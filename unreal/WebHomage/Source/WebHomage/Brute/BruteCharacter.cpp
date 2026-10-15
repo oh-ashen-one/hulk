@@ -386,8 +386,19 @@ void ABruteCharacter::StepGround(float Dt, const FBruteInput& I, const FVector& 
 	}
 	NP.Z = G; Pos = NP;
 	if (G > -50.0) LastSafe = Pos;
-	StepPhase += float(H2(Vel).Size() * Dt / 3.4 * 2.0 * PI);
+	{	// heavy footfalls: a camera thump on every sprinting step
+		const float Before = StepPhase;
+		StepPhase += float(H2(Vel).Size() * Dt / 3.4 * 2.0 * PI);
+		if (bSprinting && FMath::FloorToInt(Before / PI) != FMath::FloorToInt(StepPhase / PI)) Trauma = FMath::Max(Trauma, 0.3);
+	}
 
+	// traffic that drives into him bounces off (no crowd scare: it happens all the time in a lane)
+	if (!bSprinting && SprintKnockT <= 0.f)
+	{
+		SprintKnockT = 0.1f;
+		const int32 Nb = BruteWorld::Blast(GetWorld(), (Pos + FVector(0, 0, 0.8)) * 100.0, 2.4f, 7.f, 3.f, FVector::ZeroVector, -2.f, Held.Get(), false);
+		if (Nb) { Trauma += 0.1; BruteWorld::Collateral() += 3000.0 * Nb; Event(FString::Printf(TEXT("car_bounced %d"), Nb)); }
+	}
 	// sprinting knocks cars aside (a forward cone just ahead of the body)
 	if (bSprinting && H2(Vel).Size() > 15.0 && SprintKnockT <= 0.f)
 	{
@@ -905,6 +916,12 @@ void ABruteCharacter::Animate(float Dt)
 			T.ShPitch[S] = -42.f * Amp * Ph + (bSprinting ? 10.f : 0.f);
 			T.Elbow[S] = 25.f + 30.f * Amp;
 			T.ShAbd[S] = 16.f + 6.f * Amp;
+		}
+		{	// idle: heavy breathing, shoulders heave, a slow sway (fades out as he moves)
+			const float Idle = 1.f - FMath::Clamp(Amp * 3.f, 0.f, 1.f), Br = FMath::Sin(TelT * 1.6f);
+			T.SpinePitch += Idle * (2.5f * Br - 4.f); T.HeadPitch += Idle * -1.5f * Br; T.RootZ += Idle * (1.5f * Br - 3.f);
+			T.SpineYaw += Idle * 3.f * FMath::Sin(TelT * 0.45f);
+			for (int32 S = 0; S < 2; ++S) { T.ShAbd[S] += Idle * (4.f + 3.f * Br); T.Elbow[S] += Idle * 12.f; T.Knee[S] += Idle * 8.f; T.HipPitch[S] += Idle * 5.f; }
 		}
 		if (bCharging)
 		{

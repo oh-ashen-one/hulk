@@ -91,7 +91,7 @@ namespace BruteWorld
 	/** Pulls traffic cars within RadiusM of CenterCm out of the sim and returns them as physics cars (cap per call + global cap on live cars). */
 	void TakeCars(UWorld* W, const FVector& CenterCm, float RadiusM, int32 MaxN, TArray<ABruteCar*>& Out);
 	/** Radial blast: lifts nearby traffic cars into physics and pushes every physics car in range outward + up. Returns cars affected. */
-	int32 Blast(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir = FVector::ZeroVector, float ConeCos = -2.f, AActor* Ignore = nullptr);
+	int32 Blast(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir = FVector::ZeroVector, float ConeCos = -2.f, AActor* Ignore = nullptr, bool bScare = true);
 	/** Collateral damage counter (dollars), shared for the HUD / telemetry. */
 	double& Collateral();
 }

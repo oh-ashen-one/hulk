@@ -387,11 +387,12 @@ namespace BruteWorld
 		}
 	}
 
-	int32 Blast(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir, float ConeCos, AActor* Ignore)
+	int32 Blast(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir, float ConeCos, AActor* Ignore, bool bScare)
 	{
 		if (!W) return 0;
 		TArray<ABruteCar*> New;
 		TakeCars(W, CenterCm, RadiusM, 14, New);
+		if (bScare)
 		{	// the crowd: knocked over near the blast, running away further out
 			TArray<FWHFlungWalker> Knocked;
 			const bool bConeB = !ConeDir.IsNearlyZero();
