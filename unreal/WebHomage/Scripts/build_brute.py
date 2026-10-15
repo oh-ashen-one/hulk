@@ -73,16 +73,28 @@ def fx_material(tools, name, dust):
     """translucent unlit, two-sided: emissive = Color * Glow; opacity = Opacity x (shock: fades up the band, V) / (dust: soft edges, 1 - fresnel)."""
     MEL = unreal.MaterialEditingLibrary
     m = tools.create_asset(name, FX_DEST, unreal.Material, unreal.MaterialFactoryNew())
+    # LIT translucency: the city runs physical sun / exposure, so unlit emissive dust at ~1 reads near-black in daylight; the sun
+    # lights these like any surface and Glow only adds a little emissive (night)
     m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
-    m.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
     m.set_editor_property('two_sided', True)
+    try: m.set_editor_property('translucency_lighting_mode', unreal.TranslucencyLightingMode.TLM_SURFACE)
+    except Exception as ex: unreal.log_warning('[brute] translucency lighting mode: %s' % ex)
     col = MEL.create_material_expression(m, unreal.MaterialExpressionVectorParameter, -700, -200)
     col.set_editor_property('parameter_name', 'Color'); col.set_editor_property('default_value', unreal.LinearColor(1, 1, 1, 1))
+    MEL.connect_material_property(col, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    rough = MEL.create_material_expression(m, unreal.MaterialExpressionConstant, -700, 40)
+    rough.set_editor_property('r', 1.0)
+    MEL.connect_material_property(rough, '', unreal.MaterialProperty.MP_ROUGHNESS)
     glow = MEL.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -700, -50)
     glow.set_editor_property('parameter_name', 'Glow'); glow.set_editor_property('default_value', 1.0)
     em = MEL.create_material_expression(m, unreal.MaterialExpressionMultiply, -400, -150)
     MEL.connect_material_expressions(col, '', em, 'A'); MEL.connect_material_expressions(glow, '', em, 'B')
-    MEL.connect_material_property(em, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    k = MEL.create_material_expression(m, unreal.MaterialExpressionConstant, -400, -40)
+    k.set_editor_property('r', 0.04)   # a faint self-glow only (night); daylight look comes from the lighting
+    em2 = MEL.create_material_expression(m, unreal.MaterialExpressionMultiply, -250, -120)
+    MEL.connect_material_expressions(em, '', em2, 'A'); MEL.connect_material_expressions(k, '', em2, 'B')
+    MEL.connect_material_property(em2, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     op = MEL.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -700, 150)
     op.set_editor_property('parameter_name', 'Opacity'); op.set_editor_property('default_value', 0.6)
     if dust:

@@ -693,6 +693,13 @@ void ABruteCharacter::UpdateCamera(float Dt)
 		const FVector Back = -Rot.Vector();
 		double Hd = 0; FVector Nn;
 		if (World.SweepSolid(Pivot, Pivot + Back * (CamDist + 0.4), 0.35, Hd, Nn)) Arm = FMath::Max(1.6, Hd - 0.3);
+		// tree crowns have no collision: shorten the arm until the lens is out of the leaves (and the line to the body is clear)
+		if (World.SegmentHitsCrown(Pivot, Pivot + Back * (Arm + 2.5)))
+		{
+			double Lo = 1.6, Hi = Arm;
+			for (int32 K = 0; K < 5; ++K) { const double M = 0.5 * (Lo + Hi); if (World.SegmentHitsCrown(Pivot, Pivot + Back * (M + 2.5))) Hi = M; else Lo = M; }
+			Arm = FMath::Max(1.6, Lo);
+		}
 	}
 	CameraBoom->TargetArmLength = float(Arm * 100.0);
 	const double Sh = Trauma * Trauma;
