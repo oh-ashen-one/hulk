@@ -98,7 +98,7 @@ private:
 	double Floor(const FVector& P, double Up = 1.2) const;
 
 	// ---- body state (m, m/s); Pos = feet
-	FVector Pos = FVector::ZeroVector, Vel = FVector::ZeroVector;
+	FVector Pos = FVector::ZeroVector, Vel = FVector::ZeroVector, LastSafe = FVector::ZeroVector;
 	double Facing = 0.0;                // rad
 	EBruteMode Mode = EBruteMode::Air;
 	double ModeT = 0.0, AirT = 0.0, ApexZ = 0.0, LaunchZ = 0.0;

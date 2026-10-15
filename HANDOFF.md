@@ -1,62 +1,50 @@
-# Brute — rolling handoff (started 2026-10-15)
+# Brute — rolling handoff (updated 2026-10-15 ~02:00 local, overnight loop 1)
 
-Owner direction 2026-10-15 (verbatim intent): replace all of Spider-Man with a big
-green Hulk character. No swinging — he stomps, jumps and leaps around as his mode
-of transportation. That is the scope of the FIRST overnight loop: complete removal
-of Spider-Man and swinging, replaced by a big brick Hulk jumping and running around.
-**The owner said: do not start yet.** Prep only until an explicit go.
+Owner direction 2026-10-15: replace all of Spider-Man with a big green Hulk-like character; no swinging — he stomps, jumps and
+leaps. Owner "go" (then asleep, full permissions, "don't interrupt other sessions", "use the Customuse API/MCP for assets"):
+**jumping, launching, hitting, slapping, thunderclap, picking cars up to throw them, HUGE jumps and grand slam.**
 
-Read `docs/brute/BRIEF.md` first (design, milestones, AI roles, house rules).
-This loop = brief milestones 1+2 (Brute walks, Brute moves), plus removing the
-Spider-Man hero and web-swinging as the default.
+Read `docs/brute/BRIEF.md` (design), `docs/brute/RESULTS.md` (what loop 1 delivered, with stills), `docs/brute/MOVESET.md`
+(controls + numbers), `docs/brute/ASSETS.md` (Customuse provenance + asset pipeline).
 
-## Repo facts
-- `oh-ashen-one/hulk` is a standalone repo: main = single-commit 1.4 GB snapshot of
-  spider-man-2 main `0ca553f` (the finished Unreal 5.8 port) without `docs/night1`.
-  Full history stays in spider-man-2. No dependency on the Invincible project —
-  do not read or touch `/Users/midir/spider-man-2-invincible` or that repo.
-- `Content/` is git-ignored everywhere; `unreal/WebHomage/Scripts/build_manhattan.py`
-  regenerates every asset (see `unreal/WebHomage/CONTENT.md`).
-- Work branch: `brute`. Merging to `main` needs explicit owner permission.
+## State (verified on the Studio, checkout `/Users/midir/hulk`, branch `brute`, pushed)
 
-## Verified state (Studio, M3 Ultra, checkout `/Users/midir/hulk`)
-- Editor C++ compiled OK 2026-10-15: `unreal/WebHomage/Scripts/build_editor.sh`
-  printed `OK: UnrealEditor.modules -> libUnrealEditor-WebHomage.dylib`
-  (log: `~/hulk-logs/compile.log`).
-- Unreal Content: NOT built yet. Nothing launched, captured or played.
+- Brute is the default pawn on every map using `AWebTravGameMode` (Manhattan, Manhattan_Island showcase, ...). `-WHSpidey` restores
+  the web-swinger (code untouched otherwise).
+- Moves working in the real game (telemetry + stills in RESULTS.md): walk/run/sprint (knocks cars), hop, charged super jump
+  (40 m / 100 m; running 46 m / 115 m), leap chain (to 52 m / 128 m), air dash x2, wall run + top-out + wall kick, crater landings,
+  grand slam dive, punch-punch-slap, ground grand slam, thunderclap, grab car overhead + throw. Impacts throw traffic cars as physics
+  props, knock pedestrians over and make the crowd flee; HUD collateral counter + charge meter + controls card.
+- Body: Customuse model (one paid generation, 100 credits) cut into 11 rigid parts on a procedural rig.
+- Owner launcher: `./Play-Brute.command` (guarded launcher, Manhattan_Island, Times Square start, 1080p window, 60 fps cap).
+  **Not launched by this session** (owner launches it).
 
-## Next steps, in order (after the owner says go)
-1. Content rebuild (hours; headless; one Unreal at a time via the shared GPU slot):
+## Content on this machine (git-ignored)
 
-   ```bash
-   cd ~/hulk && SM2_MANHATTAN_SCR=~/hulk-scratch/manhattan \
-     SM2_WATER_SCR=~/hulk-scratch/water SM2_LIFE_SCR=~/hulk-scratch/life \
-     nohup caffeinate -s python3 unreal/WebHomage/Scripts/build_manhattan.py \
-     > ~/hulk-logs/content.log 2>&1 &
-   ```
+- `unreal/WebHomage/Content/` = read-only rsync copy of `/Users/midir/spider-man-2/unreal/WebHomage/Content` (same source commit
+  `0ca553f`, 2.9 GB) instead of the multi-hour rebuild. The full rebuild (`build_manhattan.py`) was started first and stopped at
+  `city_prep/gen_shaders` on missing donor inputs; fixed so far: `~/spiderbench` cloned at the pinned `64d957f` (+ npm install),
+  night lights exported to `~/hulk-scratch/night/export/night_lights.json` (pass `SM2_NIGHT_JSON` when rebuilding). Still missing
+  for a from-scratch rebuild: P2 character `ueimport` inputs, terrain export, night ref shots (all historically under
+  `~/sm2-n1/_scratch`, which no longer has them). Not needed while the copied Content is used.
+- `Content/Brute/{Parts,Fx}` from `python3 unreal/WebHomage/Scripts/build_brute.py` (inputs in `~/hulk-scratch/brute_parts`,
+  `~/hulk-scratch/brute_fx`; regenerate with `tools/brute/segment_brute.py` / `make_fx_meshes.py` from the Customuse GLB).
 
-   Hulk-owned scratch dirs on purpose: never share `~/sm2-n1/_scratch/manhattan`
-   state with other sessions. The characters step reads P2 staged inputs read-only.
-2. Smoke: guarded `-game` launch of the built Manhattan, screenshot, confirm the
-   existing Spider-Man hero still works before changing anything.
-3. The loop itself, small verified stories, one commit each, on `brute`:
-   - Remove the web-swing hero as the default (flag-off first, delete later).
-   - Placeholder Brute: ~2.5 m green blocky brawler through the existing character
-     pipeline (`Scripts/build_characters.py` path), existing chase camera.
-   - Traversal: sprint (knocks cars aside), charged super jump (~40 m vert /
-     100 m horiz), leap chains, air dash, landing shockwave/crater, wall run later.
-   - Capture suite per move + an independent critic pass, per the brief's
-     milestone rules.
-4. Push after every session; update this file in the same commit.
+## Next steps (loop 2), in order
+
+1. **Independent critic pass** on the loop-1 captures (`~/hulk-scratch/cap/*`, regenerate with `tools/brute/capture.sh <case>`):
+   not done — this session ran without subagents. Builder self-review is in RESULTS.md.
+2. Owner playtest via `Play-Brute.command`; turn feedback into stories.
+3. Milestone 3: destructible facade proxies on one district, collateral counter already wired (`BruteWorld::Collateral()`).
+4. Milestone 4: cops / SWAT enemies for the melee kit (hits currently affect cars / props / pedestrians only).
+5. Polish: occlusion fade for trees/awnings, stronger thunderclap read, skinned body (rigid seams), diagonal wall runs.
+6. Perf: desktop-session launch (`open -n -W -a`) under the exclusive perf lock; not measured yet.
 
 ## House rules that bit before (do not relearn)
-- Shared GPU coordinator `~/.cache/gpu-slot`, hard cap 2 engines, SIGTERM then
-  wait 60 s. Kill ONLY by exact PID of processes this task started — a pkill
-  pattern once hit another session's push.
-- Perf numbers only from a desktop-session launch (`open -n -W -a`), never SSH exec.
-- The Studio's /bin/bash is 3.2 (no mapfile); its zsh login shell breaks `grep -q`
-  exit codes over ssh — wrap remote checks in `bash -c`, and prefer scp'ing files
-  over heredocs through ssh (quoting mangles them).
-- GitHub refuses single pushes > 2 GB; the LFS budget is exhausted. Scripts stay
-  the only source of truth for content.
-- Logs live in `~/hulk-logs/`; scratch in `~/hulk-scratch/` (disposable).
+
+- Shared GPU coordinator `~/.cache/gpu-slot`, hard cap 2 engines; every launch via `tools/gpu/gpu_slot.sh` (capture.sh does it).
+  Kill ONLY exact PIDs this task started. Another session (Invincible / Hollow Current) runs engines in parallel — leave them be.
+- Captures need `-benchmark -fps=N` (capture.sh adds it): without it the game clock and the script clock drift apart.
+- Commandlets exit 1 on the engine's own error summary (GameFeatureData warning): judge by the `SM2_BUILD_OK` sentinel.
+- Perf numbers only from a desktop-session launch, never SSH/offscreen.
+- Logs `~/hulk-logs/`, scratch `~/hulk-scratch/` (disposable). Customuse via `codex exec` (Codex Apps connector `customuse`).

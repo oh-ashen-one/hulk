@@ -1,4 +1,20 @@
-# PROJECT CLOSED — owner-authorized main merge, 2026-10-12
+# Hulk in Manhattan (this repo, `oh-ashen-one/hulk`) — current rules, 2026-10-15
+
+This repo is the **Brute** project: an original green brawler homage to *The Incredible Hulk: Ultimate Destruction* on the Manhattan
+Unreal 5.8 port. Read `HANDOFF.md` and `docs/brute/BRIEF.md` first. Work on the `brute` branch; merging to `main` needs explicit
+owner permission. Everything below the line is the inherited spider-man-2 history (its "PROJECT CLOSED" note refers to the
+spider-man-2 repo, not this one); keep it for context only. Do not read or touch `/Users/midir/spider-man-2-invincible`.
+
+- Content (git-ignored) = the Manhattan build (`unreal/WebHomage/Scripts/build_manhattan.py`, or a read-only copy of the matching
+  spider-man-2 `0ca553f` Content) + `python3 unreal/WebHomage/Scripts/build_brute.py` (Brute body + impact FX).
+- C++: `unreal/WebHomage/Scripts/build_editor.sh` (no engine of this project running). Captures: `tools/brute/capture.sh <case>`
+  (offscreen, shared GPU slot, fixed timestep). Owner play: `Play-Brute.command` (guarded launcher; owner-launched only).
+- Shared GPU coordinator `~/.cache/gpu-slot`, hard cap 2 engines; kill only exact PIDs this session started; SIGTERM, wait 60 s.
+- Assets come from the Customuse connector (owner instruction 2026-10-15); provenance in `docs/brute/ASSETS.md`.
+
+---
+
+# PROJECT CLOSED — owner-authorized main merge, 2026-10-12 (spider-man-2 history)
 
 The owner explicitly declared this project complete and authorized merging all current work into main and deleting obsolete branches/worktrees. This supersedes the earlier unmerged/active-pass instructions below, which are historical records. Do not resume a refinement loop or fix known issues without a new request. The later owner request to play in Times Square authorizes that play session; do not close it as part of the earlier shutdown request.
 

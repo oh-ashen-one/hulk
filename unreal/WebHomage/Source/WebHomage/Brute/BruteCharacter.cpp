@@ -95,6 +95,7 @@ void ABruteCharacter::BeginPlay()
 	Facing = FMath::DegreesToRadians(GetActorRotation().Yaw);
 	if (FParse::Param(FCommandLine::Get(), TEXT("WHSpawnTimesSquare"))) { Pos = FVector(-20.0, -230.0, 1.5); Facing = HALF_PI; }
 	if (bHasSpawn) { Pos = SpawnPos; Facing = FMath::DegreesToRadians(SpawnYaw); }
+	LastSafe = Pos;
 	if (bWorldReady) { const double G = Floor(Pos, 3.0); if (G > -900.0 && G > Pos.Z - 4.0) Pos.Z = G; }
 	SetMode(EBruteMode::Ground);
 	CamYaw = FMath::RadiansToDegrees(Facing);
@@ -266,6 +267,12 @@ void ABruteCharacter::Step(float Dt, const FBruteInput& I)
 {
 	ModeT += Dt; DashT -= Dt; LandT -= Dt; ClapCd -= Dt; ComboWindow -= Dt; SprintKnockT -= Dt;
 	const FVector Wish = WishDir(I.Move);
+	if (Pos.Z < -60.0 || Pos.ContainsNaN())
+	{	// fell through the world / into the river: back to the last street he stood on
+		Pos = LastSafe + FVector(0, 0, 0.1); Vel = FVector::ZeroVector; bSlamDive = false; bCharging = false; SetMode(EBruteMode::Ground);
+		Event(TEXT("rescue_to_last_safe"));
+		return;
+	}
 	switch (Mode)
 	{
 	case EBruteMode::Ground: case EBruteMode::Land: StepGround(Dt, I, Wish); break;
@@ -330,6 +337,7 @@ void ABruteCharacter::StepGround(float Dt, const FBruteInput& I, const FVector& 
 		return;
 	}
 	NP.Z = G; Pos = NP;
+	if (G > -50.0) LastSafe = Pos;
 	StepPhase += float(H2(Vel).Size() * Dt / 3.4 * 2.0 * PI);
 
 	// sprinting knocks cars aside (a forward cone just ahead of the body)

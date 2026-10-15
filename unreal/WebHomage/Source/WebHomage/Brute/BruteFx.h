@@ -65,7 +65,7 @@ public:
 
 private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UBoxComponent> Box;
-	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Mesh;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class UInstancedStaticMeshComponent> Mesh;   // one instance: the vehicle material reads per-instance paint
 	float Age = 0.f, ImpactCd = 0.f;
 	UFUNCTION() void OnHit(UPrimitiveComponent* Self, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 };

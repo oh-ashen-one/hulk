@@ -5,6 +5,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Characters/WHCharAnimInstance.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -244,7 +245,9 @@ ABruteCar::ABruteCar()
 	Box->SetNotifyRigidBodyCollision(true);
 	Box->SetLinearDamping(0.05f); Box->SetAngularDamping(0.4f);
 	Box->BodyInstance.bUseCCD = true;
-	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	Mesh = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Mesh"));
+	Mesh->NumCustomDataFloats = 4;
+	Mesh->SetMobility(EComponentMobility::Movable);
 	Mesh->SetupAttachment(Box);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetGenerateOverlapEvents(false);
@@ -258,8 +261,11 @@ void ABruteCar::InitFrom(const FWHTakenCar& Car)
 	Mesh->SetStaticMesh(Car.Mesh);
 	if (Car.Material) for (int32 S = 0; S < Mesh->GetNumMaterials(); ++S) Mesh->SetMaterial(S, Car.Material);
 	// the vehicle material reads per-instance custom data (paint r, g, b, brake); a plain component gets the same values as primitive data
-	Mesh->SetCustomPrimitiveDataVector4(0, FVector4(Car.Color.R, Car.Color.G, Car.Color.B, 0.f));
 	Mesh->SetRelativeLocation(FVector(0, 0, -HalfH));
+	Mesh->ClearInstances();
+	Mesh->AddInstance(FTransform::Identity, false);
+	const float Cd[4] = { Car.Color.R, Car.Color.G, Car.Color.B, 0.f };
+	Mesh->SetCustomData(0, TConstArrayView<float>(Cd, 4), true);
 	Box->SetMassOverrideInKg(NAME_None, bBig ? 9000.f : 1500.f, true);
 	Box->SetSimulatePhysics(true);
 	Box->OnComponentHit.AddDynamic(this, &ABruteCar::OnHit);
