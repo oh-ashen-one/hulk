@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.DS_Store
+.scratch/
+shots/
+__pycache__/
+*.pyc
+concepts/citizens/_photos/
+concepts/_tripo_next/
+
+# Blender rotating backups; editable current .blend is versioned.
+*.blend[0-9]
