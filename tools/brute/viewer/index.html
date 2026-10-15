@@ -1,0 +1,94 @@
+<!doctype html>
+<!-- Hulk-in-Manhattan fan homage (unofficial). Brute animation review viewer: serve tools/brute/viewer with tools/brute/viewer/serve.sh -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Brute — animation review</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d2026; color: #eee; font: 14px -apple-system, Helvetica, sans-serif; overflow: hidden; }
+  #ui { position: absolute; top: 14px; left: 14px; background: rgba(0,0,0,.55); padding: 12px 14px; border-radius: 8px; min-width: 230px; }
+  #ui h1 { font-size: 15px; margin: 0 0 8px; }
+  #ui button { display: block; width: 100%; margin: 4px 0; padding: 7px 10px; border: 0; border-radius: 5px; background: #3a4150; color: #fff; text-align: left; cursor: pointer; font-size: 14px; }
+  #ui button.on { background: #5fae3c; }
+  #ui label { display: block; margin-top: 8px; }
+  #info { position: absolute; bottom: 12px; left: 14px; opacity: .7; }
+  #err { color: #f77; white-space: pre-wrap; }
+</style>
+<script type="importmap">{ "imports": { "three": "./three/build/three.module.js", "three/addons/": "./three/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="ui"><h1>Brute animations</h1><div id="clips"></div>
+  <label><input type="checkbox" id="move" checked> move through the scene (root motion preview)</label>
+  <label>speed <input type="range" id="speed" min="0.1" max="2" step="0.05" value="1"> <span id="sv">1.0</span>x</label>
+  <div id="err"></div></div>
+<div id="info">drag to orbit · scroll to zoom · model: brute.glb</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x8fa6bf); scene.fog = new THREE.Fog(0x8fa6bf, 30, 90);
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 300); camera.position.set(4.5, 2.4, 6.5);
+const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(0, 1.3, 0); controls.update();
+scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x3a3328, 1.4));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.6); sun.position.set(6, 12, 5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8 }); scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x4a4d52, roughness: 0.95 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(400, 200, 0x666a70, 0x55585d); grid.position.y = 0.002; scene.add(grid);
+const wall = new THREE.Mesh(new THREE.BoxGeometry(12, 30, 1), new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.9 }));
+wall.position.set(0, 15, -1.3); wall.receiveShadow = true; wall.visible = false; scene.add(wall);
+
+let mixer, actions = {}, current, model, clipMeta = {};
+fetch('./clips.json').then(r => r.ok ? r.json() : {}).catch(() => ({})).then(m => { clipMeta = m || {}; load(); });
+function load() {
+  new GLTFLoader().load('./brute.glb', g => {
+    model = g.scene; model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    scene.add(model);
+    mixer = new THREE.AnimationMixer(model);
+    const box = document.getElementById('clips');
+    const order = ['Idle', 'Walk', 'Run', 'Stop', 'WallClimb', 'JumpCharge', 'JumpAir', 'Land'];
+    const clips = g.animations.slice().sort((a, b) => (order.indexOf(a.name) + 99 * (order.indexOf(a.name) < 0)) - (order.indexOf(b.name) + 99 * (order.indexOf(b.name) < 0)));
+    for (const c of clips) {
+      actions[c.name] = mixer.clipAction(c);
+      const b = document.createElement('button'); b.textContent = c.name + (clipMeta[c.name] ? ` — ${clipMeta[c.name].label || ''}` : '');
+      b.onclick = () => play(c.name); b.dataset.n = c.name; box.appendChild(b);
+    }
+    if (!clips.length) document.getElementById('err').textContent = 'no animations in brute.glb';
+    play(clips.find(c => c.name === 'Walk') ? 'Walk' : clips[0]?.name);
+  }, undefined, e => { document.getElementById('err').textContent = 'load failed: ' + e.message; });
+}
+function play(n) {
+  if (!n) return;
+  const a = actions[n]; const once = clipMeta[n]?.once;
+  a.reset(); a.setLoop(once ? THREE.LoopPingPong : THREE.LoopRepeat); a.clampWhenFinished = false;
+  if (current && current !== a) current.crossFadeTo(a.play(), 0.25, false); else a.play();
+  current = a; dist = 0; if (model) model.position.set(0, 0, 0);
+  wall.visible = n === 'WallClimb';
+  document.querySelectorAll('#ui button').forEach(b => b.classList.toggle('on', b.dataset.n === n));
+}
+const speedEl = document.getElementById('speed'), sv = document.getElementById('sv');
+speedEl.oninput = () => { sv.textContent = (+speedEl.value).toFixed(2); };
+let dist = 0; const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta() * +speedEl.value;
+  if (mixer) mixer.update(dt);
+  if (model && current) {
+    const meta = clipMeta[current.getClip().name] || {};
+    if (document.getElementById('move').checked && meta.speed) {
+      const d = meta.dir || [0, 0, 1]; dist += meta.speed * dt;
+      const L = meta.loop || 0; const s = L ? (dist % L) - L / 2 : dist;
+      model.position.set(d[0] * s, d[1] * s, d[2] * s);
+      controls.target.set(model.position.x, model.position.y + 1.3, model.position.z);
+    } else model.position.set(0, 0, 0);
+  }
+  controls.update(); renderer.render(scene, camera);
+});
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+</script>
+</body>
+</html>

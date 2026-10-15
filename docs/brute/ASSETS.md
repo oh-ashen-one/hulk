@@ -34,6 +34,16 @@ it on first sight (2026-10-15). The skinned body replaced it the same day.
 
 The pawn falls back to a placeholder brick body (engine cubes) if `/Game/Brute/Skel` is missing (`-WHBruteBricks` forces it).
 
+## Brute v2 (2026-10-15, owner: "do the entire thing again on Customuse")
+
+| Step | Value |
+|---|---|
+| Previews (free) | setId `5c497309-2a0f-4e26-9a12-51cee0b6b81c`, realistic-anatomy A-pose prompt; chosen preview `50cd6afd-54b6-49bd-8f4a-3f27661c2498` |
+| Model (paid) | task `cbdd9877-6c27-4a3f-ad89-9522ece557f2`, Customuse CR 2.1 requested, 100 credits; Customuse names it "Emerald Behemoth" (https://customuse.com/d/cbdd9877-6c27-4a3f-ad89-9522ece557f2) |
+| Rig | Customuse website, Nodes editor -> Humanoid **Auto Rig** node (Cartwheel), 8 credits, driven through Codex Computer Use on the owner's Chrome; export `Emerald_Behemoth_Rigged_fbx.zip` (`SM_Character_Brute.fbx`, 52-bone SMPL-style skeleton incl. fingers, PBR PNGs) |
+| Animation | `tools/brute/animate_brute.py` (Blender): re-aims limb bones, leg IK + flat-foot copy-rotation baked to FK; Idle, Walk, Run, Stop, WallClimb, JumpCharge, JumpAir, Land -> `brute.glb` / `brute_anim.fbx` + `clips.json` |
+| Review | `tools/brute/viewer/serve.sh` -> http://127.0.0.1:8765 (three.js) |
+
 ## Re-generating
 
 `codex exec` with the customuse tools: `customuse_create_3d_preview_set` (free) -> pick a preview -> `customuse_start_3d_generation`
