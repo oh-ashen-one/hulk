@@ -14,7 +14,8 @@ Read `docs/brute/BRIEF.md` (design), `docs/brute/RESULTS.md` (what loop 1 delive
 - Moves working in the real game (telemetry + stills in RESULTS.md): walk/run/sprint (knocks cars), hop, charged super jump
   (40 m / 100 m; running 46 m / 115 m), leap chain (to 52 m / 128 m), air dash x2, wall run + top-out + wall kick, crater landings,
   grand slam dive, punch-punch-slap, launcher uppercut (sprint + attack), ground grand slam, thunderclap, grab car overhead + throw. Impacts throw traffic cars as physics
-  props, knock pedestrians over and make the crowd flee; HUD collateral counter + charge meter + controls card.
+  props, knock pedestrians over and make the crowd flee; traffic bounces off a standing Brute; HUD collateral counter + charge meter
+  + controls card. Camera: speed FOV, trauma shake, air tilt toward the landing, keeps out of facades and tree crowns.
 - Body: Customuse model (one paid generation, 100 credits) cut into 11 rigid parts on a procedural rig.
 - Verified on Manhattan (midtown), Manhattan_Island day + night (owner map, Times Square start, playable profile); a 44 s stress
   case chaining every move ran without errors (`tools/brute/cases/m11_stress.json`). The one `precision loss` ensure in the log
