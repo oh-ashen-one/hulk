@@ -8,7 +8,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 UE="/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor"
 if [ ! -x "$UE" ]; then echo "Unreal Engine 5.8 is missing: $UE" >&2; exit 1; fi
-if [ ! -d "$HERE/unreal/WebHomage/Content/Brute/Parts" ]; then
+if [ ! -d "$HERE/unreal/WebHomage/Content/Brute/Skel" ]; then
   echo "Brute content missing: run python3 unreal/WebHomage/Scripts/build_brute.py (and the Manhattan content build) first" >&2; exit 1
 fi
 MAP="${BRUTE_MAP:-/Game/Showcase/Maps/Manhattan_Island}"
