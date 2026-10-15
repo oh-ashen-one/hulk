@@ -47,8 +47,8 @@ let mixer, actions = {}, current, model, clipMeta = {};
 fetch('./clips.json').then(r => r.ok ? r.json() : {}).catch(() => ({})).then(m => { clipMeta = m || {}; load(); });
 function load() {
   new GLTFLoader().load('./brute.glb', g => {
-    model = g.scene; model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    scene.add(model);
+    model = g.scene; model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+    scene.add(model); window.__model = model; window.__scene = scene;
     mixer = new THREE.AnimationMixer(model);
     const box = document.getElementById('clips');
     const order = ['Idle', 'Walk', 'Run', 'Stop', 'WallClimb', 'JumpCharge', 'JumpAir', 'Land'];
@@ -73,7 +73,7 @@ function play(n) {
 }
 const speedEl = document.getElementById('speed'), sv = document.getElementById('sv');
 speedEl.oninput = () => { sv.textContent = (+speedEl.value).toFixed(2); };
-let dist = 0; const clock = new THREE.Clock();
+let dist = 0; const clock = new THREE.Clock(); const lastPos = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
   const dt = clock.getDelta() * +speedEl.value;
   if (mixer) mixer.update(dt);
@@ -83,8 +83,10 @@ renderer.setAnimationLoop(() => {
       const d = meta.dir || [0, 0, 1]; dist += meta.speed * dt;
       const L = meta.loop || 0; const s = L ? (dist % L) - L / 2 : dist;
       model.position.set(d[0] * s, d[1] * s, d[2] * s);
-      controls.target.set(model.position.x, model.position.y + 1.3, model.position.z);
     } else model.position.set(0, 0, 0);
+    // the camera rides along with the body (orbit offset kept)
+    const delta = model.position.clone().sub(lastPos); lastPos.copy(model.position);
+    camera.position.add(delta); controls.target.add(delta);
   }
   controls.update(); renderer.render(scene, camera);
 });

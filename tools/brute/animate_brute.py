@@ -274,7 +274,7 @@ def gait(name, T, speed, step_len, lift, drop, bob, lean, arm_sw, elbow, abd, sw
              hip_yaw=6 * ang, lean=lean, twist=-9 * ang, head_pitch=-lean * 0.6,
              arms={'l': (-arm_sw * ang + 4, abd, -4, elbow + 12 * max(0, -ang)), 'r': (arm_sw * ang + 4, abd, 4, elbow + 12 * max(0, ang))},
              feet=feet, shrug=4)
-    clips[name] = dict(label='%.1f m/s' % speed, speed=speed, loop=24, dir=[1, 0, 0])
+    clips[name] = dict(label='%.1f m/s' % speed, speed=speed, loop=24, dir=[0, 0, 1])
     bake(name, T)
 
 walk_T = 36; walk_step = 0.95 * S; walk_speed = 2 * walk_step / (walk_T / FPS) * (1 / 1)
