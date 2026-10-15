@@ -9,7 +9,7 @@
 //   air:    Shift = air dash (2 per jump), RMB / C = GRAND SLAM dive -> crater shockwave on landing
 //   wall:   sprint into a facade = run straight up it, momentum pops over the roof edge; Space on the wall = kick off
 //   land:   hard landings crater the street, shake the camera and blast cars outward
-//   combat: LMB = punch, punch, SLAP combo; RMB / C on the ground = overhead GRAND SLAM smash; F = THUNDERCLAP (forward cone);
+//   combat: LMB = punch, punch, SLAP combo; LMB while sprinting = LAUNCHER uppercut (cars go straight up); RMB / C on the ground = overhead GRAND SLAM smash; F = THUNDERCLAP (forward cone);
 //           E = grab the nearest car (lift overhead) / E or LMB while holding = THROW it where the camera looks
 // Pad: A jump, X attack, Y slam, B grab/throw, R1 clap, L3 / R2 sprint+dash, sticks move / look.
 //
@@ -31,7 +31,7 @@ UENUM()
 enum class EBruteMode : uint8 { Ground, Air, Wall, Land };
 
 UENUM()
-enum class EBruteAct : uint8 { None, Punch, Slap, Clap, Smash, Slam, Grab, Throw, Carry };
+enum class EBruteAct : uint8 { None, Punch, Slap, Clap, Smash, Slam, Grab, Throw, Carry, Uppercut };
 
 struct FBruteInput
 {

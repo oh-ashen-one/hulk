@@ -250,7 +250,7 @@ void ABruteCharacter::Tick(float Dt)
 	if (!CsvPath.IsEmpty())
 	{
 		static const TCHAR* ModeN[] = { TEXT("ground"), TEXT("air"), TEXT("wall"), TEXT("land") };
-		static const TCHAR* ActN[] = { TEXT("none"), TEXT("punch"), TEXT("slap"), TEXT("clap"), TEXT("smash"), TEXT("slam"), TEXT("grab"), TEXT("throw"), TEXT("carry") };
+		static const TCHAR* ActN[] = { TEXT("none"), TEXT("punch"), TEXT("slap"), TEXT("clap"), TEXT("smash"), TEXT("slam"), TEXT("grab"), TEXT("throw"), TEXT("carry"), TEXT("uppercut") };
 		CsvRows.Add(FString::Printf(TEXT("%.3f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%s,%.2f,%d,%d,%d,%.2f,%.0f,%s"), TelT, Pos.X, Pos.Y, Pos.Z, Vel.X, Vel.Y, Vel.Z, H2(Vel).Size(),
 			ModeN[(int32)Mode], ActN[(int32)Act], Charge, ChainN, DashesLeft, Held.IsValid() ? 1 : 0, ApexZ, BruteWorld::Collateral(), *LastEvent));
 		LastEvent.Reset();
@@ -537,9 +537,10 @@ void ABruteCharacter::StartAct(EBruteAct A)
 	case EBruteAct::Smash: ActDur = 0.9f; ActHitAt = 0.5f; break;
 	case EBruteAct::Grab: ActDur = 0.4f; ActHitAt = 0.4f; break;
 	case EBruteAct::Throw: ActDur = 0.5f; ActHitAt = 0.17f; break;
+	case EBruteAct::Uppercut: ActDur = 0.6f; ActHitAt = 0.2f; break;
 	default: ActDur = 0.f; ActHitAt = 0.f; break;
 	}
-	static const TCHAR* ActN[] = { TEXT("none"), TEXT("punch"), TEXT("slap"), TEXT("thunderclap"), TEXT("ground_smash"), TEXT("slam"), TEXT("grab"), TEXT("throw"), TEXT("carry") };
+	static const TCHAR* ActN[] = { TEXT("none"), TEXT("punch"), TEXT("slap"), TEXT("thunderclap"), TEXT("ground_smash"), TEXT("slam"), TEXT("grab"), TEXT("throw"), TEXT("carry"), TEXT("launcher_uppercut") };
 	Event(FString::Printf(TEXT("act_%s"), ActN[(int32)A]));
 }
 
@@ -574,6 +575,7 @@ void ABruteCharacter::UpdateAct(float Dt, const FBruteInput& I)
 		}
 		else if (I.bClap && !Prev.bClap && ClapCd <= 0.f && bGround) StartAct(EBruteAct::Clap);
 		else if (I.bHeavy && !Prev.bHeavy && bGround) StartAct(EBruteAct::Smash);
+		else if (I.bAttack && !Prev.bAttack && bGround && bSprinting && H2(Vel).Size() > RunSpeed) StartAct(EBruteAct::Uppercut);
 		else if (I.bAttack && !Prev.bAttack)
 		{
 			Combo = ComboWindow > 0.f ? (Combo + 1) % 3 : 0;
@@ -634,6 +636,15 @@ void ABruteCharacter::DoHit()
 		if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>((Pos + F * 1.5) * 100.0, FRotator::ZeroRotator, SP)) S->Init(30.f, false, F, 1.f);
 		Trauma = FMath::Max(Trauma, 0.7); FovKick -= 7.0; BruteWorld::Collateral() += 15000.0;
 		Event(FString::Printf(TEXT("thunderclap cars=%d"), N));
+		break;
+	}
+	case EBruteAct::Uppercut:
+	{	// the launcher: everything in front goes straight up, the Brute pops off the ground with it
+		const int32 N = BruteWorld::Blast(W, (Pos + F * 2.4 + FVector(0, 0, 0.6)) * 100.0, 5.5f, 9.f, 34.f, F, 0.0f, nullptr);
+		if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>((Pos + F * 2.4) * 100.0, FRotator::ZeroRotator, SP)) S->Init(6.f, false, FVector::ZeroVector, 0.7f);
+		if (Mode == EBruteMode::Ground || Mode == EBruteMode::Land) { Vel.Z = 9.0; Vel.X *= 0.4; Vel.Y *= 0.4; SetMode(EBruteMode::Air); AirT = 0; ApexZ = Pos.Z; LaunchZ = Pos.Z; Pos.Z += 0.05; }
+		Trauma += N ? 0.5 : 0.2; FovKick += 5.0;
+		Event(FString::Printf(TEXT("launcher_hit cars=%d"), N));
 		break;
 	}
 	case EBruteAct::Smash:
@@ -948,6 +959,16 @@ void ABruteCharacter::Animate(float Dt)
 			for (int32 S = 0; S < 2; ++S) { T.ShPitch[S] = FMath::Lerp(175.f, 55.f, K); T.Elbow[S] = FMath::Lerp(35.f, 2.f, K); T.ShAbd[S] = 10.f; T.HipPitch[S] = 55.f * K; T.Knee[S] = 85.f * K; }
 			T.SpinePitch = FMath::Lerp(14.f, -55.f, K); T.RootZ = FMath::Lerp(12.f, -55.f, K); T.HeadPitch = 30.f * K;
 		}
+		Rate = 36.f; break;
+	}
+	case EBruteAct::Uppercut:
+	{	// right fist from the knee to the sky, whole body rising into it
+		const float K = A < ActHitAt ? Wind(ActHitAt) : 1.f, Up = A < ActHitAt ? 0.f : Strike(ActHitAt, 0.09f);
+		T.ShPitch[1] = FMath::Lerp(-25.f * K, 168.f, Up); T.Elbow[1] = FMath::Lerp(95.f, 18.f, Up); T.ShAbd[1] = 10.f;
+		T.ShPitch[0] = FMath::Lerp(20.f, -35.f, Up); T.Elbow[0] = 70.f; T.ShAbd[0] = 30.f;
+		T.SpinePitch = FMath::Lerp(-35.f * K, 18.f, Up); T.SpineYaw = FMath::Lerp(25.f * K, -20.f, Up); T.HeadPitch = FMath::Lerp(20.f * K, -25.f, Up);
+		T.RootZ = FMath::Lerp(-35.f * K, 8.f, Up);
+		for (int32 S = 0; S < 2; ++S) { T.HipPitch[S] = FMath::Lerp(55.f * K, 5.f, Up); T.Knee[S] = FMath::Lerp(80.f * K, 10.f, Up); }
 		Rate = 36.f; break;
 	}
 	case EBruteAct::Grab:

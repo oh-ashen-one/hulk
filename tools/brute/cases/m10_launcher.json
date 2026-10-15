@@ -1,0 +1,11 @@
+{
+ "name": "m10_launcher",
+ "spawn": {"pos": [259.0, 170.0, 0.0], "yaw": 90, "camPitch": -6},
+ "keys": [
+  {"t": 0.0, "move": [0, 0]},
+  {"t": 0.3, "move": [0, 1], "sprint": 1},
+  {"t": 1.35, "attack": 1}, {"t": 1.45, "attack": 0},
+  {"t": 2.0, "sprint": 0, "move": [0, 0]},
+  {"t": 5.0, "move": [0, 0]}
+ ]
+}

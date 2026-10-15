@@ -17,6 +17,7 @@ overridden with `-WHBruteTune=Name=V,...`). Units: metres, seconds. Gravity 22 m
 | Wall run | sprint into a facade (> 3.5 m tall) | R2 + stick |
 | Wall kick | Space on the wall | A |
 | **Punch, punch, SLAP** combo | LMB (x3) | X |
+| **Launcher uppercut** (cars go straight up, he pops up with them) | LMB while sprinting | X while sprinting |
 | **Ground grand slam** (overhead double-fist smash) | RMB / C on the ground | Y |
 | **Thunderclap** (forward cone, 32 m) | F | R1 |
 | **Grab a car** / throw it where the camera looks | E (then E or LMB) | B |
@@ -35,6 +36,7 @@ overridden with `-WHBruteTune=Name=V,...`). Units: metres, seconds. Gravity 22 m
 | Crater landing | landing faster than 17 m/s: crater r = clamp(0.5 x vz, 7, 22) m, cars thrown 24 m/s + 16 up |
 | Grand slam dive | 60 m/s down; crater r = 14 + 0.35 x drop (16-30 m), cars 34 m/s + 24 up |
 | Punch / slap | 3.6 m / 5 m reach cone, cars 30 / 34 m/s |
+| Launcher uppercut | 5.5 m forward cone, cars 34 m/s UP + 9 forward; the Brute hops 9 m/s |
 | Ground grand slam | crater r 13 m in front |
 | Thunderclap | 32 m forward cone (cos 0.62), cars 42 m/s + 11 up |
 | Throw | 58 m/s along the camera (+6 deg), spinning; thrown cars blast on impact > 14 m/s |

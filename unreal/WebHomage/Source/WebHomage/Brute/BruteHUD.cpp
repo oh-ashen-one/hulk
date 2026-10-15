@@ -62,7 +62,7 @@ void ABruteHUD::DrawHUD()
 			TEXT("Space hop   HOLD Space = charge SUPER JUMP   keep holding on landing = leap chain"),
 			TEXT("In the air: Shift air dash   RMB / C = GRAND SLAM dive"),
 			TEXT("Sprint into a building = run up the wall   Space on the wall = kick off"),
-			TEXT("LMB punch, punch, SLAP   RMB / C = ground smash   F = THUNDERCLAP"),
+			TEXT("LMB punch, punch, SLAP   Sprint + LMB = LAUNCHER   RMB / C = ground smash   F = THUNDERCLAP"),
 			TEXT("E grab a car   E / LMB throw it where you look"),
 			TEXT("Pad: A jump  X attack  Y slam  B grab/throw  R1 clap  R2 sprint/dash      H hide this"),
 		};

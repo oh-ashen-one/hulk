@@ -39,6 +39,7 @@ the swing hero (`AWebTravGameMode`; `-WHSpidey` restores the old hero). Existing
 | Move | Result | Still |
 |---|---|---|
 | Punch, punch, SLAP combo (`m7_combat_cars`) | first punch launches a parked car | ![punch](evidence/m4_punch_car.jpg) |
+| Launcher uppercut, sprint + LMB (`m10_launcher`) | sprint-knocked car launched straight up, Brute pops up with it | ![launcher](evidence/m4_launcher_uppercut.jpg) |
 | Grab car overhead / throw (`m2_grab_throw`) | lifts a parked SUV, throws 58 m/s along the camera | ![lift](evidence/m4_car_overhead.jpg) ![throw](evidence/m4_car_throw.jpg) |
 | Thunderclap (`m4`) | 8 cars blown down the avenue | ![clap](evidence/m4_thunderclap.jpg) |
 | Ground grand slam (`m1`, `m7`) | crater r 13 m in front, 5 cars | |
