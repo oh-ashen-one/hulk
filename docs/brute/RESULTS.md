@@ -45,6 +45,8 @@ the swing hero (`AWebTravGameMode`; `-WHSpidey` restores the old hero). Existing
 | Ground grand slam (`m1`, `m7`) | crater r 13 m in front, 5 cars | |
 | Crowd reaction (`m6_ts_crowd`) | walkers knocked over near impacts, the rest run | ![crowd](evidence/m5_crowd_flees_times_square.jpg) |
 
+Stability: 44 s stress case chaining every move (`m11_stress`), no errors; day and night island maps checked.
+
 HUD: collateral damage counter (top right), super-jump charge meter, controls card (first 25 s, H toggles).
 
 ## Self-review (NOT an independent critic pass)

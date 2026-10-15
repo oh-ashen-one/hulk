@@ -1,4 +1,4 @@
-# Brute — rolling handoff (updated 2026-10-15 ~02:00 local, overnight loop 1)
+# Brute — rolling handoff (updated 2026-10-15 ~02:05 local, overnight loop 1)
 
 Owner direction 2026-10-15: replace all of Spider-Man with a big green Hulk-like character; no swinging — he stomps, jumps and
 leaps. Owner "go" (then asleep, full permissions, "don't interrupt other sessions", "use the Customuse API/MCP for assets"):
@@ -13,9 +13,12 @@ Read `docs/brute/BRIEF.md` (design), `docs/brute/RESULTS.md` (what loop 1 delive
   the web-swinger (code untouched otherwise).
 - Moves working in the real game (telemetry + stills in RESULTS.md): walk/run/sprint (knocks cars), hop, charged super jump
   (40 m / 100 m; running 46 m / 115 m), leap chain (to 52 m / 128 m), air dash x2, wall run + top-out + wall kick, crater landings,
-  grand slam dive, punch-punch-slap, ground grand slam, thunderclap, grab car overhead + throw. Impacts throw traffic cars as physics
+  grand slam dive, punch-punch-slap, launcher uppercut (sprint + attack), ground grand slam, thunderclap, grab car overhead + throw. Impacts throw traffic cars as physics
   props, knock pedestrians over and make the crowd flee; HUD collateral counter + charge meter + controls card.
 - Body: Customuse model (one paid generation, 100 credits) cut into 11 rigid parts on a procedural rig.
+- Verified on Manhattan (midtown), Manhattan_Island day + night (owner map, Times Square start, playable profile); a 44 s stress
+  case chaining every move ran without errors (`tools/brute/cases/m11_stress.json`). The one `precision loss` ensure in the log
+  is pre-existing (also in the Spider-Man baseline smoke run).
 - Owner launcher: `./Play-Brute.command` (guarded launcher, Manhattan_Island, Times Square start, 1080p window, 60 fps cap).
   **Not launched by this session** (owner launches it).
 
