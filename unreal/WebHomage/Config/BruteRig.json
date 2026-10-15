@@ -1,6 +1,8 @@
 {
  "height_cm": 260.0,
  "source": "brute.glb",
+ "skeletal": true,
+ "arm_rest_abd_deg": 27.18,
  "joints": {
   "Pelvis": [
    0.0,
@@ -24,8 +26,18 @@
   ],
   "Forearm_L": [
    -5.2,
-   -61.1,
-   137.03
+   -85.8,
+   143.0
+  ],
+  "UpperArm_R": [
+   -13.0,
+   61.1,
+   191.1
+  ],
+  "Forearm_R": [
+   -5.2,
+   85.8,
+   143.0
   ],
   "Thigh_L": [
    0.0,
@@ -36,16 +48,6 @@
    0.0,
    -26.0,
    36.4
-  ],
-  "UpperArm_R": [
-   -13.0,
-   61.1,
-   191.1
-  ],
-  "Forearm_R": [
-   -5.2,
-   61.1,
-   137.03
   ],
   "Thigh_R": [
    0.0,
@@ -58,17 +60,17 @@
    36.4
   ]
  },
- "parts": {
-  "SM_Brute_Pelvis": "Pelvis",
-  "SM_Brute_Torso": "Torso",
-  "SM_Brute_Head": "Head",
-  "SM_Brute_UpperArm_L": "UpperArm_L",
-  "SM_Brute_Forearm_L": "Forearm_L",
-  "SM_Brute_Thigh_L": "Thigh_L",
-  "SM_Brute_Shin_L": "Shin_L",
-  "SM_Brute_UpperArm_R": "UpperArm_R",
-  "SM_Brute_Forearm_R": "Forearm_R",
-  "SM_Brute_Thigh_R": "Thigh_R",
-  "SM_Brute_Shin_R": "Shin_R"
+ "bones": {
+  "Pelvis": "pelvis",
+  "Torso": "spine",
+  "Head": "head",
+  "UpperArm_L": "upperarm_l",
+  "Forearm_L": "forearm_l",
+  "UpperArm_R": "upperarm_r",
+  "Forearm_R": "forearm_r",
+  "Thigh_L": "thigh_l",
+  "Shin_L": "shin_l",
+  "Thigh_R": "thigh_r",
+  "Shin_R": "shin_r"
  }
 }

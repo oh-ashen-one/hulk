@@ -16,7 +16,8 @@ Read `docs/brute/BRIEF.md` (design), `docs/brute/RESULTS.md` (what loop 1 delive
   grand slam dive, punch-punch-slap, launcher uppercut (sprint + attack), ground grand slam, thunderclap, grab car overhead + throw. Impacts throw traffic cars as physics
   props, knock pedestrians over and make the crowd flee; traffic bounces off a standing Brute; HUD collateral counter + charge meter
   + controls card. Camera: speed FOV, trauma shake, air tilt toward the landing, keeps out of facades and tree crowns.
-- Body: Customuse model (one paid generation, 100 credits) cut into 11 rigid parts on a procedural rig.
+- Body: Customuse model (one paid generation, 100 credits), ONE skinned mesh on an 11-bone skeleton driven by the procedural rig
+  (`tools/brute/rig_brute.py`; the first rigid-part cut tore at the joints and was rejected by the owner, replaced 2026-10-15).
 - Verified on Manhattan (midtown), Manhattan_Island day + night (owner map, Times Square start, playable profile); a 44 s stress
   case chaining every move ran without errors (`tools/brute/cases/m11_stress.json`). The one `precision loss` ensure in the log
   is pre-existing (also in the Spider-Man baseline smoke run).

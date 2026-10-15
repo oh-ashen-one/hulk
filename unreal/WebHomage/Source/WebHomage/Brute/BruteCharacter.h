@@ -160,6 +160,13 @@ private:
 	FBrutePose Pose;
 	void BuildRig();
 	bool BuildRigFromMeshes();
+	/** Skinned body (tools/brute/rig_brute.py -> /Game/Brute/Skel/SK_Brute): one continuous mesh whose bones follow the joint components. */
+	bool BuildRigFromSkeleton();
+	void DriveBones();
+	UPROPERTY(Transient) TObjectPtr<class UPoseableMeshComponent> Body;
+	struct FBoneDrive { FName Bone; TObjectPtr<USceneComponent> J; FTransform RestBone, RestJointInv; };
+	TArray<FBoneDrive> Drives;
+	float ArmRestAbd = 0.f;   // rest-pose arm abduction of the skinned mesh (deg): the pose's ShAbd is measured from hanging straight down
 	UStaticMeshComponent* Part(USceneComponent* P, const TCHAR* N, class UStaticMesh* M, const FVector& L, const FVector& S, UMaterialInstanceDynamic* Mat, const FRotator& Rot = FRotator::ZeroRotator);
 	void Animate(float Dt);
 	void ApplyPose();

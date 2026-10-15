@@ -17,17 +17,22 @@ driven non-interactively with `codex exec`). No ripped assets, logos, likenesses
 
 Pipeline (all reproducible, no binaries in git):
 
-1. `tools/brute/segment_brute.py` (Blender 5.2, headless) scales the GLB to 2.6 m, cuts it into 11 rigid parts at measured joints
-   (arms vs torso by the lateral gap in the slice profile; legs below the hip cut; elbow / knee planes), rotates the arms to hang
-   straight at rest, puts every part's origin on its joint, writes `brute_parts.fbx` + the three PNG maps and
-   `unreal/WebHomage/Config/BruteRig.json` (joint positions, UE cm).
+1. `tools/brute/rig_brute.py` (Blender 5.2, headless) scales the GLB to 2.6 m, welds the UV-seam-split vertices (27,927 -> 9,646) so
+   the surface is one piece, builds an 11-bone armature at the measured joints and skins the WHOLE mesh with smooth inverse-distance
+   weights (region prior + neighbour bones + weight smoothing). It self-tests a bent pose (`MAX_EDGE_STRETCH`, optional renders with
+   `BRUTE_RENDER=1`) and writes `brute_skel.fbx`, the three PNG maps and `unreal/WebHomage/Config/BruteRig.json` (bone heads in UE cm,
+   rest arm abduction 27 deg).
 2. `tools/brute/make_fx_meshes.py` (Blender) builds the impact-effect meshes procedurally: shock ring / arc bands, dust puff, rock,
    crater bowl.
-3. `python3 unreal/WebHomage/Scripts/build_brute.py` (one headless commandlet through the shared GPU slot) imports both FBXs into
-   `/Game/Brute/Parts` and `/Game/Brute/Fx`, builds `M_Brute` (PBR from the maps, never-stream textures) and the translucent
-   `M_BruteShock` / `M_BruteDust`.
+3. `python3 unreal/WebHomage/Scripts/build_brute.py` (one headless commandlet through the shared GPU slot) imports the skeletal mesh
+   `/Game/Brute/Skel/SK_Brute` + `M_Brute` (PBR, skeletal-mesh usage, never-stream textures) and the fx into `/Game/Brute/Fx`.
+4. In game, `ABruteCharacter` animates invisible joint components procedurally and copies them onto the bones of a
+   `UPoseableMeshComponent` every frame (bone = rest bone x rest joint^-1 x joint now).
 
-The pawn falls back to a placeholder brick body (engine cubes) if `/Game/Brute/Parts` is missing (`-WHBruteBricks` forces it).
+History: loop 1 first cut the model into 11 rigid pieces (removed `segment_brute.py`); that tore at every joint and the owner rejected
+it on first sight (2026-10-15). The skinned body replaced it the same day.
+
+The pawn falls back to a placeholder brick body (engine cubes) if `/Game/Brute/Skel` is missing (`-WHBruteBricks` forces it).
 
 ## Re-generating
 

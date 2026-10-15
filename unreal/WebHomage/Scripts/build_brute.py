@@ -1,10 +1,10 @@
 # Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
-# Brute body content: imports the segmented Customuse model (tools/brute/segment_brute.py -> brute_parts.fbx) as 11 static meshes
-# /Game/Brute/Parts/SM_Brute_<Part> (+ its material / textures), idempotent (the folder is deleted first). Content is git-ignored;
-# this script + segment_brute.py + the source GLB (Customuse task, see docs/brute/ASSETS.md) are the source of truth.
+# Brute body content: imports the SKINNED Customuse model (tools/brute/rig_brute.py -> brute_skel.fbx) as the skeletal mesh
+# /Game/Brute/Skel/SK_Brute (+ M_Brute from its PBR maps) and the impact fx, idempotent (folders are deleted first). Content is git-ignored;
+# this script + rig_brute.py + the source GLB (Customuse task, see docs/brute/ASSETS.md) are the source of truth.
 #
 #   plain python3 (orchestrator; YOUR editor/game of this project closed):
-#       python3 unreal/WebHomage/Scripts/build_brute.py [--fbx ~/hulk-scratch/brute_parts/brute_parts.fbx]
+#       python3 unreal/WebHomage/Scripts/build_brute.py [--fbx ~/hulk-scratch/brute_skel/brute_skel.fbx]
 #   runs ONE headless commandlet (-nullrhi) of this project through tools/gpu/gpu_slot.sh capture (shared coordinator ~/.cache/gpu-slot).
 import os, sys, json, subprocess, time
 
@@ -24,9 +24,10 @@ except ImportError:
     IN_UE = False
 
 
-def build_material(src_dir, tools):
+def build_material(src_dir, tools, dest=None):
     """M_Brute: base colour + normal + ORM (R occlusion, G roughness, B metallic) from the Customuse PBR maps."""
     MEL = unreal.MaterialEditingLibrary
+    dest = dest or DEST
     tex = {}
     for kind, comp, srgb in (('BaseColor', unreal.TextureCompressionSettings.TC_DEFAULT, True),
                              ('Normal', unreal.TextureCompressionSettings.TC_NORMALMAP, False),
@@ -35,17 +36,18 @@ def build_material(src_dir, tools):
         if not os.path.isfile(f):
             unreal.log_warning('[brute] texture missing ' + f); continue
         t = unreal.AssetImportTask()
-        t.set_editor_property('filename', f); t.set_editor_property('destination_path', DEST)
+        t.set_editor_property('filename', f); t.set_editor_property('destination_path', dest)
         t.set_editor_property('automated', True); t.set_editor_property('replace_existing', True); t.set_editor_property('save', True)
         tools.import_asset_tasks([t])
-        a = unreal.load_asset('%s/T_Brute_%s' % (DEST, kind))
+        a = unreal.load_asset('%s/T_Brute_%s' % (dest, kind))
         if not a: continue
         a.set_editor_property('compression_settings', comp); a.set_editor_property('srgb', srgb)
         if kind == 'Normal': a.set_editor_property('flip_green_channel', False)   # Blender exports OpenGL normals (NormalGL)
         unreal.EditorAssetLibrary.save_asset(a.get_path_name())
         tex[kind] = a
     if 'BaseColor' not in tex: return None
-    m = tools.create_asset('M_Brute', DEST, unreal.Material, unreal.MaterialFactoryNew())
+    m = tools.create_asset('M_Brute', dest, unreal.Material, unreal.MaterialFactoryNew())
+    m.set_editor_property('used_with_skeletal_mesh', True)   # without the usage flag -game silently falls back to the default grey
     def sample(kind, x, y, stype):
         n = MEL.create_material_expression(m, unreal.MaterialExpressionTextureSample, x, y)
         n.set_editor_property('texture', tex[kind]); n.set_editor_property('sampler_type', stype)
@@ -147,72 +149,61 @@ def build_fx(tools):
         unreal.log('[brute] fx asset ' + a)
 
 
+SKEL = '/Game/Brute/Skel'
+
+
 def build_in_ue():
+    """the skinned body (tools/brute/rig_brute.py): one SkeletalMesh /Game/Brute/Skel/SK_Brute + M_Brute; the old rigid parts are removed"""
     fbx = os.environ['BRUTE_FBX']
     EAL = unreal.EditorAssetLibrary
-    if EAL.does_directory_exist(DEST):
-        EAL.delete_directory(DEST)
+    for d in (DEST, SKEL):
+        if EAL.does_directory_exist(d): EAL.delete_directory(d)
     ui = unreal.FbxImportUI()
-    ui.set_editor_property('import_mesh', True)
-    ui.set_editor_property('import_as_skeletal', False)
-    ui.set_editor_property('import_materials', False)
-    ui.set_editor_property('import_textures', False)
-    ui.set_editor_property('import_animations', False)
-    ui.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_STATIC_MESH)
-    sm = ui.get_editor_property('static_mesh_import_data')
-    sm.set_editor_property('combine_meshes', False)
-    sm.set_editor_property('auto_generate_collision', False)
-    sm.set_editor_property('generate_lightmap_u_vs', False)
-    sm.set_editor_property('import_uniform_scale', 1.0)
-    sm.set_editor_property('convert_scene', True)
-    sm.set_editor_property('force_front_x_axis', False)
-    sm.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
+    for k, v in (('import_mesh', True), ('import_as_skeletal', True), ('import_materials', False), ('import_textures', False),
+                 ('import_animations', False), ('create_physics_asset', False)):
+        ui.set_editor_property(k, v)
+    ui.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    sk = ui.get_editor_property('skeletal_mesh_import_data')
+    sk.set_editor_property('import_uniform_scale', 1.0)
+    sk.set_editor_property('convert_scene', True)
+    sk.set_editor_property('force_front_x_axis', False)
+    sk.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
     t = unreal.AssetImportTask()
-    t.set_editor_property('filename', fbx)
-    t.set_editor_property('destination_path', DEST)
-    t.set_editor_property('automated', True)
-    t.set_editor_property('replace_existing', True)
-    t.set_editor_property('save', True)
-    t.set_editor_property('options', ui)
+    for k, v in (('filename', fbx), ('destination_path', SKEL), ('destination_name', 'SK_Brute'), ('automated', True), ('replace_existing', True),
+                 ('save', True), ('options', ui)):
+        t.set_editor_property(k, v)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     tools.import_asset_tasks([t])
-    mat = build_material(os.path.dirname(fbx), tools)
+    for a in EAL.list_assets(SKEL, recursive=True): unreal.log('[brute] asset ' + a)
+    m = unreal.load_asset(SKEL + '/SK_Brute')
+    if not isinstance(m, unreal.SkeletalMesh):
+        cands = [a for a in EAL.list_assets(SKEL, recursive=True) if isinstance(unreal.load_asset(a), unreal.SkeletalMesh)]
+        if cands:
+            EAL.rename_asset(cands[0].split('.')[0], SKEL + '/SK_Brute'); m = unreal.load_asset(SKEL + '/SK_Brute')
+    if not isinstance(m, unreal.SkeletalMesh):
+        unreal.log_error('SM2_BUILD_FAILED: no skeletal mesh imported'); raise RuntimeError('SK_Brute missing')
+    mat = build_material(os.path.dirname(fbx), tools, SKEL)   # M_Brute + textures live beside the mesh
     for kind in ('BaseColor', 'Normal', 'ORM'):   # the hero is always on screen: never stream his maps (no grey first second)
-        tx = unreal.load_asset('%s/T_Brute_%s' % (DEST, kind))
-        if tx:
-            tx.set_editor_property('never_stream', True); EAL.save_asset(tx.get_path_name())
+        tx = unreal.load_asset('%s/T_Brute_%s' % (SKEL, kind))
+        if tx: tx.set_editor_property('never_stream', True); EAL.save_asset(tx.get_path_name())
+    if mat:
+        mats = m.get_editor_property('materials')
+        for sm in mats: sm.set_editor_property('material_interface', mat)
+        m.set_editor_property('materials', mats)
+    skel = m.get_editor_property('skeleton')
+    try: names = [str(n) for n in unreal.AnimPoseExtensions.get_bone_names(skel.get_reference_pose())]
+    except Exception as ex: names = ['?(%s)' % ex]
+    b = m.get_bounds()
+    unreal.log('[brute] SK_Brute bounds origin (%.1f %.1f %.1f) extent (%.1f %.1f %.1f), bones %s' % (b.origin.x, b.origin.y, b.origin.z, b.box_extent.x, b.box_extent.y, b.box_extent.z, names))
+    EAL.save_asset(m.get_path_name())
     build_fx(tools)
-    rig = json.load(open(os.path.join(PROJ, 'Config', 'BruteRig.json')))
-    found = 0
-    for name in rig['parts']:
-        path = '%s/%s' % (DEST, name)
-        m = unreal.load_asset(path)
-        if not m:
-            # the FBX importer may prefix the file name
-            cands = [a for a in EAL.list_assets(DEST, recursive=True) if a.split('.')[0].endswith(name)]
-            m = unreal.load_asset(cands[0]) if cands else None
-            if m and cands[0].split('.')[0] != path:
-                EAL.rename_asset(cands[0].split('.')[0], path); m = unreal.load_asset(path)
-        if not m:
-            unreal.log_error('[brute] missing mesh ' + name); continue
-        if mat:
-            for i in range(max(1, len(m.static_materials))): m.set_material(i, mat)
-        b = m.get_bounding_box()
-        unreal.log('[brute] %s bounds min (%.1f %.1f %.1f) max (%.1f %.1f %.1f)' % (name, b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z))
-        EAL.save_asset(path)
-        found += 1
-    for a in EAL.list_assets(DEST, recursive=True):
-        unreal.log('[brute] asset ' + a)
-    if found != len(rig['parts']):
-        unreal.log_error('SM2_BUILD_FAILED: %d / %d brute parts' % (found, len(rig['parts'])))
-        raise RuntimeError('brute parts missing')
     unreal.log('SM2_BUILD_OK: build_brute.py')
 
 
 def orchestrate():
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_parts/brute_parts.fbx'))
+    ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_skel/brute_skel.fbx'))
     ap.add_argument('--fx-fbx', default=os.path.join(HOME, 'hulk-scratch/brute_fx/brute_fx.fbx'))
     a = ap.parse_args()
     if subprocess.run(['pgrep', '-f', UPROJECT], capture_output=True).returncode == 0:

@@ -55,8 +55,8 @@ The brief requires an independent critic per milestone. The owner was asleep and
 following is the builder's own review of the frames and must not be read as acceptance; an independent critic pass is the first
 item of the next loop.
 
-1. Body is rigid parts: small seams at elbows / knees / waist on large bends; poses are procedural (readable silhouettes: punch,
-   slap, clap, overhead smash, carry, superhero landing) but have no secondary motion.
+1. FIXED after the owner's first look: the rigid-part body tore at every joint. It is now one skinned mesh (no gaps); poses are
+   still procedural (punch, slap, clap, overhead smash, carry, superhero landing) without secondary motion.
 2. Impact FX are mesh-based (translucent rings, dust, rocks, flat crater + cracks); they read in daylight but are not Niagara-grade.
 3. The camera can end up inside tree canopies or under awnings after landings; no occlusion fade.
 4. Thunderclap shock band is faint against bright skies; the flying cars carry the read.

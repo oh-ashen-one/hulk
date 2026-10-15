@@ -6,6 +6,8 @@
 #include "Camera/CameraComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/PoseableMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Dom/JsonObject.h"
@@ -804,6 +806,7 @@ void ABruteCharacter::BuildRig()
 		return J;
 	};
 	// joint layout (cm, feet origin, X forward, Y right): Config/BruteRig.json when present (written by tools/brute/segment_brute.py)
+	float RestAbdJson = 0.f;
 	TMap<FString, FVector> J;
 	J.Add(TEXT("Pelvis"), FVector(0, 0, 88)); J.Add(TEXT("Torso"), FVector(0, 0, 122)); J.Add(TEXT("Head"), FVector(3, 0, 209));
 	J.Add(TEXT("UpperArm_L"), FVector(-10, -61, 191)); J.Add(TEXT("UpperArm_R"), FVector(-10, 61, 191));
@@ -814,6 +817,7 @@ void ABruteCharacter::BuildRig()
 		FString Txt; TSharedPtr<FJsonObject> Root;
 		if (FFileHelper::LoadFileToString(Txt, *(FPaths::ProjectConfigDir() / TEXT("BruteRig.json"))) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Txt), Root) && Root.IsValid())
 		{
+			double Abd = 0.0; if (Root->TryGetNumberField(TEXT("arm_rest_abd_deg"), Abd)) RestAbdJson = float(Abd);
 			const TSharedPtr<FJsonObject>* Js;
 			if (Root->TryGetObjectField(TEXT("joints"), Js))
 				for (const auto& KV : (*Js)->Values) { const TArray<TSharedPtr<FJsonValue>>& A = KV.Value->AsArray(); if (A.Num() >= 3) J.Add(FString(KV.Key), FVector(A[0]->AsNumber(), A[1]->AsNumber(), A[2]->AsNumber())); }
@@ -833,6 +837,7 @@ void ABruteCharacter::BuildRig()
 		JHip[S] = Joint(JHips, *(TEXT("Brute_Hip") + FString(Sd[S])), J[Th] - J[TEXT("Pelvis")]);
 		JKn[S] = Joint(JHip[S], *(TEXT("Brute_Kn") + FString(Sd[S])), J[Sh] - J[Th]);
 	}
+	if (BuildRigFromSkeleton()) { ArmRestAbd = RestAbdJson; return; }
 	if (BuildRigFromMeshes()) return;
 
 	// placeholder brick brute (engine cubes) until the Customuse body is imported (Scripts/build_brute.py)
@@ -866,6 +871,49 @@ void ABruteCharacter::BuildRig()
 		Part(JKn[S], *(TEXT("B_Foot") + FString(Sd[S])), Cube, FVector(9, 0, -32), FVector(0.46, 0.30, 0.10), SkinD);
 	}
 	UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: placeholder brick body (%d parts)"), Parts.Num());
+}
+
+bool ABruteCharacter::BuildRigFromSkeleton()
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteParts"))) return false;
+	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Brute/Skel/SK_Brute.SK_Brute"));
+	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: /Game/Brute/Skel/SK_Brute missing")); return false; }
+	Body = NewObject<UPoseableMeshComponent>(this, TEXT("Brute_Body"));
+	Body->SetupAttachment(Fig);
+	Body->SetSkinnedAssetAndUpdate(M);
+	if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Skel/M_Brute.M_Brute")))
+		for (int32 I = 0; I < FMath::Max(1, Body->GetNumMaterials()); ++I) Body->SetMaterial(I, Mat);
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Body->SetGenerateOverlapEvents(false);
+	Body->SetCastShadow(true);
+	Body->SetBoundsScale(1.6f);   // arms overhead / punches leave the reference-pose bounds
+	Body->RegisterComponent();
+	struct FMap { const TCHAR* Bone; USceneComponent* J; };
+	const FMap Order[] = { {TEXT("pelvis"), JHips}, {TEXT("spine"), JSpine}, {TEXT("head"), JHead}, {TEXT("upperarm_l"), JSh[0]}, {TEXT("forearm_l"), JEl[0]},
+		{TEXT("upperarm_r"), JSh[1]}, {TEXT("forearm_r"), JEl[1]}, {TEXT("thigh_l"), JHip[0]}, {TEXT("shin_l"), JKn[0]}, {TEXT("thigh_r"), JHip[1]}, {TEXT("shin_r"), JKn[1]} };
+	const FTransform BodyW = Body->GetComponentTransform();
+	for (const FMap& O : Order)
+	{
+		const FName B(O.Bone);
+		if (Body->GetBoneIndex(B) == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: bone %s missing in SK_Brute"), O.Bone); Body->DestroyComponent(); Body = nullptr; Drives.Reset(); return false; }
+		FBoneDrive D; D.Bone = B; D.J = O.J;
+		D.RestBone = Body->GetBoneTransformByName(B, EBoneSpaces::ComponentSpace);
+		D.RestJointInv = O.J->GetComponentTransform().GetRelativeTransform(BodyW).Inverse();
+		Drives.Add(D);
+	}
+	UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: skinned Customuse body (%d bones driven)"), Drives.Num());
+	return true;
+}
+
+void ABruteCharacter::DriveBones()
+{
+	if (!Body) return;
+	const FTransform BodyW = Body->GetComponentTransform();
+	for (const FBoneDrive& D : Drives)
+	{
+		const FTransform JointCS = D.J->GetComponentTransform().GetRelativeTransform(BodyW);
+		Body->SetBoneTransformByName(D.Bone, D.RestBone * D.RestJointInv * JointCS, EBoneSpaces::ComponentSpace);
+	}
 }
 
 bool ABruteCharacter::BuildRigFromMeshes()
@@ -1072,9 +1120,10 @@ void ABruteCharacter::ApplyPose()
 	{
 		// UE roll: + swings a hanging limb toward -Y, so abduction (outward) is -roll on the right side (+Y) and +roll on the left
 		const float Out = S == 0 ? 1.f : -1.f;
-		JSh[S]->SetRelativeRotation(FRotator(Pose.ShPitch[S], Pose.ShYaw[S], Pose.ShAbd[S] * Out));
+		JSh[S]->SetRelativeRotation(FRotator(Pose.ShPitch[S], Pose.ShYaw[S], (Pose.ShAbd[S] - ArmRestAbd) * Out));
 		JEl[S]->SetRelativeRotation(FRotator(Pose.Elbow[S], 0, 0));
 		JHip[S]->SetRelativeRotation(FRotator(Pose.HipPitch[S], 0, Pose.HipAbd[S] * Out));
 		JKn[S]->SetRelativeRotation(FRotator(-Pose.Knee[S], 0, 0));
 	}
+	DriveBones();
 }
