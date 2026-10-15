@@ -7,6 +7,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Dom/JsonObject.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -71,6 +72,7 @@ void ABruteCharacter::BeginPlay()
 
 	World.Init(GetWorld(), this);
 	bWorldReady = World.Ok();
+	for (ULevel* L : GetWorld()->GetLevels()) IndexCrowns(L);
 	LevelAddedHandle = FWorldDelegates::LevelAddedToWorld.AddUObject(this, &ABruteCharacter::OnLevelAdded);
 	LevelRemovedHandle = FWorldDelegates::LevelRemovedFromWorld.AddUObject(this, &ABruteCharacter::OnLevelRemoved);
 
@@ -118,13 +120,59 @@ void ABruteCharacter::EndPlay(const EEndPlayReason::Type Reason)
 
 void ABruteCharacter::OnLevelAdded(ULevel* L, UWorld* W)
 {
-	if (W == GetWorld() && L && !L->IsPersistentLevel()) { World.AddLevel(L); bWorldReady = World.Ok(); }
+	if (W == GetWorld() && L && !L->IsPersistentLevel()) { World.AddLevel(L); bWorldReady = World.Ok(); IndexCrowns(L); }
 }
 
 void ABruteCharacter::OnLevelRemoved(ULevel* L, UWorld* W)
 {
 	FBox B(ForceInit);
 	if (W == GetWorld() && L) World.RemoveLevel(L, B);
+}
+
+void ABruteCharacter::IndexCrowns(ULevel* L)
+{
+	if (!L) return;
+	const int32 N0 = NCrowns;
+	for (AActor* A : L->Actors)
+	{
+		if (!A) continue;
+		TInlineComponentArray<UInstancedStaticMeshComponent*> Is(A);
+		for (UInstancedStaticMeshComponent* IC : Is)
+		{
+			const UStaticMesh* SM = IC ? IC->GetStaticMesh() : nullptr;
+			if (!SM) continue;
+			const FString Nm = SM->GetName().ToLower();
+			if (!(Nm.Contains(TEXT("leaves")) || Nm.Contains(TEXT("crown")) || Nm.Contains(TEXT("canopy")) || Nm.Contains(TEXT("foliage")))) continue;
+			const FBoxSphereBounds MB = SM->GetBounds();
+			for (int32 K = 0; K < IC->GetInstanceCount(); ++K)
+			{
+				FTransform T; if (!IC->GetInstanceTransform(K, T, true)) continue;
+				const FVector C = T.TransformPosition(MB.Origin) / 100.0;
+				const double Rr = 0.75 * MB.SphereRadius * T.GetScale3D().GetMax() / 100.0;
+				if (Rr < 0.5 || Rr > 25.0) continue;
+				const int64 Key = (int64(FMath::FloorToInt(C.X / 16.0)) << 32) ^ int64(uint32(FMath::FloorToInt(C.Y / 16.0)));
+				Crowns.FindOrAdd(Key).Add(FVector4(C.X, C.Y, C.Z, Rr)); ++NCrowns;
+			}
+		}
+	}
+	if (NCrowns > N0) UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE tree crowns indexed: +%d (total %d)"), NCrowns - N0, NCrowns);
+}
+
+bool ABruteCharacter::SegHitsCrown(const FVector& A, const FVector& B) const
+{
+	if (NCrowns == 0) return false;
+	const int32 X0 = FMath::FloorToInt((FMath::Min(A.X, B.X) - 25.0) / 16.0), X1 = FMath::FloorToInt((FMath::Max(A.X, B.X) + 25.0) / 16.0);
+	const int32 Y0 = FMath::FloorToInt((FMath::Min(A.Y, B.Y) - 25.0) / 16.0), Y1 = FMath::FloorToInt((FMath::Max(A.Y, B.Y) + 25.0) / 16.0);
+	for (int32 X = X0; X <= X1; ++X) for (int32 Y = Y0; Y <= Y1; ++Y)
+	{
+		const TArray<FVector4>* L = Crowns.Find((int64(X) << 32) ^ int64(uint32(Y))); if (!L) continue;
+		for (const FVector4& S : *L)
+		{
+			const FVector C(S.X, S.Y, S.Z);
+			if (FMath::PointDistToSegment(C, A, B) < S.W) return true;
+		}
+	}
+	return false;
 }
 
 double ABruteCharacter::Floor(const FVector& P, double Up) const
@@ -705,11 +753,12 @@ void ABruteCharacter::UpdateCamera(float Dt)
 		double Hd = 0; FVector Nn;
 		if (World.SweepSolid(Pivot, Pivot + Back * (CamDist + 0.4), 0.35, Hd, Nn)) Arm = FMath::Max(1.6, Hd - 0.3);
 		// tree crowns have no collision: shorten the arm until the lens is out of the leaves (and the line to the body is clear)
-		if (World.SegmentHitsCrown(Pivot, Pivot + Back * (Arm + 2.5)))
+		auto Leaves = [this](const FVector& P0, const FVector& P1) { return SegHitsCrown(P0, P1) || World.SegmentHitsCrown(P0, P1); };
+		if (Leaves(Pivot, Pivot + Back * (Arm + 0.6)))
 		{
-			double Lo = 1.6, Hi = Arm;
-			for (int32 K = 0; K < 5; ++K) { const double M = 0.5 * (Lo + Hi); if (World.SegmentHitsCrown(Pivot, Pivot + Back * (M + 2.5))) Hi = M; else Lo = M; }
-			Arm = FMath::Max(1.6, Lo);
+			double Lo = 3.2, Hi = Arm;   // leaves: never closer than 3.2 m (under a canopy the body would fill the screen)
+			for (int32 K = 0; K < 6; ++K) { const double M = 0.5 * (Lo + Hi); if (Leaves(Pivot, Pivot + Back * (M + 0.6))) Hi = M; else Lo = M; }
+			Arm = FMath::Min(Arm, FMath::Max(3.2, Lo));
 		}
 	}
 	CameraBoom->TargetArmLength = float(Arm * 100.0);

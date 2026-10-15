@@ -96,6 +96,11 @@ private:
 	void OnLevelAdded(ULevel* L, UWorld* W);
 	void OnLevelRemoved(ULevel* L, UWorld* W);
 	double Floor(const FVector& P, double Up = 1.2) const;
+	// tree crowns (no collision in the city): spheres from leaf / crown instanced meshes, 16 m grid; the camera pulls out of them
+	TMap<int64, TArray<FVector4>> Crowns;
+	int32 NCrowns = 0;
+	void IndexCrowns(ULevel* L);
+	bool SegHitsCrown(const FVector& A, const FVector& B) const;
 
 	// ---- body state (m, m/s); Pos = feet
 	FVector Pos = FVector::ZeroVector, Vel = FVector::ZeroVector, LastSafe = FVector::ZeroVector;
