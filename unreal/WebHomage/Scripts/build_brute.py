@@ -66,6 +66,75 @@ def build_material(src_dir, tools):
     return m
 
 
+FX_DEST = '/Game/Brute/Fx'
+
+
+def fx_material(tools, name, dust):
+    """translucent unlit, two-sided: emissive = Color * Glow; opacity = Opacity x (shock: fades up the band, V) / (dust: soft edges, 1 - fresnel)."""
+    MEL = unreal.MaterialEditingLibrary
+    m = tools.create_asset(name, FX_DEST, unreal.Material, unreal.MaterialFactoryNew())
+    m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property('two_sided', True)
+    col = MEL.create_material_expression(m, unreal.MaterialExpressionVectorParameter, -700, -200)
+    col.set_editor_property('parameter_name', 'Color'); col.set_editor_property('default_value', unreal.LinearColor(1, 1, 1, 1))
+    glow = MEL.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -700, -50)
+    glow.set_editor_property('parameter_name', 'Glow'); glow.set_editor_property('default_value', 1.0)
+    em = MEL.create_material_expression(m, unreal.MaterialExpressionMultiply, -400, -150)
+    MEL.connect_material_expressions(col, '', em, 'A'); MEL.connect_material_expressions(glow, '', em, 'B')
+    MEL.connect_material_property(em, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    op = MEL.create_material_expression(m, unreal.MaterialExpressionScalarParameter, -700, 150)
+    op.set_editor_property('parameter_name', 'Opacity'); op.set_editor_property('default_value', 0.6)
+    if dust:
+        fr = MEL.create_material_expression(m, unreal.MaterialExpressionFresnel, -700, 300)
+        fr.set_editor_property('exponent', 1.6)
+        one = MEL.create_material_expression(m, unreal.MaterialExpressionOneMinus, -500, 300)
+        MEL.connect_material_expressions(fr, '', one, '')
+        shape = one
+    else:
+        tc = MEL.create_material_expression(m, unreal.MaterialExpressionTextureCoordinate, -900, 300)
+        mask = MEL.create_material_expression(m, unreal.MaterialExpressionComponentMask, -700, 300)
+        mask.set_editor_property('r', False); mask.set_editor_property('g', True); mask.set_editor_property('b', False); mask.set_editor_property('a', False)
+        MEL.connect_material_expressions(tc, '', mask, '')
+        one = MEL.create_material_expression(m, unreal.MaterialExpressionOneMinus, -500, 300)
+        MEL.connect_material_expressions(mask, '', one, '')
+        shape = MEL.create_material_expression(m, unreal.MaterialExpressionMultiply, -350, 300)
+        MEL.connect_material_expressions(one, '', shape, 'A'); MEL.connect_material_expressions(one, '', shape, 'B')
+    mul = MEL.create_material_expression(m, unreal.MaterialExpressionMultiply, -200, 200)
+    MEL.connect_material_expressions(op, '', mul, 'A'); MEL.connect_material_expressions(shape, '', mul, 'B')
+    df = MEL.create_material_expression(m, unreal.MaterialExpressionDepthFade, -60, 200)
+    df.set_editor_property('fade_distance_default', 60.0)
+    MEL.connect_material_expressions(mul, '', df, 'Opacity')
+    MEL.connect_material_property(df, '', unreal.MaterialProperty.MP_OPACITY)
+    MEL.recompile_material(m)
+    unreal.EditorAssetLibrary.save_asset(m.get_path_name())
+    unreal.log('[brute] fx material ' + m.get_path_name())
+    return m
+
+
+def build_fx(tools):
+    fbx = os.environ.get('BRUTE_FX_FBX', '')
+    if not fbx or not os.path.isfile(fbx):
+        unreal.log_warning('[brute] no fx fbx (%s): impacts fall back to engine shapes' % fbx); return
+    EAL = unreal.EditorAssetLibrary
+    if EAL.does_directory_exist(FX_DEST): EAL.delete_directory(FX_DEST)
+    ui = unreal.FbxImportUI()
+    for k, v in (('import_mesh', True), ('import_as_skeletal', False), ('import_materials', False), ('import_textures', False), ('import_animations', False)):
+        ui.set_editor_property(k, v)
+    ui.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_STATIC_MESH)
+    sm = ui.get_editor_property('static_mesh_import_data')
+    sm.set_editor_property('combine_meshes', False); sm.set_editor_property('auto_generate_collision', False)
+    sm.set_editor_property('generate_lightmap_u_vs', False); sm.set_editor_property('convert_scene', True)
+    t = unreal.AssetImportTask()
+    for k, v in (('filename', fbx), ('destination_path', FX_DEST), ('automated', True), ('replace_existing', True), ('save', True), ('options', ui)):
+        t.set_editor_property(k, v)
+    tools.import_asset_tasks([t])
+    fx_material(tools, 'M_BruteShock', False)
+    fx_material(tools, 'M_BruteDust', True)
+    for a in EAL.list_assets(FX_DEST, recursive=True):
+        unreal.log('[brute] fx asset ' + a)
+
+
 def build_in_ue():
     fbx = os.environ['BRUTE_FBX']
     EAL = unreal.EditorAssetLibrary
@@ -96,6 +165,11 @@ def build_in_ue():
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     tools.import_asset_tasks([t])
     mat = build_material(os.path.dirname(fbx), tools)
+    for kind in ('BaseColor', 'Normal', 'ORM'):   # the hero is always on screen: never stream his maps (no grey first second)
+        tx = unreal.load_asset('%s/T_Brute_%s' % (DEST, kind))
+        if tx:
+            tx.set_editor_property('never_stream', True); EAL.save_asset(tx.get_path_name())
+    build_fx(tools)
     rig = json.load(open(os.path.join(PROJ, 'Config', 'BruteRig.json')))
     found = 0
     for name in rig['parts']:
@@ -127,6 +201,7 @@ def orchestrate():
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_parts/brute_parts.fbx'))
+    ap.add_argument('--fx-fbx', default=os.path.join(HOME, 'hulk-scratch/brute_fx/brute_fx.fbx'))
     a = ap.parse_args()
     if subprocess.run(['pgrep', '-f', UPROJECT], capture_output=True).returncode == 0:
         raise SystemExit('an Unreal process of this project is running; stop it first (SIGTERM, wait up to 60 s)')
@@ -138,7 +213,7 @@ def orchestrate():
     if os.path.exists(lg): os.remove(lg)
     cmd = [GPU_SLOT, 'capture', '--label', 'hulk-build-brute', '--timeout', '3600', '--', UE, UPROJECT, '-run=pythonscript',
            '-script=' + os.path.abspath(__file__), '-unattended', '-nullrhi', '-nosplash', '-RenderOffScreen', '-NoSound', '-NoCrashReports', '-abslog=' + lg]
-    env = {**os.environ, 'BRUTE_FBX': os.path.abspath(a.fbx), 'GPU_SLOT_DIR': root, 'GPU_SLOT_CAPTURE_MAX_HOLD': '1800'}
+    env = {**os.environ, 'BRUTE_FBX': os.path.abspath(a.fbx), 'BRUTE_FX_FBX': os.path.abspath(a.fx_fbx), 'GPU_SLOT_DIR': root, 'GPU_SLOT_CAPTURE_MAX_HOLD': '1800'}
     t0 = time.time()
     rc = subprocess.run(cmd, env=env).returncode
     txt = open(lg, errors='replace').read() if os.path.exists(lg) else ''

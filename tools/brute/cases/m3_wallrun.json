@@ -1,0 +1,9 @@
+{
+ "name": "m3_wallrun",
+ "spawn": {"pos": [249.0, 140.0, 0.0], "yaw": 0, "camPitch": -8},
+ "keys": [
+  {"t": 0.0, "move": [0, 0]},
+  {"t": 0.8, "move": [0, 1], "sprint": 1},
+  {"t": 9.0, "sprint": 0, "move": [0, 0]}
+ ]
+}

@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Life/WHLifeTraffic.h"
+#include "Life/WHLifeCrowd.h"
 #include "BruteFx.generated.h"
 
 class UStaticMeshComponent;
@@ -19,6 +20,9 @@ namespace BruteFx
 	UStaticMesh* Cube();
 	UStaticMesh* Sphere();
 	UStaticMesh* Cylinder();
+	/** /Game/Brute/Fx assets (Scripts/build_brute.py); null when the fx content is not built. */
+	UStaticMesh* FxMesh(const TCHAR* Name);
+	UMaterialInstanceDynamic* FxMat(UObject* Outer, bool bDust, const FLinearColor& C, float Opacity, float Glow);
 }
 
 /** One impact: an expanding dust ring, flying debris chunks, a crater disk with radial cracks (persists), or a forward clap cone. */
@@ -33,7 +37,7 @@ public:
 	virtual void Tick(float Dt) override;
 
 private:
-	struct FPart { TObjectPtr<UStaticMeshComponent> C; FVector P, V, S0; float Life = 1.f, Age = 0.f, Spin = 0.f; uint8 Kind = 0; bool bRest = false; };
+	struct FPart { TObjectPtr<UStaticMeshComponent> C; TObjectPtr<UMaterialInstanceDynamic> M; FVector P, V, S0; float Life = 1.f, Age = 0.f, Spin = 0.f, Op0 = 1.f, Delay = 0.f, R1 = 1.f; uint8 Kind = 0; bool bRest = false; };
 	TArray<FPart> Parts;
 	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> Comps;
 	float Age = 0.f, Radius = 8.f, CraterLife = 30.f;
@@ -64,6 +68,21 @@ private:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Mesh;
 	float Age = 0.f, ImpactCd = 0.f;
 	UFUNCTION() void OnHit(UPrimitiveComponent* Self, AActor* Other, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+};
+
+/** A pedestrian knocked flying by an impact: tumbles ballistically, lands, lies a moment, then is gone (no gore, cartoon physics). */
+UCLASS()
+class WEBHOMAGE_API ABruteFlung : public AActor
+{
+	GENERATED_BODY()
+public:
+	ABruteFlung();
+	void Init(const FWHFlungWalker& W, const FVector& VelCm);
+	virtual void Tick(float Dt) override;
+private:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<class USkeletalMeshComponent> Body;
+	FVector Vel = FVector::ZeroVector, Spin = FVector::ZeroVector; FRotator Rot = FRotator::ZeroRotator;
+	float GroundZ = 0.f, Age = 0.f, RestT = -1.f, Scale = 1.f;
 };
 
 /** World helpers shared by the Brute's moves. */

@@ -78,6 +78,8 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category="Brute") float CraterVz = 17.f;          // landing speed that cracks the street
 
 	EBruteMode GetMode() const { return Mode; }
+	bool IsCharging() const { return bCharging && Charge > 0.12f; }
+	float GetCharge01() const { return FMath::Clamp(Charge / ChargeTime, 0.f, 1.f); }
 	FVector GetPosM() const { return Pos; }
 	FVector GetVelM() const { return Vel; }
 
@@ -137,7 +139,7 @@ private:
 	FBruteInput SampleScript(double T) const;
 
 	// ---- camera (control rotation drives yaw / pitch; own collision + speed FOV + trauma shake)
-	double CamYaw = 0.0, CamPitch = -12.0, CamDist = 7.5, CamFov = 72.0, Trauma = 0.0, FovKick = 0.0;
+	double CamYaw = 0.0, CamPitch = -12.0, CamDist = 7.5, CamFov = 72.0, Trauma = 0.0, FovKick = 0.0, LookIdle = 0.0;
 	void UpdateCamera(float Dt);
 
 	// ---- rig

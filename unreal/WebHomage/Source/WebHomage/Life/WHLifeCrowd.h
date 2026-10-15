@@ -39,6 +39,16 @@ namespace WHLife
 	};
 }
 
+/** Brute: a visible walker knocked off its feet by an impact (the walker itself respawns elsewhere in the crowd). */
+struct FWHFlungWalker
+{
+	TObjectPtr<USkeletalMesh> Mesh = nullptr;
+	TObjectPtr<UMaterialInterface> Material = nullptr;
+	TSubclassOf<UAnimInstance> Anim;
+	FVector PosCm = FVector::ZeroVector;
+	float YawDeg = 0.f, Scale = 1.f;
+};
+
 UCLASS()
 class WEBHOMAGE_API AWHLifeCrowd : public AActor
 {
@@ -129,6 +139,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="Life") FString StatsString() const;
 	/** Live walkers (C++ only): world positions of the feet-level pivot (cm), model ids, and their skeletal components. */
+	/** Brute: visible walkers within KnockM of CenterCm are knocked over (returned, then respawned out of view); walkers within FleeM
+	 *  turn away from the impact and run. Returns the number of walkers that started fleeing. */
+	int32 Panic(const FVector& CenterCm, float KnockM, float FleeM, TArray<FWHFlungWalker>& OutKnocked);
 	void GetLive(TArray<FVector>& Pos, TArray<int32>& Model, TArray<USkeletalMeshComponent*>& Comps, TArray<float>& Speed) const;
 	/** Live walkers whose position is inside a cone in front of Eye (also returns the number of distinct models via OutModels). */
 	UFUNCTION(BlueprintCallable, Category="Life") int32 CountInCone(FVector Eye, FVector Forward, float HalfAngleDeg, float Range, int32& OutModels) const;

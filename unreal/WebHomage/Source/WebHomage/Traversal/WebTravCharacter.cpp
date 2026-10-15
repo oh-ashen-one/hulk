@@ -1,6 +1,7 @@
 // Homage fan game. Not an official Marvel, Sony or Insomniac game; no affiliation.
 #include "Traversal/WebTravCharacter.h"
 #include "Brute/BruteCharacter.h"
+#include "Brute/BruteHUD.h"
 #include "Traversal/WebTraversalComponent.h"
 #include "Traversal/WebTravScript.h"
 #include "Traversal/Anim/WebTravAnimInstance.h"
@@ -2340,6 +2341,8 @@ bool AWebTravCharacter::InputTestTick(float Dt)
 AWebTravGameMode::AWebTravGameMode()
 {
 	// Brute (2026-10-15): the green brawler replaces the web-swinging hero in every map that uses this game mode; -WHSpidey restores the swinger
-	DefaultPawnClass = FParse::Param(FCommandLine::Get(), TEXT("WHSpidey")) ? AWebTravCharacter::StaticClass() : ABruteCharacter::StaticClass();
+	const bool bSpidey = FParse::Param(FCommandLine::Get(), TEXT("WHSpidey"));
+	DefaultPawnClass = bSpidey ? AWebTravCharacter::StaticClass() : ABruteCharacter::StaticClass();
+	if (!bSpidey) HUDClass = ABruteHUD::StaticClass();
 	PlayerControllerClass = AWebHomagePlayerController::StaticClass();
 }

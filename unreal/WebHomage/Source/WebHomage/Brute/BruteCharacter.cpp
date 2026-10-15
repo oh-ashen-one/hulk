@@ -53,8 +53,8 @@ ABruteCharacter::ABruteCharacter()
 	CameraBoom->TargetArmLength = 750.f;
 	CameraBoom->bDoCollisionTest = false;
 	CameraBoom->bEnableCameraLag = true;
-	CameraBoom->CameraLagSpeed = 9.f;
-	CameraBoom->CameraLagMaxDistance = 600.f;
+	CameraBoom->CameraLagSpeed = 12.f;
+	CameraBoom->CameraLagMaxDistance = 220.f;
 	CameraBoom->TargetOffset = FVector(0.f, 0.f, 95.f);
 	CameraBoom->SocketOffset = FVector(0.f, 55.f, 30.f);
 	FollowCamera->SetFieldOfView(72.f);
@@ -230,12 +230,16 @@ void ABruteCharacter::Tick(float Dt)
 	if (bScript) ScriptT += Dt;
 	CamYaw += I.MouseDeg.X + I.LookRate.X * Dt;
 	CamPitch = FMath::Clamp(CamPitch - I.MouseDeg.Y - I.LookRate.Y * Dt, -70.0, 45.0);
+	LookIdle = (I.MouseDeg.SizeSquared() > 1e-4 || I.LookRate.SizeSquared() > 1.0) ? 0.0 : LookIdle + Dt;
 
 	// fixed substeps (120 Hz) so fast falls never tunnel through a roof
+	// press edges: Step sees them on the first substep only; UpdateAct sees this frame's edges against the frame start
+	const FBruteInput FrameStart = Prev;
 	const int32 N = FMath::Clamp(FMath::CeilToInt(Dt * 120.f), 1, 8);
 	for (int32 K = 0; K < N; ++K) { Step(Dt / N, I); if (K == 0) Prev = I; }
-	Prev = I;
+	Prev = FrameStart;
 	UpdateAct(Dt, I);
+	Prev = I;
 
 	SetActorLocationAndRotation(Pos * 100.0 + FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), FRotator(0.0, FMath::RadiansToDegrees(Facing), 0.0));
 	Animate(Dt);
@@ -278,7 +282,7 @@ void ABruteCharacter::StepGround(float Dt, const FBruteInput& I, const FVector& 
 	bSprinting = I.bSprint && I.Move.Size() > 0.3f && !bActing && !bCharging;
 	double Target = I.Move.Size() < 0.05f ? 0.0 : (bSprinting ? SprintSpeed : (I.Move.Size() > 0.7f ? RunSpeed : WalkSpeed));
 	if (bActing) Target *= 0.3; else if (Act == EBruteAct::Carry) Target = FMath::Min(Target, (double)RunSpeed * 0.85);
-	if (bCharging) Target *= 0.25;
+	if (bCharging) Target = H2(Vel).Size() > RunSpeed ? FMath::Max(Target * 0.35, H2(Vel).Size() * (1.0 - 0.35 * Dt)) : Target * 0.3;   // a sprinting charge keeps its momentum for a running super jump
 	if (bLand) Target *= LandHard > 0.5f ? 0.0 : 0.4;
 	const FVector Hv = H2(Vel);
 	const FVector Want = Wish.GetSafeNormal() * Target;
@@ -348,7 +352,7 @@ void ABruteCharacter::Launch(float K, const FVector& Wish)
 	}
 	else
 	{
-		const double ChainK = 1.0 + 0.1 * FMath::Min(ChainN, 3);
+		const double ChainK = (1.0 + 0.1 * FMath::Min(ChainN, 3)) * (Hs > RunSpeed + 2.0 ? 1.15 : 1.0);   // chains and sprint take-offs go even bigger
 		const double Kk = FMath::Pow(FMath::Clamp((double)K, 0.0, 1.0), 0.8);
 		const double Hgt = FMath::Lerp(7.0, (double)SuperJumpHeight, Kk) * ChainK;
 		const double Vz = FMath::Sqrt(2.0 * Gravity * Hgt);
@@ -652,7 +656,7 @@ void ABruteCharacter::UpdateCamera(float Dt)
 	APlayerController* PC = Cast<APlayerController>(Controller);
 	const double Spd = Vel.Size();
 	double WantDist = 7.2 + FMath::Clamp((Spd - 8.0) / 30.0, 0.0, 1.0) * 3.0;
-	if (Mode == EBruteMode::Air) WantDist += FMath::Clamp((Pos.Z - LaunchZ) / 30.0, 0.0, 1.0) * 3.5;
+	if (Mode == EBruteMode::Air) WantDist += FMath::Clamp((Pos.Z - LaunchZ) / 30.0, 0.0, 1.0) * 2.0;
 	if (Mode == EBruteMode::Wall) WantDist = 9.0;
 	if (bCharging) WantDist += Charge / ChargeTime * 1.5;
 	if (Held.IsValid()) WantDist += 2.0;
@@ -662,6 +666,12 @@ void ABruteCharacter::UpdateCamera(float Dt)
 	CamFov = Approach(CamFov, WantFov, 6.0, Dt);
 	Trauma = FMath::Clamp(Trauma - Dt * 1.6, 0.0, 1.0);
 
+	if (Mode == EBruteMode::Air && LookIdle > 0.8)
+	{	// hands-off in a big jump: tilt down over the street so the landing zone is in view
+		const double Hgt = Pos.Z - Floor(Pos, 0.5);
+		CamPitch = Approach(CamPitch, -(12.0 + 18.0 * FMath::Clamp(Hgt / 40.0, 0.0, 1.0)), 1.6, Dt);
+	}
+	else if (Mode != EBruteMode::Air && LookIdle > 1.2 && CamPitch < -14.0) CamPitch = Approach(CamPitch, -12.0, 1.2, Dt);   // ease back after a jump
 	double Pitch = CamPitch;
 	if (Mode == EBruteMode::Wall) Pitch = FMath::Max(Pitch, 10.0);   // look up the facade
 	const FRotator Rot(Pitch, CamYaw, 0.0);

@@ -709,3 +709,38 @@ int32 AWHLifeCrowd::CountInCone(FVector Eye, FVector Forward, float HalfAngleDeg
 	OutModels = Models.Num();
 	return N;
 }
+
+// ------------------------------------------------------------------------------------------------ Brute: impacts scare the crowd
+int32 AWHLifeCrowd::Panic(const FVector& CenterCm, float KnockM, float FleeM, TArray<FWHFlungWalker>& OutKnocked)
+{
+	if (!bReady) return 0;
+	const FVector2D C(CenterCm.X * 0.01f, CenterCm.Y * 0.01f);
+	FVector Eye, Fwd; float Half = 181.f; GetView(Eye, Fwd, Half);
+	int32 NFlee = 0, NKnock = 0;
+	for (int32 I = 0; I < Walkers.Num(); ++I)
+	{
+		FWalker& W = Walkers[I];
+		if (W.Edge < 0) continue;
+		const FVector2D D = W.Pos - C; const float Dist = D.Size();
+		if (Dist > FleeM) continue;
+		if (Dist < KnockM && W.Comp >= 0 && NKnock < 12)
+		{
+			FWHFlungWalker F; F.Mesh = Meshes.IsValidIndex(W.Model) ? Meshes[W.Model].Get() : nullptr;
+			F.Material = MaterialOverrides.IsValidIndex(W.Model) ? MaterialOverrides[W.Model].Get() : nullptr; F.Anim = AnimClass;
+			F.PosCm = FVector(W.Pos.X * 100.f, W.Pos.Y * 100.f, (Edges[W.Edge].Kind == 1) ? 2.f : SidewalkZ); F.YawDeg = FMath::RadiansToDegrees(W.Heading) - 90.f; F.Scale = W.Scale;
+			if (F.Mesh) { OutKnocked.Add(F); ++NKnock; }
+			Unassign(I);
+			if (!Respawn(W, Eye, true)) W.Edge = -1;
+			continue;
+		}
+		const FEdge& E = Edges[W.Edge];
+		if (W.State == 1) { W.State = 0; W.WaitT = 0.f; }
+		if (FVector2D::DotProduct(E.U * W.Dir, D) < 0.f)
+		{	// heading toward the impact: turn around on the same edge
+			W.Dir = -W.Dir; W.S = FMath::Clamp(E.Len - W.S, 0.f, E.Len); W.Node = W.Dir > 0 ? E.B : E.A; W.bDecided = false; W.LatAdj = 0.f;
+		}
+		W.Target = 3.8f + Ff(W.Rng) * 1.6f; W.Speed = FMath::Max(W.Speed, 2.0f);
+		++NFlee;
+	}
+	return NFlee;
+}
