@@ -60,6 +60,19 @@ namespace WHLife
 	};
 }
 
+/** Brute: a car lifted out of the traffic simulation (moving or parked) so the caller can turn it into a physics prop. */
+struct FWHTakenCar
+{
+	TObjectPtr<UStaticMesh> Mesh = nullptr;
+	TObjectPtr<UMaterialInterface> Material = nullptr;
+	FTransform Xf;                         // world (cm), mesh origin on the road
+	FVector VelCm = FVector::ZeroVector;   // cm/s (moving cars keep their speed)
+	FLinearColor Color = FLinearColor::White;
+	int32 Type = 0;
+	float LenM = 4.8f, WidM = 1.85f;
+	bool bBig = false;
+};
+
 UCLASS()
 class WEBHOMAGE_API AWHLifeTraffic : public AActor
 {
@@ -161,8 +174,13 @@ public:
 	/** Night: registers the headlight / taillight provider with the city-lights actor (idempotent; called from either side's BeginPlay). */
 	void RegisterNightLights(AWHCityLights* Lights);
 	UFUNCTION(BlueprintCallable, Category="Life") int32 CountInCone(FVector Eye, FVector Forward, float HalfAngleDeg, float Range) const;
+	/** Brute: removes up to MaxN cars (moving and parked) whose centre lies within RadiusCm of CenterCm (horizontal distance, |dz| < 6 m),
+	 *  nearest first, and returns them. The simulation forgets them; parked instances are hidden. */
+	int32 TakeCarsInRadius(const FVector& CenterCm, float RadiusCm, int32 MaxN, TArray<FWHTakenCar>& Out);
 
 private:
+	struct FParkedRef { int32 Type = 0, Inst = 0; FLinearColor Color = FLinearColor::White; bool bTaken = false; };
+	TArray<FParkedRef> ParkedRefs;   // parallel to ParkedPts
 	TWeakObjectPtr<AWHCityLights> NightLights;
 	int32 NightProviderId = -1;
 	void EmitNightLights(const FVector& Cam, const FWHCLConfig& Cfg, TArray<FWHCLRecord>& Out) const;

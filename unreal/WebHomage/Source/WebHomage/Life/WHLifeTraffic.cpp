@@ -259,7 +259,7 @@ void AWHLifeTraffic::BuildComponents()
 			C->SetupAttachment(GetRootComponent());
 			C->SetStaticMesh(M);
 			if (VehicleMaterial) { for (int32 S = 0; S < (M ? M->GetStaticMaterials().Num() : 1); ++S) C->SetMaterial(S, VehicleMaterial); }
-			C->SetMobility(Pass ? EComponentMobility::Static : EComponentMobility::Movable);
+			C->SetMobility(EComponentMobility::Movable);   // Brute: parked instances can be lifted out at runtime (TakeCarsInRadius)
 			C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			C->SetCanEverAffectNavigation(false);
 			C->SetGenerateOverlapEvents(false);
@@ -278,7 +278,7 @@ void AWHLifeTraffic::PlaceParked()
 {
 	FVector4 ClearR(0, 0, 0, 0); bool bClear = false;
 	{ FString S; if (FParse::Value(FCommandLine::Get(), TEXT("WHLifeClearParked="), S)) { TArray<FString> P; S.ParseIntoArray(P, TEXT(":"), true); if (P.Num() >= 4) { bClear = true; ClearR = FVector4(FCString::Atof(*P[0]), FCString::Atof(*P[1]), FCString::Atof(*P[2]), FCString::Atof(*P[3])); } } }
-	NumParked = 0; NumParkedTaxis = 0; ParkedPts.Reset(); ParkedTypes.Reset();
+	NumParked = 0; NumParkedTaxis = 0; ParkedPts.Reset(); ParkedTypes.Reset(); ParkedRefs.Reset();
 	TArray<FString> Lines; ParkedData.ParseIntoArrayLines(Lines);
 	TArray<TArray<FTransform>> Tx; Tx.SetNum(NumTypes);
 	TArray<TArray<float>> Cd; Cd.SetNum(NumTypes);
@@ -303,6 +303,7 @@ void AWHLifeTraffic::PlaceParked()
 		Tx[T].Add(FTransform(FRotator(0.f, Yaw, 0.f), FVector(X, Y, 1.f)));
 		ParkedPts.Add(FVector(X, Y, 80.f)); ParkedTypes.Add(T);
 		Cd[T].Append({ FCString::Atof(*P[4]), FCString::Atof(*P[5]), FCString::Atof(*P[6]), P.Num() > 7 ? FCString::Atof(*P[7]) : 0.f });
+		{ FParkedRef R; R.Type = T; R.Inst = Tx[T].Num() - 1; R.Color = FLinearColor(FCString::Atof(*P[4]), FCString::Atof(*P[5]), FCString::Atof(*P[6])); ParkedRefs.Add(R); }
 		++NumParked; if (T <= T_taxi_gr) ++NumParkedTaxis;
 	}
 	for (int32 T = 0; T < NumTypes; ++T)
@@ -952,4 +953,55 @@ void AWHLifeTraffic::PushInstances()
 		MovingISM[T]->BatchUpdateInstancesTransforms(0, Xf[T], true, true, false);
 		Dirty[T] = false;
 	}
+}
+
+// ------------------------------------------------------------------------------------------------ Brute: lift cars out of the sim
+int32 AWHLifeTraffic::TakeCarsInRadius(const FVector& CenterCm, float RadiusCm, int32 MaxN, TArray<FWHTakenCar>& Out)
+{
+	if (!bReady || MaxN <= 0) return 0;
+	struct FCand { float D2; int32 Idx; bool bParked; };
+	TArray<FCand> Cands;
+	const float R2 = RadiusCm * RadiusCm;
+	for (int32 I = 0; I < Cars.Num(); ++I)
+	{
+		const FCar& C = Cars[I]; if (!C.bActive || C.Inst < 0 || !Xf.IsValidIndex(C.Type) || !Xf[C.Type].IsValidIndex(C.Inst)) continue;
+		const FVector P = Xf[C.Type][C.Inst].GetLocation();
+		if (P.Z < -1000.f || FMath::Abs(P.Z - CenterCm.Z) > 600.f) continue;
+		const float D2 = FVector::DistSquared2D(P, CenterCm); if (D2 < R2) Cands.Add({ D2, I, false });
+	}
+	for (int32 I = 0; I < ParkedPts.Num(); ++I)
+	{
+		if (!ParkedRefs.IsValidIndex(I) || ParkedRefs[I].bTaken) continue;   // parked Z is nominal (1 cm): 2D test only
+		const float D2 = FVector::DistSquared2D(ParkedPts[I], CenterCm); if (D2 < R2) Cands.Add({ D2, I, true });
+	}
+	Cands.Sort([](const FCand& A, const FCand& B) { return A.D2 < B.D2; });
+	int32 N = 0;
+	for (const FCand& K : Cands)
+	{
+		if (N >= MaxN) break;
+		FWHTakenCar T;
+		if (!K.bParked)
+		{
+			FCar& C = Cars[K.Idx];
+			T.Type = C.Type; T.Xf = Xf[C.Type][C.Inst]; T.Color = C.Color;
+			T.VelCm = T.Xf.GetRotation().GetForwardVector() * C.V * 100.f;
+			DespawnCar(K.Idx);
+		}
+		else
+		{
+			FParkedRef& R = ParkedRefs[K.Idx];
+			UInstancedStaticMeshComponent* M = ParkedISM.IsValidIndex(R.Type) ? ParkedISM[R.Type].Get() : nullptr;
+			if (!M || !M->GetInstanceTransform(R.Inst, T.Xf, true)) continue;
+			T.Type = R.Type; T.Color = R.Color;
+			M->UpdateInstanceTransform(R.Inst, FTransform(FRotator::ZeroRotator, FVector(0, 0, -5000.f), FVector(0.001f)), true, true, false);
+			R.bTaken = true; ParkedPts[K.Idx] = FVector(0, 0, -1e7f); --NumParked;
+		}
+		T.Mesh = VehicleMeshes.IsValidIndex(T.Type) ? VehicleMeshes[T.Type].Get() : nullptr;
+		T.Material = VehicleMaterial;
+		T.LenM = GTypes[T.Type].Len; T.WidM = GTypes[T.Type].Wid; T.bBig = GTypes[T.Type].bBig;
+		if (!T.Mesh) continue;
+		Out.Add(T); ++N;
+	}
+	if (N) PushInstances();
+	return N;
 }
