@@ -34,6 +34,8 @@ public:
 	ABruteShockwave();
 	/** RadiusM: ring reach. bCrater: leave a crater + cracks. ConeDir non-zero: a forward cone (thunderclap) instead of a full ring. */
 	void Init(float RadiusM, bool bCrater, const FVector& ConeDir = FVector::ZeroVector, float Strength = 1.f);
+	/** A fist punched into a facade (actor at the hit point): a dark crater on the wall plane, radial cracks, rubble falling, a dust burst. */
+	void InitWall(const FVector& Normal, float SizeM);
 	virtual void Tick(float Dt) override;
 
 private:

@@ -43,6 +43,8 @@ The pawn falls back to a placeholder brick body (engine cubes) if `/Game/Brute/S
 | Rig | Customuse website, Nodes editor -> Humanoid **Auto Rig** node (Cartwheel), 8 credits, driven through Codex Computer Use on the owner's Chrome; export `Emerald_Behemoth_Rigged_fbx.zip` (`SM_Character_Brute.fbx`, 52-bone SMPL-style skeleton incl. fingers, PBR PNGs) |
 | Animation | `tools/brute/animate_brute.py` (Blender): re-aims limb bones, leg IK + flat-foot copy-rotation baked to FK; Idle, Walk, Run, Stop, WallClimb, JumpCharge, JumpAir, Land -> `brute.glb` / `brute_anim.fbx` + `clips.json` |
 | Review | `tools/brute/viewer/serve.sh` -> http://127.0.0.1:8765 (three.js) |
+| Final clips (owner-approved in the viewer) | Cartwheel text-to-motion via the Customuse Humanoid Animation node: Idle, Walk (2nd gen), Run, StopLunge (trimmed at the coil), Jump (charge crouch -> launch), WallAttach (fists into the wall); **WallClimb reuses WallAttach** (owner's call after the Cartwheel and Meshy climbs were rejected). Hand-made Blender clips were rejected and are not used. `tools/brute/assemble_motion.py` cleans and merges them into `brute_anim.fbx` |
+| In game (2026-10-16) | `build_brute.py` imports `brute_anim.fbx` as `/Game/Brute/Body/SK_Brute` (+ `SK_Brute_Skeleton`, `M_Brute` from the export's D / N / ORM maps) and `A_Brute_<Clip>` AnimSequences. `ABruteCharacter::AnimateClips` samples them on the game thread into the poseable mesh: state -> clip segment, crossfades, root travel removed, feet put back on the street; combat moves aim the arms along the procedural joints as an overlay. Segment markers come from the bone curves (`tools/brute/analyze_clips.py`). `-WHBruteV1` falls back to the v1 path |
 
 ## Re-generating
 

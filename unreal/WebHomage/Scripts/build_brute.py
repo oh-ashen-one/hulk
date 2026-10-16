@@ -1,6 +1,6 @@
 # Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
 # Brute body content: imports the SKINNED Customuse model (tools/brute/rig_brute.py -> brute_skel.fbx) as the skeletal mesh
-# /Game/Brute/Skel/SK_Brute (+ M_Brute from its PBR maps) and the impact fx, idempotent (folders are deleted first). Content is git-ignored;
+# /Game/Brute/Body/SK_Brute (+ A_Brute_<Clip> anims, M_Brute from its PBR maps) and the impact fx, idempotent (folders are deleted first). Content is git-ignored;
 # this script + rig_brute.py + the source GLB (Customuse task, see docs/brute/ASSETS.md) are the source of truth.
 #
 #   plain python3 (orchestrator; YOUR editor/game of this project closed):
@@ -149,20 +149,49 @@ def build_fx(tools):
         unreal.log('[brute] fx asset ' + a)
 
 
-SKEL = '/Game/Brute/Skel'
+SKEL = '/Game/Brute/Body'   # v2 (a fresh folder: re-importing over the v1 SK_Brute in /Game/Brute/Skel cannot merge the new bone tree)
+OLD_SKEL = '/Game/Brute/Skel'
+
+
+CLIPS = ('Idle', 'Walk', 'Run', 'StopLunge', 'Jump', 'WallAttach', 'WallClimb')
+
+
+def rename_anims(EAL):
+    """the FBX takes import as <mesh>_Anim_<armature>_<Clip>: rename them to A_Brute_<Clip> (the names BruteCharacter loads)"""
+    found = []
+    for a in EAL.list_assets(SKEL, recursive=True):
+        o = unreal.load_asset(a)
+        if not isinstance(o, unreal.AnimSequence): continue
+        nm = a.split('.')[0].split('/')[-1]
+        clip = next((c for c in sorted(CLIPS, key=len, reverse=True) if nm.endswith(c)), None)
+        if not clip: unreal.log_warning('[brute] unmatched anim ' + a); continue
+        dst = '%s/A_Brute_%s' % (SKEL, clip)
+        if a.split('.')[0] != dst: EAL.rename_asset(a.split('.')[0], dst)
+        s = unreal.load_asset(dst)
+        unreal.log('[brute] anim %s %.2f s' % (dst, s.get_play_length()))
+        found.append(clip)
+    missing = [c for c in CLIPS if c not in found]
+    if missing: unreal.log_error('SM2_BUILD_FAILED: clips missing %s' % missing); raise RuntimeError('clips missing')
 
 
 def build_in_ue():
-    """the skinned body (tools/brute/rig_brute.py): one SkeletalMesh /Game/Brute/Skel/SK_Brute + M_Brute; the old rigid parts are removed"""
+    """the v2 body (Customuse CR 2.1 'Emerald Behemoth', Customuse auto-rig, clips assembled by tools/brute/assemble_motion.py):
+    one SkeletalMesh /Game/Brute/Body/SK_Brute + its AnimSequences A_Brute_<Clip> + M_Brute; the old rigid parts are removed"""
     fbx = os.environ['BRUTE_FBX']
     EAL = unreal.EditorAssetLibrary
-    for d in (DEST, SKEL):
+    for d in (DEST, OLD_SKEL, SKEL):
         if EAL.does_directory_exist(d): EAL.delete_directory(d)
     ui = unreal.FbxImportUI()
     for k, v in (('import_mesh', True), ('import_as_skeletal', True), ('import_materials', False), ('import_textures', False),
-                 ('import_animations', False), ('create_physics_asset', False)):
+                 ('import_animations', True), ('create_physics_asset', False)):
         ui.set_editor_property(k, v)
     ui.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    an = ui.get_editor_property('anim_sequence_import_data')
+    an.set_editor_property('convert_scene', True)
+    an.set_editor_property('import_bone_tracks', True)
+    an.set_editor_property('animation_length', unreal.FBXAnimationLengthImportType.FBXALIT_EXPORTED_TIME)
+    try: an.set_editor_property('use_default_sample_rate', False); an.set_editor_property('custom_sample_rate', 30)
+    except Exception as ex: unreal.log_warning('[brute] sample rate: %s' % ex)
     sk = ui.get_editor_property('skeletal_mesh_import_data')
     sk.set_editor_property('import_uniform_scale', 1.0)
     sk.set_editor_property('convert_scene', True)
@@ -196,6 +225,8 @@ def build_in_ue():
     b = m.get_bounds()
     unreal.log('[brute] SK_Brute bounds origin (%.1f %.1f %.1f) extent (%.1f %.1f %.1f), bones %s' % (b.origin.x, b.origin.y, b.origin.z, b.box_extent.x, b.box_extent.y, b.box_extent.z, names))
     EAL.save_asset(m.get_path_name())
+    rename_anims(EAL)
+    EAL.save_directory(SKEL)
     build_fx(tools)
     unreal.log('SM2_BUILD_OK: build_brute.py')
 
@@ -203,9 +234,19 @@ def build_in_ue():
 def orchestrate():
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_skel/brute_skel.fbx'))
+    ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_v4/brute_anim.fbx'))
+    ap.add_argument('--tex-dir', default=os.path.join(HOME, 'hulk-scratch/brute_v2/rig/textures'), help='Customuse auto-rig export textures (SM_Character_Brute_{D,N,ORM}.png)')
     ap.add_argument('--fx-fbx', default=os.path.join(HOME, 'hulk-scratch/brute_fx/brute_fx.fbx'))
     a = ap.parse_args()
+    # stage the FBX + its maps under the names build_material expects (T_Brute_<Kind>.png beside the FBX)
+    import shutil
+    stage = os.path.join(HOME, 'hulk-scratch', 'brute_ue')
+    os.makedirs(stage, exist_ok=True)
+    shutil.copy2(a.fbx, os.path.join(stage, 'brute_anim.fbx'))
+    for kind, suf in (('BaseColor', 'D'), ('Normal', 'N'), ('ORM', 'ORM')):
+        src = os.path.join(a.tex_dir, 'SM_Character_Brute_%s.png' % suf)
+        if os.path.isfile(src): shutil.copy2(src, os.path.join(stage, 'T_Brute_%s.png' % kind))
+    a.fbx = os.path.join(stage, 'brute_anim.fbx')
     if subprocess.run(['pgrep', '-f', UPROJECT], capture_output=True).returncode == 0:
         raise SystemExit('an Unreal process of this project is running; stop it first (SIGTERM, wait up to 60 s)')
     root = os.path.join(HOME, '.cache', 'gpu-slot')

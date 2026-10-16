@@ -7,6 +7,8 @@
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/PoseableMeshComponent.h"
+#include "Animation/AnimSequence.h"
+#include "Animation/Skeleton.h"
 #include "Engine/SkeletalMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -358,10 +360,18 @@ void ABruteCharacter::StepGround(float Dt, const FBruteInput& I, const FVector& 
 	}
 
 	// jump: tap = hop, hold = charge, release = super jump
-	if (I.bJump && !Prev.bJump && !bActing && (!bLand || ModeT > 0.12)) { bCharging = true; Charge = 0.f; }
+	if (I.bJump && !Prev.bJump && !bActing && (!bLand || ModeT > 0.12)) { bCharging = true; Charge = 0.f; bChargeCracked = false; }
 	if (bCharging)
 	{
-		if (I.bJump) Charge = FMath::Min(Charge + Dt, ChargeTime);
+		if (I.bJump)
+		{
+			Charge = FMath::Min(Charge + Dt, ChargeTime);
+			if (Charge >= ChargeTime && !bChargeCracked)
+			{	// full charge: the street gives way under his feet before he even leaves it
+				bChargeCracked = true; Trauma = FMath::Max(Trauma, 0.35);
+				Impact(Pos, 3.5f, true, 0.35f, 4.f, 2.f); Event(TEXT("charge_floor_crack"));
+			}
+		}
 		else { bCharging = false; Launch(Charge < 0.16f ? -1.f : Charge / ChargeTime, Wish); return; }
 	}
 
@@ -431,7 +441,7 @@ void ABruteCharacter::Launch(float K, const FVector& Wish)
 		Vel = Dir * Vh; Vel.Z = Vz;
 		Facing = FMath::Atan2(Dir.Y, Dir.X);
 		Trauma += 0.2 + 0.35 * K; FovKick += 6.0 + 10.0 * K;
-		if (K > 0.45f) Impact(Pos, 4.f + 6.f * K, false, 0.5f + 0.6f * K, 10.f, 8.f);
+		if (K > 0.45f) Impact(Pos, 4.f + 6.f * K, K > 0.6f, 0.5f + 0.6f * K, 10.f, 8.f);   // a strong take-off breaks the street (crater)
 		Event(FString::Printf(TEXT("super_jump k=%.2f chain=%d h=%.1f range=%.1f vz=%.1f vh=%.1f"), K, ChainN, Hgt, Range, Vz, Vh));
 	}
 	SetMode(EBruteMode::Air); AirT = 0.0; LaunchZ = Pos.Z; ApexZ = Pos.Z; DashesLeft = 2; Charge = 0.f;
@@ -837,6 +847,7 @@ void ABruteCharacter::BuildRig()
 		JHip[S] = Joint(JHips, *(TEXT("Brute_Hip") + FString(Sd[S])), J[Th] - J[TEXT("Pelvis")]);
 		JKn[S] = Joint(JHip[S], *(TEXT("Brute_Kn") + FString(Sd[S])), J[Sh] - J[Th]);
 	}
+	if (BuildClipRig()) { ArmRestAbd = RestAbdJson; return; }
 	if (BuildRigFromSkeleton()) { ArmRestAbd = RestAbdJson; return; }
 	if (BuildRigFromMeshes()) return;
 
@@ -941,6 +952,7 @@ bool ABruteCharacter::BuildRigFromMeshes()
 
 FVector ABruteCharacter::HandWorldCm(int32 S) const
 {
+	if (bClipRig && Body) return Body->GetBoneTransform(BHand[S]).GetLocation();
 	return JEl[S] ? JEl[S]->GetComponentTransform().TransformPosition(FVector(0, 0, -58)) : GetActorLocation();
 }
 
@@ -1107,13 +1119,16 @@ void ABruteCharacter::Animate(float Dt)
 	}
 	Pose.Blend(T, 1.f - FMath::Exp(-Rate * Dt));
 	ApplyPose();
+	if (bClipRig) AnimateClips(Dt);
 }
 
 void ABruteCharacter::ApplyPose()
 {
 	if (!Fig) return;
 	const float Half = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-	Fig->SetRelativeLocationAndRotation(FVector(0, 0, -Half + Pose.RootZ), FRotator(Pose.RootPitch, 0, Pose.RootRoll));
+	// clip body: the clips carry their own crouches; the procedural root only rides along while a combat overlay plays
+	const float RootK = bClipRig ? OverlayW : 1.f;
+	Fig->SetRelativeLocationAndRotation(FVector(0, 0, -Half + Pose.RootZ * RootK), FRotator(Pose.RootPitch * RootK, 0, Pose.RootRoll * RootK));
 	JSpine->SetRelativeRotation(FRotator(Pose.SpinePitch, Pose.SpineYaw, Pose.SpineRoll));
 	JHead->SetRelativeRotation(FRotator(Pose.HeadPitch, 0, 0));
 	for (int32 S = 0; S < 2; ++S)
@@ -1126,4 +1141,224 @@ void ABruteCharacter::ApplyPose()
 		JKn[S]->SetRelativeRotation(FRotator(-Pose.Knee[S], 0, 0));
 	}
 	DriveBones();
+}
+
+// ================================================================================================ v2 clip body
+bool ABruteCharacter::BuildClipRig()
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteV1"))) return false;
+	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Brute/Body/SK_Brute.SK_Brute"));
+	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: /Game/Brute/Body/SK_Brute missing (run Scripts/build_brute.py)")); return false; }
+	static const TCHAR* Names[CNum] = { TEXT("Idle"), TEXT("Walk"), TEXT("Run"), TEXT("StopLunge"), TEXT("Jump"), TEXT("WallAttach"), TEXT("WallClimb") };
+	Clips.Reset();
+	for (const TCHAR* N : Names)
+	{
+		UAnimSequence* S = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Brute/Body/A_Brute_%s.A_Brute_%s"), N, N));
+		if (!S) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: clip A_Brute_%s missing"), N); Clips.Reset(); return false; }
+		Clips.Add(S);
+	}
+	const FReferenceSkeleton& Ref = M->GetRefSkeleton();
+	auto Bi = [&Ref](const TCHAR* N) { return Ref.FindBoneIndex(FName(N)); };
+	BHips = Bi(TEXT("Hips")); BSpine = Bi(TEXT("Spine1"));
+	BArm[0] = Bi(TEXT("LeftArm")); BArm[1] = Bi(TEXT("RightArm")); BFore[0] = Bi(TEXT("LeftForeArm")); BFore[1] = Bi(TEXT("RightForeArm"));
+	BHand[0] = Bi(TEXT("LeftHand")); BHand[1] = Bi(TEXT("RightHand"));
+	BFoot[0] = Bi(TEXT("LeftFoot")); BFoot[1] = Bi(TEXT("RightFoot")); BFoot[2] = Bi(TEXT("LeftToeBase")); BFoot[3] = Bi(TEXT("RightToeBase"));
+	for (int32 B : { BHips, BSpine, BArm[0], BArm[1], BFore[0], BFore[1], BHand[0], BHand[1], BFoot[0], BFoot[1], BFoot[2], BFoot[3] })
+		if (B == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: SK_Brute lacks a Mixamo-named bone")); Clips.Reset(); return false; }
+
+	Body = NewObject<UPoseableMeshComponent>(this, TEXT("Brute_Body"));
+	Body->SetupAttachment(Fig);
+	Body->SetSkinnedAssetAndUpdate(M);
+	if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Body/M_Brute.M_Brute")))
+		for (int32 I = 0; I < FMath::Max(1, Body->GetNumMaterials()); ++I) Body->SetMaterial(I, Mat);
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Body->SetGenerateOverlapEvents(false);
+	Body->SetCastShadow(true);
+	Body->SetBoundsScale(2.f);   // leaps / overhead fists leave the reference bounds
+
+	const int32 NB = Ref.GetNum();
+	USkeleton* Sk = M->GetSkeleton();
+	RefLocal = Ref.GetRefBonePose();
+	SkelIdx.SetNum(NB); BoneParent.SetNum(NB); CS.SetNum(NB);
+	for (int32 I = 0; I < NB; ++I)
+	{
+		SkelIdx[I] = Sk ? Sk->GetSkeletonBoneIndexFromMeshBoneIndex(M, I) : I;
+		BoneParent[I] = Ref.GetParentIndex(I);
+	}
+	// measure on an idle frame, not the bind pose: the clips' armature root carries the export's axis turn, so only a sampled pose
+	// faces the way the animation does
+	{
+		FClipPlay P; P.Clip = CIdle; P.T = 0.5;
+		SampleClip(P, PoseA);
+		for (int32 I = 0; I < NB; ++I) CS[I] = BoneParent[I] < 0 ? PoseA[I] : PoseA[I] * CS[BoneParent[I]];
+	}
+	// face +X (toes ahead of the ankles), feet on the figure origin, 2.6 m tall
+	FVector Fw = (CS[BFoot[2]].GetLocation() - CS[BFoot[0]].GetLocation()) + (CS[BFoot[3]].GetLocation() - CS[BFoot[1]].GetLocation());
+	Fw.Z = 0.0; Fw = Fw.GetSafeNormal();
+	const double Yaw = FMath::Atan2(Fw.Y, Fw.X);
+	BodyYawQ = FQuat(FVector::UpVector, -Yaw);
+	RefHipsCS = CS[BHips].GetLocation();
+	RefFootZ = 1e9; for (int32 B : BFoot) RefFootZ = FMath::Min(RefFootZ, CS[B].GetLocation().Z);
+	const double Hgt = M->GetBounds().BoxExtent.Z * 2.0;
+	const double Sc = Hgt > 1.0 ? 260.0 / Hgt : 1.0;
+	Body->SetRelativeScale3D(FVector(Sc));
+	Body->SetRelativeLocationAndRotation(FVector(0, 0, -RefFootZ * Sc), BodyYawQ.Rotator());
+	Body->RegisterComponent();
+	Body->BoneSpaceTransforms = RefLocal;
+	PoseA = RefLocal; PoseB = RefLocal;
+	WImpacts = { WAttachImpact, 1.5f };
+	bClipRig = true;
+	Play(CIdle, 0.05, Clips[CIdle]->GetPlayLength(), true, 1.f, 0.f, TEXT("idle"));
+	UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: v2 clip body (%d bones, %d clips, forward yaw %.0f deg, height %.0f cm x %.2f, foot z %.1f)"),
+		NB, Clips.Num(), FMath::RadiansToDegrees(Yaw), Hgt, Sc, RefFootZ);
+	return true;
+}
+
+void ABruteCharacter::Play(int32 Clip, double Lo, double Hi, bool bLoop, float Rate, float FadeS, FName Tag, double Start)
+{
+	if (Cur.Clip == Clip && Cur.Tag == Tag) { Cur.Lo = Lo; Cur.Hi = Hi; Cur.bLoop = bLoop; Cur.Rate = Rate; return; }
+	Old = Cur;
+	FadeDur = FadeS; Fade = (FadeS > 0.f && Old.Clip >= 0) ? 0.f : 1.f;
+	Cur.Clip = Clip; Cur.Lo = Lo; Cur.Hi = Hi; Cur.bLoop = bLoop; Cur.Rate = Rate; Cur.Tag = Tag; Cur.bHold = false;
+	Cur.T = Start >= 0.0 ? Start : Lo;
+}
+
+void ABruteCharacter::SampleClip(const FClipPlay& P, TArray<FTransform>& Out) const
+{
+	Out = RefLocal;
+	if (!Clips.IsValidIndex(P.Clip) || !Clips[P.Clip]) return;
+	const UAnimSequence* S = Clips[P.Clip];
+	const FAnimExtractContext Ctx(FMath::Clamp(P.T, 0.0, (double)S->GetPlayLength()));
+	for (int32 I = 0; I < Out.Num(); ++I)
+		if (SkelIdx[I] != INDEX_NONE) S->GetBoneTransform(Out[I], FSkeletonPoseBoneIndex(SkelIdx[I]), Ctx, false);
+}
+
+void ABruteCharacter::AnimateClips(float Dt)
+{
+	if (!Body) return;
+	const double Hs = H2(Vel).Size();
+	auto Len = [this](int32 C) { return (double)Clips[C]->GetPlayLength(); };
+	const double PrevT = Cur.T; const FName PrevTag = Cur.Tag;
+
+	// ---- state -> clip segment
+	if (Mode == EBruteMode::Wall)
+	{	// slam into the facade fists first, then every climb step is the same slam again, one fist after the other
+		if (PrevAnimMode != EBruteMode::Wall) Play(CWallAttach, 0.0, WClimbHi, false, 1.7f, 0.08f, TEXT("attach"), 0.2);
+		else if (Cur.Tag == TEXT("attach") && Cur.T >= WClimbHi - 0.02) Play(CWallClimb, WClimbLo, WClimbHi, true, 1.6f, 0.12f, TEXT("climb"));
+	}
+	else if (Mode == EBruteMode::Air)
+	{
+		if (Cur.Tag != TEXT("air")) Play(CJump, JLaunch, JApex, false, 1.3f, 0.1f, TEXT("air"));
+		else { Cur.Hi = Vel.Z > 1.0 ? JApex : JFallHi; Cur.Rate = Vel.Z > 1.0 ? 1.3f : 0.5f; }
+	}
+	else if (Mode == EBruteMode::Land && LandHard > 0.5f)
+	{	// hard landing: the stop-lunge coil (deep crouch absorbing the impact)
+		Play(CStopLunge, LandFrom, Len(CStopLunge), false, 2.2f, 0.05f, TEXT("land"));
+	}
+	else if (bCharging)
+	{
+		if (!bWasCharging)
+		{	// out of a run: plant and coil (stop-lunge); from a stand: the jump clip's charge crouch, scrubbed by the charge
+			if (Hs > RunSpeed) Play(CStopLunge, 1.0, Len(CStopLunge), false, 2.0f, 0.1f, TEXT("lunge"));
+			else Play(CJump, JChargeLo, JChargeHi, false, 0.f, 0.12f, TEXT("charge"));
+		}
+		if (Cur.Tag == TEXT("charge")) Cur.T = FMath::Lerp((double)JChargeLo, (double)JChargeHi, (double)Smooth01(GetCharge01()));
+	}
+	else if (Hs < 1.2)
+		Play(CIdle, 0.05, Len(CIdle), true, 1.f, 0.25f, TEXT("idle"));
+	else if (Hs < (WalkSpeed + RunSpeed) * 0.5)
+		Play(CWalk, 0.05, Len(CWalk), true, FMath::Clamp(float(Hs) / 5.5f, 0.7f, 1.5f), 0.22f, TEXT("walk"));
+	else
+		Play(CRun, 0.05, Len(CRun), true, FMath::Clamp(float(Hs) / 11.f, 0.9f, 1.9f), 0.18f, TEXT("run"));
+	bWasCharging = bCharging; PrevAnimMode = Mode;
+
+	// ---- advance
+	auto Adv = [Dt](FClipPlay& P)
+	{
+		P.T += P.Rate * Dt;
+		if (P.bLoop) { const double L = P.Hi - P.Lo; if (L > 1e-3) while (P.T >= P.Hi) P.T -= L; }
+		else P.T = FMath::Min(P.T, P.Hi);
+	};
+	Adv(Cur);
+	if (Fade < 1.f) { Adv(Old); Fade = FMath::Min(1.f, Fade + Dt / FMath::Max(FadeDur, 0.01f)); }
+
+	// fists hitting the wall (attach + every climb loop): a crater where each fist lands
+	if ((Cur.Tag == TEXT("attach") || Cur.Tag == TEXT("climb")) && Cur.Tag == PrevTag)
+		for (int32 K = 0; K < WImpacts.Num(); ++K)
+		{
+			const double Ti = WImpacts[K];
+			const bool bHit = Cur.T >= PrevT ? (PrevT < Ti && Ti <= Cur.T) : (Ti > PrevT || Ti <= Cur.T);
+			if (bHit) { WallPunchFx(K % 2); if (K == 0 && Cur.Tag == TEXT("attach")) WallPunchFx(1); }   // the attach slam drives both fists in
+		}
+
+	// ---- sample + crossfade
+	SampleClip(Cur, PoseA);
+	if (Fade < 1.f && Old.Clip >= 0)
+	{
+		SampleClip(Old, PoseB);
+		const float A = Smooth01(Fade);
+		for (int32 I = 0; I < PoseA.Num(); ++I) { FTransform X; X.Blend(PoseB[I], PoseA[I], A); PoseA[I] = X; }
+	}
+	auto FK = [this]() { for (int32 I = 0; I < PoseA.Num(); ++I) CS[I] = BoneParent[I] < 0 ? PoseA[I] : PoseA[I] * CS[BoneParent[I]]; };
+	auto SetCS = [this](int32 B, const FTransform& X) { CS[B] = X; PoseA[B] = BoneParent[B] < 0 ? X : X.GetRelativeTransform(CS[BoneParent[B]]); };
+	FK();
+
+	// ---- root: the sim moves him, so the clip's own travel goes (no drift, no leaping out of the capsule); ground clips keep their
+	// crouch and the lowest foot is put back on the street
+	{
+		FTransform Hx = CS[BHips];
+		FVector L = Hx.GetLocation();
+		const FVector RefH = RefHipsCS;
+		L.X = RefH.X; L.Y = RefH.Y;
+		const bool bGround = Mode == EBruteMode::Ground || Mode == EBruteMode::Land;
+		if (!bGround) L.Z = FMath::Min(L.Z, RefH.Z + 5.0);
+		Hx.SetLocation(L); SetCS(BHips, Hx); FK();
+		if (bGround)
+		{
+			double Low = 1e9; for (int32 B : BFoot) Low = FMath::Min(Low, CS[B].GetLocation().Z);
+			L.Z += RefFootZ - Low; Hx.SetLocation(L); SetCS(BHips, Hx); FK();
+		}
+	}
+
+	// ---- combat overlay: spine twist / bend and the arms aimed along the procedural joints (punch, slap, clap, smash, grab, carry, throw,
+	// uppercut, slam dive, air dash)
+	const bool bOv = Act != EBruteAct::None || bSlamDive || DashT > 0.f || Held.IsValid();
+	OverlayW = float(Approach(OverlayW, bOv ? 1.0 : 0.0, bOv ? 18.0 : 8.0, Dt));
+	if (OverlayW > 0.01f)
+	{
+		const FQuat Qa = FRotator(Pose.SpinePitch, Pose.SpineYaw, Pose.SpineRoll).Quaternion();
+		const FQuat Qcs = FQuat::Slerp(FQuat::Identity, BodyYawQ.Inverse() * Qa * BodyYawQ, OverlayW);
+		FTransform Sp = CS[BSpine]; Sp.SetRotation(Qcs * Sp.GetRotation()); SetCS(BSpine, Sp); FK();
+		const FTransform BodyW = Body->GetComponentTransform();
+		for (int32 S = 0; S < 2; ++S)
+		{
+			const FVector Sh = JSh[S]->GetComponentLocation(), El = JEl[S]->GetComponentLocation(), Hd = JEl[S]->GetComponentTransform().TransformPosition(FVector(0, 0, -58));
+			const FVector DU = BodyW.InverseTransformVectorNoScale(El - Sh).GetSafeNormal(), DF = BodyW.InverseTransformVectorNoScale(Hd - El).GetSafeNormal();
+			auto Aim = [&](int32 B, int32 Child, const FVector& D)
+			{
+				const FVector Cur0 = (CS[Child].GetLocation() - CS[B].GetLocation()).GetSafeNormal();
+				if (Cur0.IsNearlyZero() || D.IsNearlyZero()) return;
+				const FQuat Q = FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(Cur0, D), OverlayW);
+				FTransform X = CS[B]; X.SetRotation(Q * X.GetRotation()); SetCS(B, X); FK();
+			};
+			Aim(BArm[S], BFore[S], DU);
+			Aim(BFore[S], BHand[S], DF);
+		}
+	}
+	Body->BoneSpaceTransforms = PoseA;
+	Body->MarkRefreshTransformDirty();
+}
+
+void ABruteCharacter::WallPunchFx(int32 Side)
+{
+	UWorld* W = GetWorld(); if (!W) return;
+	const FVector HandM = HandWorldCm(Side) / 100.0;
+	FTravHit Hit;
+	FVector At = HandM - WallN * 0.3, N = WallN;
+	if (bWorldReady && World.Raycast(HandM + WallN * 1.0, -WallN, 3.5, Hit)) { At = Hit.Point; N = Hit.Normal; }
+	FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>(At * 100.0, FRotator::ZeroRotator, SP)) S->InitWall(N, 0.9f);
+	Trauma = FMath::Max(Trauma, 0.3);
+	BruteWorld::Collateral() += 4000.0;
+	Event(FString::Printf(TEXT("wall_punch %s"), Side == 0 ? TEXT("L") : TEXT("R")));
 }

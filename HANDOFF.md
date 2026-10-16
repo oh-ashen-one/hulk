@@ -1,4 +1,4 @@
-# Brute — rolling handoff (updated 2026-10-15, post-v2 asset rebuild)
+# Brute — rolling handoff (updated 2026-10-16, v2 body + clips integrated in Unreal)
 
 Owner direction 2026-10-15: replace all of Spider-Man with a big green Hulk-like character; no swinging — he stomps, jumps and
 leaps. Owner "go" (full permissions, "don't interrupt other sessions", "use the Customuse API/MCP for assets"):
@@ -17,8 +17,7 @@ captures; the owner has played it live once.
 
 **v2 asset (body + animation) is the current work thread.** The owner rejected two earlier bodies ("super fucking ugly",
 "still looks horrible") and several animation passes. The current set below is the one the owner reviewed in the localhost
-viewer and approved clip-by-clip. **Next session's job: integrate this set into Unreal** — the in-game body is still the v1
-11-bone skinned Tripo P1 mesh with procedural poses.
+viewer and approved clip-by-clip. **Integrated into Unreal 2026-10-16** (see "In-game v2" below); the owner has not played it yet.
 
 ## Approved v2 asset set (owner-reviewed 2026-10-15)
 
@@ -56,17 +55,30 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
 - `animate_brute.py`, `rig_brute.py`, `segment_brute.py` — v1 pipeline, kept for reference.
 - `capture.sh`, `cases/` — scripted in-game captures.
 
-## NEXT SESSION: Unreal integration (owner said "go ahead, full thing, use subagents when needed")
+## In-game v2 (2026-10-16, pushed)
 
-1. Import `brute_anim.fbx` (or GLB via interchange) into UE5.8 via `unreal/WebHomage/Scripts/build_brute.py` →
-   `/Game/Brute/Skel`. Skeleton-compatible AnimSequences per clip. Replace v1 mesh/parts (keep `/Game/Brute/Fx`).
-2. `BruteCharacter` (`Source/WebHomage/Brute/BruteCharacter.cpp/h`): swap procedural pose driving for AnimSequence playback
-   by state — Idle / Walk / Run by speed, StopLunge on sprint-stop, Jump charge→launch, WallAttach on wall contact,
-   WallClimb per climb step (replay slam each step + haul up), JumpAir/Land if present.
-3. **FX hooks the owner explicitly wants:** floor cracks/debris under charged-jump launch ("floor breaks under his feet");
-   wall crater + debris at each climb punch impact.
-4. Test on Manhattan + Manhattan_Island via `tools/brute/capture.sh`; live owner playtest via `./Play-Brute.command`.
-5. Update ASSETS.md/MOVESET.md/RESULTS.md, commit + push `brute`. **Never merge to main** without explicit permission.
+- `python3 unreal/WebHomage/Scripts/build_brute.py` imports `~/hulk-scratch/brute_v4/brute_anim.fbx` + the Customuse maps into
+  `/Game/Brute/Body` (`SK_Brute`, `A_Brute_<Clip>` x7, `M_Brute`); old `/Game/Brute/Skel` + `Parts` are deleted. A fresh folder
+  is required: re-importing over the v1 `SK_Brute` fails with "cannot merge bone tree with the existing skeleton".
+- `ABruteCharacter::BuildClipRig` / `AnimateClips` (BruteCharacter.cpp, end of file): clips sampled on the game thread into the
+  poseable mesh. Ground: Idle / Walk / Run by speed (rates clamped, feet slide at sprint speed by design), charge = Jump clip's
+  crouch scrubbed by the charge (from a run: StopLunge coil), air = Jump launch -> apex hold, hard landing = StopLunge coil,
+  wall = WallAttach slam then the slam segment looped as the climb. Root travel removed, lowest foot pinned to the street, forward
+  measured from a sampled idle frame (the bind pose is turned 77 deg vs the clips). Combat moves (punch/slap/clap/smash/grab/
+  carry/throw/uppercut/slam dive/dash) still come from the procedural joints, applied as a spine + arm-aim overlay.
+- FX the owner asked for: full charge cracks the street (`charge_floor_crack`), a strong take-off leaves a crater; every climb
+  fist leaves a wall crater with cracks, rubble and dust (`ABruteShockwave::InitWall`, events `wall_punch L/R`).
+- Verified offscreen (movie frames inspected): `tools/brute/capture.sh v2_loco -movie` and `m3_wallrun -movie`; strips in
+  `docs/brute/evidence/v2_ingame_*.jpg`. Not verified: owner live play, Manhattan_Island, fps.
+- `-WHBruteV1` falls back to the old procedural path (needs the old Skel content, which the build now deletes -> bricks).
+
+## Next steps
+
+1. Owner playtest via `./Play-Brute.command`; turn feedback into fixes.
+2. Combat clips: punches/clap/smash/grab/throw are still procedural arm overlays on the new body — generate real clips (Meshy
+   preset library has punches) if the owner wants them.
+3. No falling/landing clip: air uses the jump's arms-up hold. Generate JumpAir/Land if needed.
+4. Independent critic pass, Manhattan_Island check, desktop fps measurement.
 
 ## Gotchas (learned the hard way)
 

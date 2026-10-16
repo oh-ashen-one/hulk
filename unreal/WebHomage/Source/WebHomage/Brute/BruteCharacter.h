@@ -170,6 +170,30 @@ private:
 	UStaticMeshComponent* Part(USceneComponent* P, const TCHAR* N, class UStaticMesh* M, const FVector& L, const FVector& S, UMaterialInstanceDynamic* Mat, const FRotator& Rot = FRotator::ZeroRotator);
 	void Animate(float Dt);
 	void ApplyPose();
+
+	// ---- v2 body: Customuse CR 2.1 mesh + owner-approved clips (/Game/Brute/Body/SK_Brute + A_Brute_<Clip>;
+	// segment markers measured from the clips' bone curves, tools/brute/analyze_clips.py).
+	// The clips are sampled on the game thread into the poseable mesh: state -> clip segment, crossfades, feet kept on the ground,
+	// root travel removed (the sim moves him); the procedural pose above still drives the combat arms as an aim overlay.
+	enum EClip : uint8 { CIdle, CWalk, CRun, CStopLunge, CJump, CWallAttach, CWallClimb, CNum };
+	struct FClipPlay { int32 Clip = -1; double T = 0.0, Lo = 0.0, Hi = 0.0; float Rate = 1.f; bool bLoop = true, bHold = false; FName Tag; };
+	UPROPERTY(Transient) TArray<TObjectPtr<class UAnimSequence>> Clips;
+	TArray<int32> SkelIdx, BoneParent;
+	TArray<FTransform> RefLocal, PoseA, PoseB, CS;
+	bool bClipRig = false;
+	FClipPlay Cur, Old; float Fade = 1.f, FadeDur = 0.2f, OverlayW = 0.f;
+	double RefFootZ = 0.0; FVector RefHipsCS = FVector::ZeroVector; FQuat BodyYawQ = FQuat::Identity;
+	int32 BHips = 0, BSpine = 0, BArm[2] = { 0, 0 }, BFore[2] = { 0, 0 }, BHand[2] = { 0, 0 }, BFoot[4] = { 0, 0, 0, 0 };
+	// markers (s) measured by tools/brute/analyze_clips.py; defaults are the 2026-10-15 measurements
+	float JChargeLo = 0.17f, JChargeHi = 2.45f, JLaunch = 2.55f, JApex = 3.17f, JFallHi = 3.6f, LandFrom = 1.6f, WAttachImpact = 0.7f, WClimbLo = 0.55f, WClimbHi = 1.85f;
+	TArray<float> WImpacts;   // fist-in times inside the climb segment (a wall crater at each)
+	bool bWasCharging = false, bChargeCracked = false;
+	EBruteMode PrevAnimMode = EBruteMode::Ground;
+	bool BuildClipRig();
+	void Play(int32 Clip, double Lo, double Hi, bool bLoop, float Rate, float FadeS, FName Tag, double Start = -1.0);
+	void SampleClip(const FClipPlay& P, TArray<FTransform>& Out) const;
+	void AnimateClips(float Dt);
+	void WallPunchFx(int32 Side);
 	FVector HandWorldCm(int32 S) const;
 
 	// ---- telemetry
