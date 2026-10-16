@@ -55,7 +55,7 @@ void ABruteHUD::DrawHUD()
 		}
 	}
 
-	if (bCard && T < 25.f)
+	if (bCard)   // owner 2026-10-16: the controls stay on screen (bottom left) for the whole session; H still hides / shows them
 	{
 		static const TCHAR* Lines[] = {
 			TEXT("WASD move   Mouse look   Shift sprint (knocks cars aside)"),
@@ -64,9 +64,9 @@ void ABruteHUD::DrawHUD()
 			TEXT("Sprint into a building = run up the wall   Space on the wall = kick off"),
 			TEXT("LMB punch, punch, SLAP   Sprint + LMB = LAUNCHER   RMB / C = ground smash   F = THUNDERCLAP"),
 			TEXT("E grab a car   E / LMB throw it where you look"),
-			TEXT("Pad: A jump  X attack  Y slam  B grab/throw  R1 clap  R2 sprint/dash      H hide this"),
+			TEXT("Pad: A jump  X attack  Y slam  B grab/throw  R1 clap  R2 sprint/dash      H hide / show"),
 		};
-		const float A = T > 22.f ? (25.f - T) / 3.f : 1.f;
+		const float A = 1.f;
 		const float LX = 36.f * S, LH = 24.f * S, N = UE_ARRAY_COUNT(Lines);
 		const float LY = Canvas->ClipY - 40.f * S - LH * N;
 		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.45f * A), LX - 14.f * S, LY - 14.f * S, 760.f * S, LH * N + 24.f * S);
