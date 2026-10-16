@@ -86,10 +86,13 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
    of the city HISMs (lamps, sign poles, hydrants, trash, newsboxes, parked ISM cars, trees = bark + its leaves as one falling tree)
    and spawns `ABruteDebris` physics copies (cap 40 per blast / 180 alive); every walker in the blast radius is flung (cap 30 per
    blast, ~60 alive); cars x1.3 speed / x1.35 up / more spin. `-WHBruteDebugBreak` logs candidates.
-4/5. CLIPS GENERATED, AWAITING OWNER REVIEW in the viewer (http://127.0.0.1:8765, build `~/hulk-scratch/brute_v5`): PunchR/L,
-   Slap, Clap (weak), Smash, Lift, Throw (soft), Uppercut, Fall, Land (Meshy T2M, 93 credits, balance 1,104; retarget route fixed,
-   see `tools/brute/calib_smpl.py`). After approval: point `build_brute.py` at brute_v5, extend `CLIPS` there + `EClip` in
-   BruteCharacter, drive acts from clips (hit times in clips.json `hit`), Fall in air when falling, Land on hard landings.
+4/5. DONE (owner "go ahead", 2026-10-16) combat + air clips in game: `build_brute.py` imports `~/hulk-scratch/brute_v5/brute_anim.fbx`
+   (17 clips; two commandlets: clean, then import; if Interchange drops the takes it re-imports them explicitly as animations onto
+   the skeleton). `ABruteCharacter::ActClip` maps each act to its clip segment (from / to / rate) and the act's hit time + duration
+   now come from the clip's contact time (clips.json `hit`): punches alternate PunchR / PunchL, Slap, Clap, Smash, Uppercut, Grab =
+   Lift, Carry = Lift hold, Throw. Falling = Fall loop, hard landing = Land (superhero landing, then he rises). Procedural arm overlay
+   only for slam dive + air dash now. Case `v3_combat`. Known weak clips (owner told): Clap (hands not palm-to-palm), Throw (soft),
+   Slap (spins, back to camera). Meshy balance 1,104.
 
 ## Next steps (after the list)
 

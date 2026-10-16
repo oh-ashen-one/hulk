@@ -153,7 +153,8 @@ SKEL = '/Game/Brute/Body'   # v2 (a fresh folder: re-importing over the v1 SK_Br
 OLD_SKEL = '/Game/Brute/Skel'
 
 
-CLIPS = ('Idle', 'Walk', 'Run', 'StopLunge', 'Jump', 'WallAttach', 'WallClimb')
+CLIPS = ('Idle', 'Walk', 'Run', 'StopLunge', 'Jump', 'WallAttach', 'WallClimb',
+         'PunchL', 'PunchR', 'Slap', 'Clap', 'Smash', 'Lift', 'Throw', 'Uppercut', 'Fall', 'Land')
 
 
 def rename_anims(EAL):
@@ -181,6 +182,10 @@ def build_in_ue():
     EAL = unreal.EditorAssetLibrary
     for d in (DEST, OLD_SKEL, SKEL):
         if EAL.does_directory_exist(d): EAL.delete_directory(d)
+    if os.environ.get('BRUTE_PHASE') == 'clean':
+        # a re-import in the same process as the delete silently drops the animations (the old skeleton is still in memory):
+        # the orchestrator runs the delete and the import as two commandlets
+        unreal.log('SM2_BUILD_OK: build_brute.py'); return
     ui = unreal.FbxImportUI()
     for k, v in (('import_mesh', True), ('import_as_skeletal', True), ('import_materials', False), ('import_textures', False),
                  ('import_animations', True), ('create_physics_asset', False)):
@@ -225,6 +230,21 @@ def build_in_ue():
     b = m.get_bounds()
     unreal.log('[brute] SK_Brute bounds origin (%.1f %.1f %.1f) extent (%.1f %.1f %.1f), bones %s' % (b.origin.x, b.origin.y, b.origin.z, b.box_extent.x, b.box_extent.y, b.box_extent.z, names))
     EAL.save_asset(m.get_path_name())
+    if not any(isinstance(unreal.load_asset(x), unreal.AnimSequence) for x in EAL.list_assets(SKEL, recursive=True)):
+        # Interchange sometimes imports the mesh but drops the takes (seen on re-imports): import them explicitly onto the skeleton
+        ua = unreal.FbxImportUI()
+        for k, v in (('import_mesh', False), ('import_as_skeletal', True), ('import_materials', False), ('import_textures', False), ('import_animations', True)):
+            ua.set_editor_property(k, v)
+        ua.set_editor_property('mesh_type_to_import', unreal.FBXImportType.FBXIT_ANIMATION)
+        ua.set_editor_property('skeleton', m.get_editor_property('skeleton'))
+        aa = ua.get_editor_property('anim_sequence_import_data')
+        aa.set_editor_property('convert_scene', True); aa.set_editor_property('import_bone_tracks', True)
+        aa.set_editor_property('animation_length', unreal.FBXAnimationLengthImportType.FBXALIT_EXPORTED_TIME)
+        ta = unreal.AssetImportTask()
+        for k, v in (('filename', fbx), ('destination_path', SKEL), ('automated', True), ('replace_existing', True), ('save', True), ('options', ua)):
+            ta.set_editor_property(k, v)
+        tools.import_asset_tasks([ta])
+        unreal.log('[brute] explicit animation import: %s' % [x for x in EAL.list_assets(SKEL, recursive=True) if isinstance(unreal.load_asset(x), unreal.AnimSequence)])
     rename_anims(EAL)
     EAL.save_directory(SKEL)
     build_fx(tools)
@@ -234,7 +254,7 @@ def build_in_ue():
 def orchestrate():
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_v4/brute_anim.fbx'))
+    ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_v5/brute_anim.fbx'))
     ap.add_argument('--tex-dir', default=os.path.join(HOME, 'hulk-scratch/brute_v2/rig/textures'), help='Customuse auto-rig export textures (SM_Character_Brute_{D,N,ORM}.png)')
     ap.add_argument('--fx-fbx', default=os.path.join(HOME, 'hulk-scratch/brute_fx/brute_fx.fbx'))
     a = ap.parse_args()
@@ -259,7 +279,9 @@ def orchestrate():
            '-script=' + os.path.abspath(__file__), '-unattended', '-nullrhi', '-nosplash', '-RenderOffScreen', '-NoSound', '-NoCrashReports', '-abslog=' + lg]
     env = {**os.environ, 'BRUTE_FBX': os.path.abspath(a.fbx), 'BRUTE_FX_FBX': os.path.abspath(a.fx_fbx), 'GPU_SLOT_DIR': root, 'GPU_SLOT_CAPTURE_MAX_HOLD': '1800'}
     t0 = time.time()
-    rc = subprocess.run(cmd, env=env).returncode
+    rc = subprocess.run(cmd, env={**env, 'BRUTE_PHASE': 'clean'}).returncode
+    if os.path.exists(lg): os.rename(lg, lg + '.clean')
+    rc = subprocess.run(cmd, env={**env, 'BRUTE_PHASE': 'import'}).returncode
     txt = open(lg, errors='replace').read() if os.path.exists(lg) else ''
     for l in txt.splitlines():
         if '[brute]' in l or 'SM2_BUILD' in l or 'Error' in l: print(l.split('LogPython: ')[-1])

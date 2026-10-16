@@ -653,6 +653,12 @@ void ABruteCharacter::StartAct(EBruteAct A)
 	case EBruteAct::Uppercut: ActDur = 0.6f; ActHitAt = 0.2f; break;
 	default: ActDur = 0.f; ActHitAt = 0.f; break;
 	}
+	++ActSerial;
+	if (bClipRig)
+	{	// the clip decides the timing: contact = the generated fist / palm / release moment, recovery cut where the clip settles
+		const FActClip C = ActClip(A);
+		if (C.Clip >= 0) { ActHitAt = A == EBruteAct::Grab ? (C.To - C.From) / C.Rate : (C.Hit - C.From) / C.Rate; ActDur = (C.To - C.From) / C.Rate; }
+	}
 	static const TCHAR* ActN[] = { TEXT("none"), TEXT("punch"), TEXT("slap"), TEXT("thunderclap"), TEXT("ground_smash"), TEXT("slam"), TEXT("grab"), TEXT("throw"), TEXT("carry"), TEXT("launcher_uppercut") };
 	Event(FString::Printf(TEXT("act_%s"), ActN[(int32)A]));
 }
@@ -1191,7 +1197,8 @@ bool ABruteCharacter::BuildClipRig()
 	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteV1"))) return false;
 	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Brute/Body/SK_Brute.SK_Brute"));
 	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: /Game/Brute/Body/SK_Brute missing (run Scripts/build_brute.py)")); return false; }
-	static const TCHAR* Names[CNum] = { TEXT("Idle"), TEXT("Walk"), TEXT("Run"), TEXT("StopLunge"), TEXT("Jump"), TEXT("WallAttach"), TEXT("WallClimb") };
+	static const TCHAR* Names[CNum] = { TEXT("Idle"), TEXT("Walk"), TEXT("Run"), TEXT("StopLunge"), TEXT("Jump"), TEXT("WallAttach"), TEXT("WallClimb"),
+		TEXT("PunchL"), TEXT("PunchR"), TEXT("Slap"), TEXT("Clap"), TEXT("Smash"), TEXT("Lift"), TEXT("Throw"), TEXT("Uppercut"), TEXT("Fall"), TEXT("Land") };
 	Clips.Reset();
 	for (const TCHAR* N : Names)
 	{
@@ -1283,7 +1290,13 @@ void ABruteCharacter::AnimateClips(float Dt)
 	const double PrevT = Cur.T; const FName PrevTag = Cur.Tag;
 
 	// ---- state -> clip segment
-	if (Mode == EBruteMode::Wall)
+	const FActClip AC = (Act != EBruteAct::None && Act != EBruteAct::Slam) ? ActClip(Act) : FActClip();
+	if (AC.Clip >= 0 && Mode != EBruteMode::Wall)
+	{	// combat: the act's clip segment, restarted for every new act (combo punches alternate fists)
+		if (Act == EBruteAct::Carry) Play(CLift, AC.From, AC.To, false, 0.f, 0.15f, TEXT("carry"), AC.To);
+		else Play(AC.Clip, AC.From, AC.To, false, AC.Rate, 0.08f, FName(*FString::Printf(TEXT("act%d"), ActSerial)));
+	}
+	else if (Mode == EBruteMode::Wall)
 	{	// slam into the facade fists first, then every climb step is the same slam again, one fist after the other
 		if (PrevAnimMode != EBruteMode::Wall) Play(CWallAttach, 0.0, WClimbHi, false, 1.7f, 0.08f, TEXT("attach"), 0.2);
 		else if (Cur.Tag == TEXT("attach") && Cur.T >= WClimbHi - 0.02) Play(CWallClimb, WClimbLo, WClimbHi, true, 1.6f, 0.12f, TEXT("climb"));
@@ -1291,12 +1304,13 @@ void ABruteCharacter::AnimateClips(float Dt)
 	}
 	else if (Mode == EBruteMode::Air)
 	{
-		if (Cur.Tag != TEXT("air")) Play(CJump, JLaunch, JApex, false, 1.3f, 0.1f, TEXT("air"));
-		else { Cur.Hi = Vel.Z > 1.0 ? JApex : JFallHi; Cur.Rate = Vel.Z > 1.0 ? 1.3f : 0.5f; }
+		// rising: the jump's launch (arms thrown up); falling: the Fall loop (arms spread, legs braced)
+		if (Vel.Z < -3.0) Play(CFall, 0.0, Len(CFall), true, 1.f, 0.35f, TEXT("fall"));
+		else if (Cur.Tag != TEXT("air") && Cur.Tag != TEXT("fall")) Play(CJump, JLaunch, JApex, false, 1.3f, 0.1f, TEXT("air"));
 	}
-	else if (Mode == EBruteMode::Land && LandHard > 0.5f)
-	{	// hard landing: the stop-lunge coil (deep crouch absorbing the impact)
-		Play(CStopLunge, LandFrom, Len(CStopLunge), false, 2.2f, 0.05f, TEXT("land"));
+	else if ((Mode == EBruteMode::Land && LandHard > 0.5f) || (Cur.Tag == TEXT("land") && Cur.T < Cur.Hi - 0.05 && Hs < 3.0 && !bCharging))
+	{	// hard landing: superhero landing (fist planted), then he rises -- unless he moves off first
+		Play(CLand, 0.35, Len(CLand), false, 1.5f, 0.06f, TEXT("land"));
 	}
 	else if (bCharging)
 	{
@@ -1365,7 +1379,7 @@ void ABruteCharacter::AnimateClips(float Dt)
 
 	// ---- combat overlay: spine twist / bend and the arms aimed along the procedural joints (punch, slap, clap, smash, grab, carry, throw,
 	// uppercut, slam dive, air dash)
-	const bool bOv = Act != EBruteAct::None || bSlamDive || DashT > 0.f || Held.IsValid();
+	const bool bOv = bSlamDive || DashT > 0.f;   // every other move has its own clip now (2026-10-16)
 	OverlayW = float(Approach(OverlayW, bOv ? 1.0 : 0.0, bOv ? 18.0 : 8.0, Dt));
 	if (OverlayW > 0.01f)
 	{
@@ -1480,4 +1494,24 @@ bool ABruteCharacter::TryLatch(const FBruteInput& I)
 	SetMode(EBruteMode::Wall); Trauma = FMath::Max(Trauma, 0.4);
 	Event(TEXT("wall_latch"));
 	return true;
+}
+
+ABruteCharacter::FActClip ABruteCharacter::ActClip(EBruteAct A) const
+{
+	// From / To / Rate tuned so the heavy generated swings still read fast in play; Hit = the clip's contact time (clips.json)
+	FActClip C;
+	switch (A)
+	{
+	case EBruteAct::Punch: C.Clip = (Combo % 2 == 0) ? CPunchR : CPunchL; C.From = 0.45f; C.To = 1.40f; C.Rate = 1.6f; C.Hit = 1.0f; break;
+	case EBruteAct::Slap: C.Clip = CSlap; C.From = 0.30f; C.To = 1.60f; C.Rate = 1.5f; C.Hit = 0.83f; break;
+	case EBruteAct::Clap: C.Clip = CClap; C.From = 0.20f; C.To = 1.60f; C.Rate = 1.4f; C.Hit = 0.80f; break;
+	case EBruteAct::Smash: C.Clip = CSmash; C.From = 0.40f; C.To = 2.00f; C.Rate = 1.4f; C.Hit = 1.17f; break;
+	case EBruteAct::Uppercut: C.Clip = CUppercut; C.From = 0.15f; C.To = 1.40f; C.Rate = 1.4f; C.Hit = 0.60f; break;
+	case EBruteAct::Grab: C.Clip = CLift; C.From = 0.60f; C.To = 2.40f; C.Rate = 2.0f; C.Hit = 2.40f; break;
+	case EBruteAct::Carry: C.Clip = CLift; C.From = 2.40f; C.To = 2.95f; C.Rate = 0.f; break;
+	case EBruteAct::Throw: C.Clip = CThrow; C.From = 0.40f; C.To = 1.60f; C.Rate = 1.5f; C.Hit = 1.00f; break;
+	default: break;
+	}
+	if (C.Clip >= 0 && Clips.IsValidIndex(C.Clip) && Clips[C.Clip]) C.To = FMath::Min(C.To, Clips[C.Clip]->GetPlayLength());
+	return C;
 }

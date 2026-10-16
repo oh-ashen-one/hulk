@@ -187,7 +187,12 @@ private:
 	// segment markers measured from the clips' bone curves, tools/brute/analyze_clips.py).
 	// The clips are sampled on the game thread into the poseable mesh: state -> clip segment, crossfades, feet kept on the ground,
 	// root travel removed (the sim moves him); the procedural pose above still drives the combat arms as an aim overlay.
-	enum EClip : uint8 { CIdle, CWalk, CRun, CStopLunge, CJump, CWallAttach, CWallClimb, CNum };
+	enum EClip : uint8 { CIdle, CWalk, CRun, CStopLunge, CJump, CWallAttach, CWallClimb,
+		CPunchL, CPunchR, CSlap, CClap, CSmash, CLift, CThrow, CUppercut, CFall, CLand, CNum };
+	/** combat clip segment per act: clip, start / end (s), play rate; the act's hit + duration follow from the clip's contact time */
+	struct FActClip { int32 Clip = -1; float From = 0.f, To = 0.f, Rate = 1.f, Hit = 0.f; };
+	FActClip ActClip(EBruteAct A) const;
+	int32 ActSerial = 0;
 	struct FClipPlay { int32 Clip = -1; double T = 0.0, Lo = 0.0, Hi = 0.0; float Rate = 1.f; bool bLoop = true, bHold = false; FName Tag; };
 	UPROPERTY(Transient) TArray<TObjectPtr<class UAnimSequence>> Clips;
 	TArray<int32> SkelIdx, BoneParent;
