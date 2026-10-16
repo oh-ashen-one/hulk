@@ -82,6 +82,11 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
      the inside of a box. Fix: after every air/ground step, if the capsule centre is inside a building box, push to the nearest
      face (or the roof top); plus an "unstuck" watchdog (no progress for 1.5 s while inside geometry -> teleport to `LastSafe` or the
      roof) and a manual key (e.g. hold R 1 s = respawn at last safe street spot). Reproduce with a scripted case from that spawn.
+   - **FEATURE (owner 2026-10-16, backlog): every attack wrecks everything around him.** Thunderclap, smash, grand slam, punches,
+     landings: ALL nearby stuff breaks (street props, lamp posts, hydrants, benches, trees, awnings, shop windows / facade pieces —
+     breakable proxies or Chaos geometry collections swapped in near the impact), cars get blown away (owner: "that's really cool",
+     keep and push it harder), and PEOPLE get flung too (currently only pedestrians very near an impact tumble via `ABruteFlung`;
+     the rest just flee — make every walker in the blast radius fly, cartoon/non-gory). Scale radius + force by move.
 2. Combat clips: punches/clap/smash/grab/throw are still procedural arm overlays on the new body — generate real clips (Meshy
    preset library has punches) if the owner wants them.
 3. No falling/landing clip: air uses the jump's arms-up hold. Generate JumpAir/Land if needed.
