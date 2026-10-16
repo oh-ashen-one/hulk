@@ -72,31 +72,29 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
   `docs/brute/evidence/v2_ingame_*.jpg`. Not verified: owner live play, Manhattan_Island, fps.
 - `-WHBruteV1` falls back to the old procedural path (needs the old Skel content, which the build now deletes -> bricks).
 
-## Next steps
+## Owner fix list 2026-10-16 (status)
 
-1. Owner playtest via `./Play-Brute.command`; turn feedback into fixes.
-   - **BUG (owner 2026-10-16, backlog): got stuck inside a building** after landing on / hitting a roof. Log copy
-     `~/hulk-logs/play-brute-stuck-20261016.log`: last events `super_jump` at (-310.8 -115.6 0.2) then `air_wall_smash` at
-     (-304.8 -115.6 9.1) moving +X at 26 m/s, then nothing — he ended up inside the facade. Likely causes: `StepAir` push-out
-     only bounces the velocity (no depenetration check after the 120 Hz substep at 26-60 m/s), and `PushOutCapsule` can resolve to
-     the inside of a box. Fix: after every air/ground step, if the capsule centre is inside a building box, push to the nearest
-     face (or the roof top); plus an "unstuck" watchdog (no progress for 1.5 s while inside geometry -> teleport to `LastSafe` or the
-     roof) and a manual key (e.g. hold R 1 s = respawn at last safe street spot). Reproduce with a scripted case from that spawn.
-   - **FEATURE (owner 2026-10-16, backlog): every attack wrecks everything around him.** Thunderclap, smash, grand slam, punches,
-     landings: ALL nearby stuff breaks (street props, lamp posts, hydrants, benches, trees, awnings, shop windows / facade pieces —
-     breakable proxies or Chaos geometry collections swapped in near the impact), cars get blown away (owner: "that's really cool",
-     keep and push it harder), and PEOPLE get flung too (currently only pedestrians very near an impact tumble via `ABruteFlung`;
-     the rest just flee — make every walker in the blast radius fly, cartoon/non-gory). Scale radius + force by move.
-   - **FEATURE (owner 2026-10-16, backlog): latch onto a building from a jump.** Today the wall only catches when sprinting into
-     it (`StepGround` wall_run_start, `StepAir` wall_catch needs sprint held). Wanted: in the air, touching / sliding along a
-     facade + press ATTACK (LMB / pad X) = punch both fists in and latch (WallAttach clip + wall craters), then climb up FAST
-     (stick up / hold sprint). Implementation: in `StepAir`, when `PushOutCapsule` reports a side contact (or a short raycast along
-     velocity/facing finds a face within ~1.5 m) and `bAttack` is pressed (edge) -> enter Wall mode instead of the air punch; keep
-     the current sprint-catch too. Consider a brief "wall slide" state while airborne against a face so the press window is generous.
-2. Combat clips: punches/clap/smash/grab/throw are still procedural arm overlays on the new body — generate real clips (Meshy
-   preset library has punches) if the owner wants them.
-3. No falling/landing clip: air uses the jump's arms-up hold. Generate JumpAir/Land if needed.
-4. Independent critic pass, Manhattan_Island check, desktop fps measurement.
+1. DONE `ef67045` stuck inside buildings: speed-scaled substeps (<= 0.3 m per substep), indoor watchdog `IsIndoors` (real geometry:
+   roof above -- also traced down from above, roofs are one-sided -- and walls within 15 m on 7/8 sides; the box index misses some
+   buildings and overhangs sidewalks, so it is NOT used), rescue to the last verified-outdoor spot else onto the roof, hold R / d-pad
+   down 1 s = manual respawn. Cases `fix1_inside` (spawned inside -> on the roof in 1 s), `fix1_stuck_repro`; no false rescues in
+   v2_loco / m3 / m11 / m5 / m6.
+2. DONE `7c41923` latch from a jump: air contact with a tall face = 0.45 s wall-slide window, ATTACK (buffered 0.3 s, also a 1.6 m
+   probe ahead / sideways when gliding past) = `wall_latch`; latched he hangs, W / Shift climbs (Shift x1.3), S drops, Space kicks.
+   Case `fix2_latch`.
+3. DONE `e4f1f67` attacks wreck everything: `BruteWorld::BreakProps` (called from every Blast) hides small street-level instances
+   of the city HISMs (lamps, sign poles, hydrants, trash, newsboxes, parked ISM cars, trees = bark + its leaves as one falling tree)
+   and spawns `ABruteDebris` physics copies (cap 40 per blast / 180 alive); every walker in the blast radius is flung (cap 30 per
+   blast, ~60 alive); cars x1.3 speed / x1.35 up / more spin. `-WHBruteDebugBreak` logs candidates.
+4/5. CLIPS GENERATED, AWAITING OWNER REVIEW in the viewer (http://127.0.0.1:8765, build `~/hulk-scratch/brute_v5`): PunchR/L,
+   Slap, Clap (weak), Smash, Lift, Throw (soft), Uppercut, Fall, Land (Meshy T2M, 93 credits, balance 1,104; retarget route fixed,
+   see `tools/brute/calib_smpl.py`). After approval: point `build_brute.py` at brute_v5, extend `CLIPS` there + `EClip` in
+   BruteCharacter, drive acts from clips (hit times in clips.json `hit`), Fall in air when falling, Land on hard landings.
+
+## Next steps (after the list)
+
+- Independent critic pass, desktop fps measurement.
+- Wall top-out right at the start of a wall run seen in m11 (pre-existing, 215,-8): face raycast misses on some facades.
 
 ## Gotchas (learned the hard way)
 
