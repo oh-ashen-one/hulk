@@ -15,7 +15,7 @@ RIG, MDIR, OUT = argv[0], argv[1], argv[2]
 HEIGHT = float(os.environ.get('BRUTE_HEIGHT_M', '2.6'))
 os.makedirs(OUT, exist_ok=True)
 CLIPS = [('Idle', r'idle', True), ('Walk', r'walk', True), ('Run', r'(?<!sk)run(?!.*stop)', True), ('StopLunge', r'stoplunge', False),
-         ('Jump', r'_jump', False), ('WallAttach', r'attach', False), ('WallClimb', r'climb', True), ('JumpAir', r'fall|_air', True),
+         ('Jump', r'_jump', False), ('WallAttach', r'attach', False), ('WallClimb', r'climb|attach', True), ('JumpAir', r'fall|_air', True),
          ('Land', r'land', False)]
 INPLACE = {'Walk', 'Run', 'StopLunge'}
 
@@ -55,7 +55,8 @@ files = sorted(glob.glob(os.path.join(MDIR, '**', '*.fbx'), recursive=True) + gl
 print('MOTION FILES', [os.path.basename(f) for f in files])
 clips, meta = {}, {}
 for name, pat, loop in CLIPS:
-    f = next((x for x in files if re.search(pat, os.path.basename(x).lower())), None)
+    # owner 2026-10-15: no separate climb clip; WallClimb reuses the WallAttach slam (fists into the wall) as the climb step
+    f = next((x for x in files if re.search(pat.split('|')[0], os.path.basename(x).lower())), None) or next((x for x in files if re.search(pat, os.path.basename(x).lower())), None)
     if not f: print('MISSING clip', name); continue
     objs = imp(f)
     src = next((o for o in objs if o.type == 'ARMATURE'), None)
@@ -184,7 +185,7 @@ bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'brute.glb'), export_format
 bpy.ops.export_scene.fbx(filepath=os.path.join(OUT, 'brute_anim.fbx'), use_selection=True, object_types={'MESH', 'ARMATURE'}, axis_forward='X', axis_up='Z',
                          apply_scale_options='FBX_SCALE_ALL', add_leaf_bones=False, bake_anim=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=False,
                          path_mode='COPY', embed_textures=True)
-labels = {'Idle': 'idle, breathing', 'StopLunge': 'sprint, stop, coil to leap', 'Jump': 'launch', 'WallAttach': 'slam into a wall, fists in', 'WallClimb': 'punch-climb up the wall', 'JumpAir': 'falling', 'Land': 'superhero landing'}
+labels = {'Idle': 'idle, breathing', 'StopLunge': 'sprint, stop, coil to leap', 'Jump': 'launch', 'WallAttach': 'slam into a wall, fists in', 'WallClimb': 'climb step = the WallAttach slam', 'JumpAir': 'falling', 'Land': 'superhero landing'}
 cj = {n: dict(label=labels.get(n, '%.1f m/s' % m['speed']), speed=(m['speed'] if n in ('Walk', 'Run') else 0), loop=24 if n in ('Walk', 'Run') else 0,
               dir=[0, 0, 1], once=not m['loop'], **({'wallZ': m['wall_fwd'] * k} if 'wall_fwd' in m else {})) for n, m in meta.items()}
 json.dump(cj, open(os.path.join(OUT, 'clips.json'), 'w'), indent=1)
