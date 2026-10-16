@@ -112,6 +112,10 @@ private:
 	float DashT = 0.f, LandT = 0.f, LandHard = 0.f, SprintKnockT = 0.f, StepPhase = 0.f;
 	bool bSlamDive = false, bSprinting = false;
 	FVector WallN = FVector::ForwardVector; double WallTop = 0.0;
+	// latch from a jump (owner 2026-10-16): in the air against / gliding along a facade, ATTACK punches both fists in and he hangs there;
+	// stick forward / sprint climbs fast, stick back drops, Space kicks off. WallSlideT = the press window after touching a face.
+	float WallSlideT = 0.f, AttackBufT = 0.f; FVector SlideN = FVector::ForwardVector; double SlideTop = 0.0; bool bLatched = false;
+	bool TryLatch(const FBruteInput& I);
 	static constexpr double R = 0.75, H = 2.55, StepH = 0.7;
 
 	// ---- actions

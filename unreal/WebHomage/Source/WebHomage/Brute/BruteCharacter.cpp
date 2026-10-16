@@ -412,7 +412,7 @@ void ABruteCharacter::StepGround(float Dt, const FBruteInput& I, const FVector& 
 		const FVector Into = Wish.IsNearlyZero() ? H2(Vel).GetSafeNormal() : Wish.GetSafeNormal();
 		if (bSprinting && FVector::DotProduct(Into, -N2) > 0.55 && C.Top - NP.Z > 3.5 && Act == EBruteAct::None)
 		{
-			WallN = N2; WallTop = C.Top; Pos = NP; Vel = FVector(0, 0, WallClimbSpeed); Facing = FMath::Atan2(-N2.Y, -N2.X);
+			WallN = N2; WallTop = C.Top; Pos = NP; Vel = FVector(0, 0, WallClimbSpeed); Facing = FMath::Atan2(-N2.Y, -N2.X); bLatched = false;
 			SetMode(EBruteMode::Wall); Event(FString::Printf(TEXT("wall_run_start top=%.1f"), C.Top - NP.Z));
 			return;
 		}
@@ -480,6 +480,9 @@ void ABruteCharacter::Launch(float K, const FVector& Wish)
 void ABruteCharacter::StepAir(float Dt, const FBruteInput& I, const FVector& Wish)
 {
 	AirT += Dt;
+	WallSlideT -= Dt; AttackBufT -= Dt;
+	if (I.bAttack && !Prev.bAttack) AttackBufT = 0.3f;
+	if (AttackBufT > 0.f && TryLatch(I)) return;
 	// air dash (sprint key pressed in the air)
 	if (I.bDash && !Prev.bDash && DashesLeft > 0 && !bSlamDive)
 	{
@@ -519,13 +522,20 @@ void ABruteCharacter::StepAir(float Dt, const FBruteInput& I, const FVector& Wis
 		const FVector Into = Wish.IsNearlyZero() ? H2(Vel).GetSafeNormal() : Wish.GetSafeNormal();
 		if (!bSlamDive && (I.bSprint || bSprinting) && FVector::DotProduct(Into, -N2) > 0.4 && C.Top - NP.Z > 3.0 && Act == EBruteAct::None)
 		{
-			WallN = N2; WallTop = C.Top; Pos = NP; Vel = FVector(0, 0, FMath::Max((double)WallClimbSpeed, Vel.Z * 0.7)); Facing = FMath::Atan2(-N2.Y, -N2.X);
+			WallN = N2; WallTop = C.Top; Pos = NP; Vel = FVector(0, 0, FMath::Max((double)WallClimbSpeed, Vel.Z * 0.7)); Facing = FMath::Atan2(-N2.Y, -N2.X); bLatched = false;
 			SetMode(EBruteMode::Wall); Event(TEXT("wall_catch"));
 			return;
 		}
 		const double Vn = FVector::DotProduct(H2(Vel), N2);
 		if (Vn < -14.0) { Impact(NP - N2 * 0.8 + FVector(0, 0, 1.0), 6.f, false, 0.7f, 16.f, 6.f); Trauma += 0.4; Event(TEXT("air_wall_smash")); }
-		if (Vn < 0) Vel -= N2 * Vn * 1.15;
+		if (!bSlamDive && C.Top - NP.Z > 3.0)
+		{	// a tall face: slide along / down it for a moment so ATTACK can latch on (no bounce away from it)
+			if (WallSlideT <= 0.f) Event(TEXT("wall_slide"));
+			WallSlideT = 0.45f; SlideN = N2; SlideTop = C.Top;
+			if (Vn < 0) Vel -= N2 * Vn;
+			if (Vel.Z < -6.0) Vel.Z = FMath::Max(Vel.Z, -6.0 - 30.0 * (0.45 - WallSlideT));
+		}
+		else if (Vn < 0) Vel -= N2 * Vn * 1.15;
 	}
 	ApexZ = FMath::Max(ApexZ, NP.Z);
 	const double G = Floor(NP, FMath::Max(1.0, -Vel.Z * Dt + 0.5));
@@ -586,9 +596,12 @@ void ABruteCharacter::StepWall(float Dt, const FBruteInput& I)
 	// climb straight up the facade; leaving it at the roof edge pops the body over, Space kicks off, letting go of sprint + stick drops
 	const FVector Along(-WallN.Y, WallN.X, 0.0);
 	const double Lateral = FVector::DotProduct(WishDir(I.Move), Along) * 5.0;
-	Vel = FVector(0, 0, WallClimbSpeed) + Along * Lateral;
+	// a latched Brute hangs until told to climb; climbing from a latch is faster still with sprint held
+	const bool bUp = I.bSprint || I.Move.Y > 0.3f;
+	const double Up = bLatched ? (bUp ? WallClimbSpeed * (I.bSprint ? 1.3 : 1.0) : 0.0) : WallClimbSpeed;
+	Vel = FVector(0, 0, Up) + Along * Lateral;
 	FVector NP = Pos + Vel * Dt - WallN * 0.6 * Dt;
-	StepPhase += float(WallClimbSpeed * Dt / 2.6 * 2.0 * PI);
+	StepPhase += float(Up * Dt / 2.6 * 2.0 * PI);
 	FTravHit Hit;
 	const bool bFace = bWorldReady && World.Raycast(NP + FVector(0, 0, 0.6), -WallN, R + 1.2, Hit);
 	if (I.bJump && !Prev.bJump)
@@ -604,7 +617,7 @@ void ABruteCharacter::StepWall(float Dt, const FBruteInput& I)
 		Event(TEXT("wall_top_out"));
 		return;
 	}
-	if ((!I.bSprint && I.Move.Y < 0.3f) || ModeT > 9.0)
+	if (bLatched ? I.Move.Y < -0.5f : ((!I.bSprint && I.Move.Y < 0.3f) || ModeT > 9.0))
 	{
 		Vel = WallN * 4.0; SetMode(EBruteMode::Air); AirT = 0; ApexZ = Pos.Z; Event(TEXT("wall_release"));
 		return;
@@ -676,7 +689,7 @@ void ABruteCharacter::UpdateAct(float Dt, const FBruteInput& I)
 		else if (I.bClap && !Prev.bClap && ClapCd <= 0.f && bGround) StartAct(EBruteAct::Clap);
 		else if (I.bHeavy && !Prev.bHeavy && bGround) StartAct(EBruteAct::Smash);
 		else if (I.bAttack && !Prev.bAttack && bGround && bSprinting && H2(Vel).Size() > RunSpeed) StartAct(EBruteAct::Uppercut);
-		else if (I.bAttack && !Prev.bAttack)
+		else if (I.bAttack && !Prev.bAttack && Mode != EBruteMode::Wall)
 		{
 			Combo = ComboWindow > 0.f ? (Combo + 1) % 3 : 0;
 			StartAct(Combo == 2 ? EBruteAct::Slap : EBruteAct::Punch);
@@ -1274,6 +1287,7 @@ void ABruteCharacter::AnimateClips(float Dt)
 	{	// slam into the facade fists first, then every climb step is the same slam again, one fist after the other
 		if (PrevAnimMode != EBruteMode::Wall) Play(CWallAttach, 0.0, WClimbHi, false, 1.7f, 0.08f, TEXT("attach"), 0.2);
 		else if (Cur.Tag == TEXT("attach") && Cur.T >= WClimbHi - 0.02) Play(CWallClimb, WClimbLo, WClimbHi, true, 1.6f, 0.12f, TEXT("climb"));
+		if (Cur.Tag == TEXT("climb")) Cur.Rate = Vel.Z > 1.0 ? FMath::Clamp(1.6f * float(Vel.Z) / WallClimbSpeed, 1.2f, 2.2f) : 0.f;   // latched + idle: hang on the fists
 	}
 	else if (Mode == EBruteMode::Air)
 	{
@@ -1438,4 +1452,32 @@ void ABruteCharacter::Rescue(const TCHAR* Why)
 		if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>(Pos * 100.0, FRotator::ZeroRotator, SP)) S->Init(4.f, false, FVector::ZeroVector, 0.4f);
 	}
 	Event(FString::Printf(TEXT("rescue_%s"), Why));
+}
+
+bool ABruteCharacter::TryLatch(const FBruteInput& I)
+{
+	if (bSlamDive || Held.IsValid() || !bWorldReady) return false;
+	FVector N = FVector::ZeroVector, At = Pos; double Top = 0.0;
+	if (WallSlideT > 0.f) { N = SlideN; Top = SlideTop; }
+	else
+	{	// gliding past a facade without touching it: probe ahead and to both sides (1.6 m beyond the body)
+		const FVector Fw = H2(Vel).SizeSquared() > 4.0 ? H2(Vel).GetSafeNormal() : FVector(FMath::Cos(Facing), FMath::Sin(Facing), 0.0);
+		const FVector Dirs[3] = { Fw, FVector(-Fw.Y, Fw.X, 0.0), FVector(Fw.Y, -Fw.X, 0.0) };
+		for (const FVector& D : Dirs)
+		{
+			FTravHit Hit;
+			if (World.Raycast(Pos + FVector(0, 0, 1.3), D, R + 1.6, Hit) && FMath::Abs(Hit.Normal.Z) < 0.3 && !Hit.bGround)
+			{
+				FTravHit Up; if (!World.Raycast(Pos + FVector(0, 0, 4.5), D, R + 2.2, Up)) continue;   // too short to climb
+				N = H2(Hit.Normal).GetSafeNormal(); At = Hit.Point; Top = Pos.Z + 60.0; break;
+			}
+		}
+	}
+	if (N.IsNearlyZero()) return false;
+	WallN = N; WallTop = Top; Facing = FMath::Atan2(-N.Y, -N.X); Vel = FVector::ZeroVector;
+	if (WallSlideT <= 0.f) Pos = FVector(At.X, At.Y, Pos.Z) + N * (R + 0.15);
+	Act = EBruteAct::None; bLatched = true; WallSlideT = 0.f; AttackBufT = 0.f;
+	SetMode(EBruteMode::Wall); Trauma = FMath::Max(Trauma, 0.4);
+	Event(TEXT("wall_latch"));
+	return true;
 }

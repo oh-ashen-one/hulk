@@ -61,7 +61,7 @@ void ABruteHUD::DrawHUD()
 			TEXT("WASD move   Mouse look   Shift sprint (knocks cars aside)"),
 			TEXT("Space hop   HOLD Space = charge SUPER JUMP   keep holding on landing = leap chain"),
 			TEXT("In the air: Shift air dash   RMB / C = GRAND SLAM dive"),
-			TEXT("Sprint into a building = run up the wall   Space on the wall = kick off"),
+			TEXT("Sprint into a building = run up the wall   In the air at a wall: LMB = punch in & hang, W / Shift climb, S drop, Space kick off"),
 			TEXT("LMB punch, punch, SLAP   Sprint + LMB = LAUNCHER   RMB / C = ground smash   F = THUNDERCLAP"),
 			TEXT("E grab a car   E / LMB throw it where you look      Hold R = back to the street (if stuck)"),
 			TEXT("Pad: A jump  X attack  Y slam  B grab/throw  R1 clap  R2 sprint/dash      H hide / show"),
@@ -69,7 +69,7 @@ void ABruteHUD::DrawHUD()
 		const float A = 1.f;
 		const float LX = 36.f * S, LH = 24.f * S, N = UE_ARRAY_COUNT(Lines);
 		const float LY = Canvas->ClipY - 40.f * S - LH * N;
-		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.45f * A), LX - 14.f * S, LY - 14.f * S, 760.f * S, LH * N + 24.f * S);
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.45f * A), LX - 14.f * S, LY - 14.f * S, 900.f * S, LH * N + 24.f * S);
 		for (int32 I = 0; I < N; ++I) DrawText(Lines[I], FLinearColor(1.f, 1.f, 1.f, A), LX, LY + I * LH, Small, 1.25f * S);
 	}
 }
