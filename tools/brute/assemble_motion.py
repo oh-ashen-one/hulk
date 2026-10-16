@@ -14,9 +14,10 @@ argv = sys.argv[sys.argv.index('--') + 1:]
 RIG, MDIR, OUT = argv[0], argv[1], argv[2]
 HEIGHT = float(os.environ.get('BRUTE_HEIGHT_M', '2.6'))
 os.makedirs(OUT, exist_ok=True)
-CLIPS = [('Idle', r'idle', True), ('Walk', r'walk', True), ('Run', r'(?<!sk)run(?!.*stop)', True), ('Stop', r'stop', False),
-         ('WallClimb', r'climb', True), ('JumpCharge', r'jump', False), ('JumpAir', r'fall|air', True), ('Land', r'land', False)]
-INPLACE = {'Walk', 'Run', 'Stop', 'WallClimb'}
+CLIPS = [('Idle', r'idle', True), ('Walk', r'walk', True), ('Run', r'(?<!sk)run(?!.*stop)', True), ('StopLunge', r'stoplunge', False),
+         ('Jump', r'_jump', False), ('WallAttach', r'attach', False), ('WallClimb', r'climb', True), ('JumpAir', r'fall|_air', True),
+         ('Land', r'land', False)]
+INPLACE = {'Walk', 'Run', 'StopLunge'}
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.context.scene.render.fps = 30
@@ -90,6 +91,11 @@ for name, act in clips.items():
     sc.frame_set(f1); p1 = (arm.matrix_world @ arm.pose.bones[root].head).copy()
     d = p1 - p0; d.z = 0; T = max(1e-3, (f1 - f0) / sc.render.fps)
     meta[name].update(speed=round(d.length / T, 3), dur=round(T, 3))
+    if name in ('WallAttach', 'WallClimb'):
+        # where his hands end up (forward of the start): the viewer puts its test wall there
+        hb = [b for b in ('LeftHand', 'RightHand', 'left_wrist', 'right_wrist') if b in bones]
+        sc.frame_set(f1); fwd = max(((arm.matrix_world @ arm.pose.bones[b].head) - p0).dot(Vector((0, -1, 0))) for b in hb) if hb else 0.8
+        meta[name]['wall_fwd'] = round(fwd, 3)
     if name in ('Walk', 'Run') and meta[name]['speed'] < 0.3:
         # generated in place: the ground speed is how fast a planted foot slides backwards
         feet = [b for b in ('LeftFoot', 'RightFoot', 'left_ankle', 'right_ankle', 'LeftToeBase', 'RightToeBase') if b in bones][:2]
@@ -105,16 +111,42 @@ for name, act in clips.items():
         if vs:
             vs.sort(); meta[name]['speed'] = round(vs[len(vs) // 2], 3); meta[name]['speed_from'] = 'planted foot'
 
-    if name in INPLACE and d.length > 0.05:
-        # subtract the linear horizontal travel from the root location curves (in the root bone's local space)
-        rb = arm.data.bones[root]; Bq = rb.matrix_local.to_quaternion()
-        dl = (arm.matrix_world.to_quaternion() @ Bq).inverted() @ d
-        for i in range(3):
-            fc = find_fc(act, 'pose.bones["%s"].location' % root, i)
-            if not fc: continue
-            for kp in fc.keyframe_points:
-                t = (kp.co.x - f0) / max(1, f1 - f0); off = dl[i] * t
-                kp.co.y -= off; kp.handle_left.y -= off; kp.handle_right.y -= off
+    if name == 'StopLunge':
+        # end on the deepest coil (it leads straight into Jump); the generated tail stands up and throws the head back
+        zs_ = []
+        for fr in range(f0, f1 + 1):
+            sc.frame_set(fr); zs_.append((arm.matrix_world @ arm.pose.bones[root].head).z)
+        lo = f0 + min(range(len(zs_)), key=lambda i: zs_[i])
+        for fc in fcs(act):
+            for idx in range(len(fc.keyframe_points) - 1, -1, -1):
+                if fc.keyframe_points[idx].co.x > lo + 2: fc.keyframe_points.remove(fc.keyframe_points[idx])
+            fc.update()
+        act.frame_range = (f0, lo + 2); act.use_frame_range = True
+        f1 = lo + 2; T = (f1 - f0) / sc.render.fps; meta[name]['dur'] = round(T, 3)
+        print('TRIM StopLunge at frame', lo)
+    if name in INPLACE:
+        # in place: take the root's horizontal path out FRAME BY FRAME (a sprint-then-stop is not a straight line). Loops keep their
+        # in-stride sway (only a 1 s moving average of the path is removed); one-shots are pinned to the start position.
+        rb = arm.data.bones[root]; Rinv = (arm.matrix_world.to_quaternion() @ rb.matrix_local.to_quaternion()).inverted()
+        path = []
+        for fr in range(f0, f1 + 1):
+            sc.frame_set(fr); h = (arm.matrix_world @ arm.pose.bones[root].head).copy(); path.append(Vector((h.x - p0.x, h.y - p0.y, 0)))
+        if meta[name]['loop']:
+            w = sc.render.fps // 2; sm = []
+            for i in range(len(path)):
+                seg = path[max(0, i - w):i + w + 1]; sm.append(sum(seg, Vector()) / len(seg))
+            path = sm
+        locs = [find_fc(act, 'pose.bones["%s"].location' % root, i) for i in range(3)]
+        if not all(locs):
+            for i in range(3):
+                if not locs[i]:
+                    b0 = bags(act)[0]; locs[i] = b0.fcurves.new('pose.bones["%s"].location' % root, index=i)
+        base = [[fc.evaluate(fr) for fr in range(f0, f1 + 1)] for fc in locs]
+        for fc in locs: fc.keyframe_points.clear()
+        for k_, fr in enumerate(range(f0, f1 + 1)):
+            dl = Rinv @ path[k_]
+            for i in range(3): locs[i].keyframe_points.insert(fr, base[i][k_] - dl[i], options={'FAST'})
+        for fc in locs: fc.update()
     if meta[name]['loop']:
         # seamless loop: blend the tail into the head (last 25 % of 0.5 s)
         n = max(2, min(8, (f1 - f0) // 4))
@@ -152,9 +184,9 @@ bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'brute.glb'), export_format
 bpy.ops.export_scene.fbx(filepath=os.path.join(OUT, 'brute_anim.fbx'), use_selection=True, object_types={'MESH', 'ARMATURE'}, axis_forward='X', axis_up='Z',
                          apply_scale_options='FBX_SCALE_ALL', add_leaf_bones=False, bake_anim=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=False,
                          path_mode='COPY', embed_textures=True)
-labels = {'Idle': 'idle, breathing', 'Stop': 'skid to a stop', 'WallClimb': 'climbing a facade', 'JumpCharge': 'crouch + launch', 'JumpAir': 'falling', 'Land': 'superhero landing'}
+labels = {'Idle': 'idle, breathing', 'StopLunge': 'sprint, stop, coil to leap', 'Jump': 'launch', 'WallAttach': 'slam into a wall, fists in', 'WallClimb': 'punch-climb up the wall', 'JumpAir': 'falling', 'Land': 'superhero landing'}
 cj = {n: dict(label=labels.get(n, '%.1f m/s' % m['speed']), speed=(m['speed'] if n in ('Walk', 'Run') else 0), loop=24 if n in ('Walk', 'Run') else 0,
-              dir=[0, 0, 1], once=not m['loop']) for n, m in meta.items()}
+              dir=[0, 0, 1], once=not m['loop'], **({'wallZ': m['wall_fwd'] * k} if 'wall_fwd' in m else {})) for n, m in meta.items()}
 json.dump(cj, open(os.path.join(OUT, 'clips.json'), 'w'), indent=1)
 json.dump(meta, open(os.path.join(OUT, 'clips_meta.json'), 'w'), indent=1)
 print('WROTE', OUT, list(clips))
