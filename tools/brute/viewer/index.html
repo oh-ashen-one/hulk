@@ -52,7 +52,7 @@ function load() {
     model.traverse(o => { if (o.isBone && !hips && /hips|pelvis/i.test(o.name)) hips = o; });
     mixer = new THREE.AnimationMixer(model);
     const box = document.getElementById('clips');
-    const order = ['Idle', 'Walk', 'Run', 'StopLunge', 'Jump', 'WallAttach', 'WallClimb', 'JumpAir', 'Land'];
+    const order = ['Idle', 'Walk', 'Run', 'StopLunge', 'Jump', 'WallAttach', 'WallClimb', 'Fall', 'Land', 'PunchL', 'PunchR', 'Slap', 'Clap', 'Smash', 'Lift', 'Throw', 'Uppercut'];
     const clips = g.animations.slice().sort((a, b) => (order.indexOf(a.name) + 99 * (order.indexOf(a.name) < 0)) - (order.indexOf(b.name) + 99 * (order.indexOf(b.name) < 0)));
     for (const c of clips) {
       actions[c.name] = mixer.clipAction(c);

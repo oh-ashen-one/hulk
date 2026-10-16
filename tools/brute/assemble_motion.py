@@ -4,7 +4,7 @@
 #   - root (pelvis) forward travel is removed for in-place clips and its speed measured (for the game's speed matching)
 #   - looping clips get a seamless loop: the last 0.25 s cross-fade into the first frames
 #   - the model is scaled to the game height (2.6 m), feet on the ground
-# Writes <out>/brute.glb (+ brute_anim.fbx) with clips Idle, Walk, Run, Stop, WallClimb, JumpCharge, JumpAir, Land and clips.json.
+# Writes <out>/brute.glb (+ brute_anim.fbx) with the CLIPS below (locomotion/wall + combat/air) and clips.json (once/loop, hit times).
 # usage: Blender -b --factory-startup -P tools/brute/assemble_motion.py -- <rigged.fbx> <motion_dir> <out_dir>
 #   motion_dir holds the downloaded FBX files; the clip is found by keyword in the file name (idle, walk, run, stop, climb, jump, fall, land)
 import bpy, sys, os, json, math, glob, re
@@ -15,9 +15,17 @@ RIG, MDIR, OUT = argv[0], argv[1], argv[2]
 HEIGHT = float(os.environ.get('BRUTE_HEIGHT_M', '2.6'))
 os.makedirs(OUT, exist_ok=True)
 CLIPS = [('Idle', r'idle', True), ('Walk', r'walk', True), ('Run', r'(?<!sk)run(?!.*stop)', True), ('StopLunge', r'stoplunge', False),
-         ('Jump', r'_jump', False), ('WallAttach', r'attach', False), ('WallClimb', r'climb|attach', True), ('JumpAir', r'fall|_air', True),
-         ('Land', r'land', False)]
-INPLACE = {'Walk', 'Run', 'StopLunge'}
+         ('Jump', r'_jump', False), ('WallAttach', r'attach', False), ('WallClimb', r'climb|attach', True),
+         # 2026-10-16 combat + air clips (Meshy Text-to-Motion raw SMPL clips -> retarget_motion.py; files Brute_<name>.glb)
+         ('PunchL', r'brute_punchl', False), ('PunchR', r'brute_punchr', False), ('Slap', r'brute_slap', False), ('Clap', r'brute_clap', False),
+         ('Smash', r'brute_smash', False), ('Lift', r'brute_liftthrow', False), ('Throw', r'brute_liftthrow', False),
+         ('Uppercut', r'brute_uppercut', False), ('Fall', r'brute_fall', True), ('Land', r'brute_land', False)]
+INPLACE = {'Walk', 'Run', 'StopLunge', 'PunchL', 'PunchR', 'Slap', 'Clap', 'Smash', 'Lift', 'Throw', 'Uppercut', 'Fall', 'Land'}
+# keep only [a, b] frames (offsets from the clip's first frame), re-based to the first frame: Lift / Throw are the two halves of one
+# lift-hold-hurl take (Throw starts exactly on Lift's overhead hold); punches / clap drop a messy generated tail
+TRIM = {'PunchL': (0, 46), 'PunchR': (0, 46), 'Clap': (0, 62), 'Lift': (19, 109), 'Throw': (109, 174)}
+# contact moment (seconds from the clip start, after TRIM): fist / palm / ground contact, measured from hand telemetry
+HIT = {'PunchL': 1.0, 'PunchR': 1.0, 'Slap': 0.83, 'Clap': 0.8, 'Smash': 1.17, 'Uppercut': 0.6, 'Throw': 1.0, 'Land': 0.5}
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.context.scene.render.fps = 30
@@ -73,6 +81,16 @@ for name, pat, loop in CLIPS:
     for fc in list(fcs(act)):
         m = re.match(r'pose\.bones\["(.+?)"\]', fc.data_path)
         if m and m.group(1) not in bones: remove_fc(act, fc)
+    if name in TRIM:
+        fa = int(round(act.frame_range[0])); ta, tb = TRIM[name]
+        for fc in fcs(act):
+            pts = fc.keyframe_points
+            for idx in range(len(pts) - 1, -1, -1):
+                if not (fa + ta - 0.01 <= pts[idx].co.x <= fa + tb + 0.01): pts.remove(pts[idx])
+            for kp in pts: kp.co.x -= ta; kp.handle_left.x -= ta; kp.handle_right.x -= ta
+            fc.update()
+        act.frame_range = (fa, fa + tb - ta); act.use_frame_range = True
+        print('TRIM', name, 'frames', fa + ta, '..', fa + tb, '-> start', fa)
     # source armature scale vs ours (motion translation units)
     ks = (src.matrix_world.to_scale().x / arm.matrix_world.to_scale().x) if src else 1.0
     if abs(ks - 1.0) > 1e-3:
@@ -185,9 +203,12 @@ bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, 'brute.glb'), export_format
 bpy.ops.export_scene.fbx(filepath=os.path.join(OUT, 'brute_anim.fbx'), use_selection=True, object_types={'MESH', 'ARMATURE'}, axis_forward='X', axis_up='Z',
                          apply_scale_options='FBX_SCALE_ALL', add_leaf_bones=False, bake_anim=True, bake_anim_use_nla_strips=True, bake_anim_use_all_actions=False,
                          path_mode='COPY', embed_textures=True)
-labels = {'Idle': 'idle, breathing', 'StopLunge': 'sprint, stop, coil to leap', 'Jump': 'launch', 'WallAttach': 'slam into a wall, fists in', 'WallClimb': 'climb step = the WallAttach slam', 'JumpAir': 'falling', 'Land': 'superhero landing'}
+labels = {'Idle': 'idle, breathing', 'StopLunge': 'sprint, stop, coil to leap', 'Jump': 'launch', 'WallAttach': 'slam into a wall, fists in', 'WallClimb': 'climb step = the WallAttach slam', 'Land': 'superhero landing, fist planted',
+          'PunchL': 'left haymaker', 'PunchR': 'right haymaker', 'Slap': 'big backhand slap', 'Clap': 'thunderclap', 'Smash': 'double-fist ground smash',
+          'Lift': 'grab low, heave overhead, hold', 'Throw': 'hurl forward from overhead', 'Uppercut': 'crouch, rising uppercut', 'Fall': 'airborne, arms spread'}
 cj = {n: dict(label=labels.get(n, '%.1f m/s' % m['speed']), speed=(m['speed'] if n in ('Walk', 'Run') else 0), loop=24 if n in ('Walk', 'Run') else 0,
-              dir=[0, 0, 1], once=not m['loop'], **({'wallZ': m['wall_fwd'] * k} if 'wall_fwd' in m else {})) for n, m in meta.items()}
+              dir=[0, 0, 1], once=not m['loop'], **({'wallZ': m['wall_fwd'] * k} if 'wall_fwd' in m else {}),
+              **({'hit': HIT[n]} if n in HIT else {})) for n, m in meta.items()}
 json.dump(cj, open(os.path.join(OUT, 'clips.json'), 'w'), indent=1)
 json.dump(meta, open(os.path.join(OUT, 'clips_meta.json'), 'w'), indent=1)
 print('WROTE', OUT, list(clips))
