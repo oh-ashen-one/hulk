@@ -1,55 +1,91 @@
-# Brute — rolling handoff (updated 2026-10-15 ~02:05 local, overnight loop 1)
+# Brute — rolling handoff (updated 2026-10-15, post-v2 asset rebuild)
 
 Owner direction 2026-10-15: replace all of Spider-Man with a big green Hulk-like character; no swinging — he stomps, jumps and
-leaps. Owner "go" (then asleep, full permissions, "don't interrupt other sessions", "use the Customuse API/MCP for assets"):
+leaps. Owner "go" (full permissions, "don't interrupt other sessions", "use the Customuse API/MCP for assets"):
 **jumping, launching, hitting, slapping, thunderclap, picking cars up to throw them, HUGE jumps and grand slam.**
 
-Read `docs/brute/BRIEF.md` (design), `docs/brute/RESULTS.md` (what loop 1 delivered, with stills), `docs/brute/MOVESET.md`
-(controls + numbers), `docs/brute/ASSETS.md` (Customuse provenance + asset pipeline).
+Read `docs/brute/BRIEF.md` (design), `docs/brute/RESULTS.md` (loop-1 gameplay evidence), `docs/brute/MOVESET.md`
+(controls + numbers), `docs/brute/ASSETS.md` (asset provenance + pipeline).
 
-## State (verified on the Studio, checkout `/Users/midir/hulk`, branch `brute`, pushed)
+## Where we are
 
-- Brute is the default pawn on every map using `AWebTravGameMode` (Manhattan, Manhattan_Island showcase, ...). `-WHSpidey` restores
-  the web-swinger (code untouched otherwise).
-- Moves working in the real game (telemetry + stills in RESULTS.md): walk/run/sprint (knocks cars), hop, charged super jump
-  (40 m / 100 m; running 46 m / 115 m), leap chain (to 52 m / 128 m), air dash x2, wall run + top-out + wall kick, crater landings,
-  grand slam dive, punch-punch-slap, launcher uppercut (sprint + attack), ground grand slam, thunderclap, grab car overhead + throw. Impacts throw traffic cars as physics
-  props, knock pedestrians over and make the crowd flee; traffic bounces off a standing Brute; HUD collateral counter + charge meter
-  + controls card. Camera: speed FOV, trauma shake, air tilt toward the landing, keeps out of facades and tree crowns.
-- Body: Customuse model (one paid generation, 100 credits), ONE skinned mesh on an 11-bone skeleton driven by the procedural rig
-  (`tools/brute/rig_brute.py`; the first rigid-part cut tore at the joints and was rejected by the owner, replaced 2026-10-15).
-- Verified on Manhattan (midtown), Manhattan_Island day + night (owner map, Times Square start, playable profile); a 44 s stress
-  case chaining every move ran without errors (`tools/brute/cases/m11_stress.json`). The one `precision loss` ensure in the log
-  is pre-existing (also in the Spider-Man baseline smoke run).
-- Owner launcher: `./Play-Brute.command` (guarded launcher, Manhattan_Island, Times Square start, 1080p window, 60 fps cap).
-  **Not launched by this session** (owner launches it).
+**v1 gameplay is live in-game on `brute`** (all pushed): Brute is the default pawn (`-WHSpidey` restores Spider-Man),
+walk/run/sprint, charged super jump (~40 m/100 m; running 46 m/115 m), leap chain, air dash x2, wall run/top-out/kick,
+crater landings, grand slam (air dive + ground), punch-punch-slap, sprint launcher uppercut, thunderclap, grab/throw cars,
+crowd panic, HUD (collateral + charge meter), camera polish. Everything in RESULTS.md was verified by scripted offscreen
+captures; the owner has played it live once.
 
-## Content on this machine (git-ignored)
+**v2 asset (body + animation) is the current work thread.** The owner rejected two earlier bodies ("super fucking ugly",
+"still looks horrible") and several animation passes. The current set below is the one the owner reviewed in the localhost
+viewer and approved clip-by-clip. **Next session's job: integrate this set into Unreal** — the in-game body is still the v1
+11-bone skinned Tripo P1 mesh with procedural poses.
 
-- `unreal/WebHomage/Content/` = read-only rsync copy of `/Users/midir/spider-man-2/unreal/WebHomage/Content` (same source commit
-  `0ca553f`, 2.9 GB) instead of the multi-hour rebuild. The full rebuild (`build_manhattan.py`) was started first and stopped at
-  `city_prep/gen_shaders` on missing donor inputs; fixed so far: `~/spiderbench` cloned at the pinned `64d957f` (+ npm install),
-  night lights exported to `~/hulk-scratch/night/export/night_lights.json` (pass `SM2_NIGHT_JSON` when rebuilding). Still missing
-  for a from-scratch rebuild: P2 character `ueimport` inputs, terrain export, night ref shots (all historically under
-  `~/sm2-n1/_scratch`, which no longer has them). Not needed while the copied Content is used.
-- `Content/Brute/{Parts,Fx}` from `python3 unreal/WebHomage/Scripts/build_brute.py` (inputs in `~/hulk-scratch/brute_parts`,
-  `~/hulk-scratch/brute_fx`; regenerate with `tools/brute/segment_brute.py` / `make_fx_meshes.py` from the Customuse GLB).
+## Approved v2 asset set (owner-reviewed 2026-10-15)
 
-## Next steps (loop 2), in order
+Model: **"Emerald Behemoth"**, Customuse CR 2.1 (NOT Tripo), task `cbdd9877-6c27-4a3f-ad89-9522ece557f2`, 100 credits.
+Rigged via Customuse website Humanoid Auto Rig node (Cartwheel), 8 credits → 52-bone humanoid skeleton incl. fingers,
+PBR textures. Rigged FBX: `~/hulk-scratch/brute_v2/` (exported from Downloads as `Emerald_Behemoth_Rigged_fbx.zip`).
 
-1. **Independent critic pass** on the loop-1 captures (`~/hulk-scratch/cap/*`, regenerate with `tools/brute/capture.sh <case>`):
-   not done — this session ran without subagents. Builder self-review is in RESULTS.md.
-2. Owner playtest via `Play-Brute.command`; turn feedback into stories.
-3. Milestone 3: destructible facade proxies on one district, collateral counter already wired (`BruteWorld::Collateral()`).
-4. Milestone 4: cops / SWAT enemies for the melee kit (hits currently affect cars / props / pedestrians only).
-5. Polish: occlusion fade for trees/awnings, stronger thunderclap read, skinned body (rigid seams), diagonal wall runs.
-6. Perf: desktop-session launch (`open -n -W -a`) under the exclusive perf lock; not measured yet.
+Approved clips (assembled into `~/hulk-scratch/brute_v4/brute.glb` + `brute_anim.fbx`, viewer copies in
+`tools/brute/viewer/`):
 
-## House rules that bit before (do not relearn)
+| Clip | Source | Notes |
+|---|---|---|
+| Idle | Cartwheel T2M via Customuse | approved |
+| Walk | Cartwheel | approved (2nd gen; 1st was "zombie" — prompt asked "slow heavy", got shuffle). Upright lumbering, ~0.6 m/s |
+| Run | Cartwheel | approved, ~2.1 m/s |
+| StopLunge | Cartwheel | approved after trim: sprint → slam → coil, cut at coil (full clip's stand-up blew out the traps) |
+| Jump | Cartwheel regen | approved: ~2 s charge crouch (knees bent, looking up), then explosive launch |
+| WallAttach | Cartwheel regen | approved: leap at wall, both fists punch in overhead, hangs |
+| WallClimb | **reuses WallAttach clip** | owner call: separate climb attempts all rejected; game replays the attach slam per step |
 
-- Shared GPU coordinator `~/.cache/gpu-slot`, hard cap 2 engines; every launch via `tools/gpu/gpu_slot.sh` (capture.sh does it).
-  Kill ONLY exact PIDs this task started. Another session (Invincible / Hollow Current) runs engines in parallel — leave them be.
-- Captures need `-benchmark -fps=N` (capture.sh adds it): without it the game clock and the script clock drift apart.
-- Commandlets exit 1 on the engine's own error summary (GameFeatureData warning): judge by the `SM2_BUILD_OK` sentinel.
-- Perf numbers only from a desktop-session launch, never SSH/offscreen.
-- Logs `~/hulk-logs/`, scratch `~/hulk-scratch/` (disposable). Customuse via `codex exec` (Codex Apps connector `customuse`).
+Rejected motion attempts (do NOT resurrect): Blender hand-authored clips ("looks like shit"), Cartwheel climb v1/v2
+(ladder-like, hands too close, elbows in), Meshy T2M climb (`~/hulk-scratch/meshy/climbA/B_rt.glb`, still "completely
+fucked up"). WallClimb = WallAttach was the owner's suggested fix.
+
+## Pipeline (all scripts in `tools/brute/`)
+
+- `assemble_motion.py` — Blender script: imports rigged FBX + per-clip GLBs from `~/hulk-scratch/brute_v2/motion/`,
+  cleans (root-drift removal, seamless loops, 2.6 m height, feet on ground), writes `brute.glb`, `brute_anim.fbx`,
+  `clips.json`. Blender 5: actions need `assign()` slot handling — already coded.
+- `viewer/` — Three.js viewer (`index.html`, `serve.sh` → http://127.0.0.1:8765). Camera follows hips; wall clips show
+  translucent wall (`wallZ` in clips.json). Owner refreshes with Cmd+Shift+R.
+- `retarget_motion.py` — maps Meshy 24-bone rig → Behemoth 52-bone skeleton; env `BRUTE_FIST`/`BRUTE_FIST_AXIS` add fist
+  curl (Meshy has no fingers).
+- `meshy_motion.py` — Meshy API helper (rig, text-to-motion prime 10 cr, apply 3 cr).
+- `animate_brute.py`, `rig_brute.py`, `segment_brute.py` — v1 pipeline, kept for reference.
+- `capture.sh`, `cases/` — scripted in-game captures.
+
+## NEXT SESSION: Unreal integration (owner said "go ahead, full thing, use subagents when needed")
+
+1. Import `brute_anim.fbx` (or GLB via interchange) into UE5.8 via `unreal/WebHomage/Scripts/build_brute.py` →
+   `/Game/Brute/Skel`. Skeleton-compatible AnimSequences per clip. Replace v1 mesh/parts (keep `/Game/Brute/Fx`).
+2. `BruteCharacter` (`Source/WebHomage/Brute/BruteCharacter.cpp/h`): swap procedural pose driving for AnimSequence playback
+   by state — Idle / Walk / Run by speed, StopLunge on sprint-stop, Jump charge→launch, WallAttach on wall contact,
+   WallClimb per climb step (replay slam each step + haul up), JumpAir/Land if present.
+3. **FX hooks the owner explicitly wants:** floor cracks/debris under charged-jump launch ("floor breaks under his feet");
+   wall crater + debris at each climb punch impact.
+4. Test on Manhattan + Manhattan_Island via `tools/brute/capture.sh`; live owner playtest via `./Play-Brute.command`.
+5. Update ASSETS.md/MOVESET.md/RESULTS.md, commit + push `brute`. **Never merge to main** without explicit permission.
+
+## Gotchas (learned the hard way)
+
+- Customuse tab: owner designated ONE Chrome tab (id was 911546424, window with 3 other tabs). Drive it via AppleScript
+  JavaScript by tab ID — no mouse/focus, works while owner uses the Mac. **Do not open new Customuse tabs/windows.**
+  ALWAYS verify the prompt field actually contains the new text before pressing Run (readonly-unlock races cost one
+  wasted 33-credit run already). Codex Computer Use was tried and abandoned — collides with owner input.
+- Credits: Customuse ≈2,876 left (Simple T2M ~33/run but billing was uneven — one run took 67/150; verify before/after).
+  Meshy ≈1,314 left (`~/.agents-md/.secrets/meshy.env`, `MESHY_API_KEY` — never print/commit). Tripo secrets at
+  `~/.agents-md/.secrets/tripo.env` (unused so far).
+- Customuse Simple mode T2M is weak for nonstandard motion (climb failed repeatedly); Detailed ~98 cr. Meshy prime is
+  cheap and fast (~15 s) but also failed this climb. For future hard motions: prefer retargeting Meshy/preset clips and
+  correcting in Blender over endless Cartwheel rerolls.
+- Viewer lies to watch for: hips-follow camera (fixed), leftover Cartwheel "Icosphere" (removed), one-shots must not
+  ping-pong, check actual playback not just stills before telling owner it's good.
+- GPU: shared `~/.cache/gpu-slot`, cap 2 renderer engines; captures need `-benchmark -fps=N`; `capture.sh` handles it.
+  Don't kill other sessions' engines.
+- Scratch: `~/hulk-scratch/` (disposable): `brute_v2/` rigged FBX + motion GLBs, `brute_v4/` assembled output, `meshy/`.
+  Logs `~/hulk-logs/`.
+- `Content/` is git-ignored; imported assets regenerate via `build_brute.py`.
+- Owner tone: blunt, curses, hates being shown unviewed output. Watch actual playback before claiming quality.
+  Show, don't promise.
