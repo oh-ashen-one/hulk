@@ -1,11 +1,14 @@
 // Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
 #include "Brute/BruteFx.h"
 #include "WebHomage.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Components/BoxComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Characters/WHCharAnimInstance.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "UObject/UObjectIterator.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -415,6 +418,57 @@ void ABruteFlung::Tick(float Dt)
 	}
 }
 
+// ================================================================================================ street debris
+ABruteDebris::ABruteDebris()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	Box = CreateDefaultSubobject<UBoxComponent>(TEXT("Body"));
+	RootComponent = Box;
+	Box->SetCollisionProfileName(TEXT("PhysicsActor"));
+	Box->SetLinearDamping(0.08f); Box->SetAngularDamping(0.5f);
+	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	Mesh->SetupAttachment(Box);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->SetCastShadow(true);
+}
+
+void ABruteDebris::Init(UInstancedStaticMeshComponent* Src, const FTransform& Xf, const FVector& VelCm, UInstancedStaticMeshComponent* Leaves, const FTransform& LXf)
+{
+	UStaticMesh* M = Src->GetStaticMesh();
+	Mesh->SetStaticMesh(M);
+	for (int32 I = 0; I < Src->GetNumMaterials(); ++I) Mesh->SetMaterial(I, Src->GetMaterial(I));
+	const FBox B = M->GetBoundingBox();
+	const FVector S = Xf.GetScale3D().GetAbs();
+	FVector Ext = (B.GetExtent() * S).ComponentMax(FVector(12.f));
+	if (Leaves) Ext = FVector(FMath::Min(Ext.X, 60.f), FMath::Min(Ext.Y, 60.f), Ext.Z);   // a tree: collide as its trunk, so it topples
+	Box->SetBoxExtent(Ext);
+	Box->SetWorldTransform(FTransform(Xf.GetRotation(), Xf.TransformPosition(B.GetCenter()), FVector::OneVector));
+	Mesh->SetRelativeLocation(-(B.GetCenter() * S)); Mesh->SetRelativeScale3D(S);
+	Scale0 = S;
+	if (Leaves && Leaves->GetStaticMesh())
+	{
+		Mesh2 = NewObject<UStaticMeshComponent>(this, TEXT("Leaves"));
+		Mesh2->SetupAttachment(Box); Mesh2->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh2->SetStaticMesh(Leaves->GetStaticMesh());
+		for (int32 I = 0; I < Leaves->GetNumMaterials(); ++I) Mesh2->SetMaterial(I, Leaves->GetMaterial(I));
+		Mesh2->RegisterComponent();
+		Mesh2->SetWorldTransform(LXf);
+	}
+	Box->SetSimulatePhysics(true);
+	Box->SetMassOverrideInKg(NAME_None, FMath::Clamp(float(B.GetVolume() * S.X * S.Y * S.Z) * 1e-4f, 20.f, 400.f), true);
+	Box->SetPhysicsLinearVelocity(VelCm);
+	FRandomStream& R = Rng();
+	Box->SetPhysicsAngularVelocityInDegrees(FVector(R.FRandRange(-400.f, 400.f), R.FRandRange(-400.f, 400.f), R.FRandRange(-250.f, 250.f)));
+	Life = R.FRandRange(18.f, 26.f);
+}
+
+void ABruteDebris::Tick(float Dt)
+{
+	Super::Tick(Dt);
+	Age += Dt;
+	if (Age > Life) { const float K = FMath::Max(0.f, 1.f - (Age - Life) / 0.8f); Box->SetWorldScale3D(FVector(FMath::Max(K, 0.01f))); if (K <= 0.f) Destroy(); }
+}
+
 // ================================================================================================ world helpers
 namespace BruteWorld
 {
@@ -440,16 +494,102 @@ namespace BruteWorld
 		}
 	}
 
+	TArray<TWeakObjectPtr<ABruteDebris>>& LiveDebris() { static TArray<TWeakObjectPtr<ABruteDebris>> L; return L; }
+
+	int32 BreakProps(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir, float ConeCos)
+	{
+		// owner 2026-10-16: "everything around him needs to break". The city's street kit / props / trees are no-collision instanced meshes
+		// in per-tile actors: every SMALL instance standing near street level inside the blast is hidden and replaced by flying debris.
+		if (!W || RadiusM < 1.f) return 0;
+		const double Rcm = RadiusM * 100.0;
+		const FVector CF = FVector(ConeDir.X, ConeDir.Y, 0).GetSafeNormal();
+		TArray<TWeakObjectPtr<ABruteDebris>>& L = LiveDebris();
+		L.RemoveAll([](const TWeakObjectPtr<ABruteDebris>& D) { return !D.IsValid(); });
+		const int32 MaxPer = 40, MaxLive = 180;
+		int32 N = 0; TMap<FString, int32> Names;
+		for (TObjectIterator<UInstancedStaticMeshComponent> It; It && N < MaxPer; ++It)
+		{
+			UInstancedStaticMeshComponent* C = *It;
+			if (!C || C->GetWorld() != W || !C->IsRegistered() || !C->GetStaticMesh() || C->GetInstanceCount() == 0) continue;
+			AActor* Ow = C->GetOwner();
+			if (!Ow || Ow->ActorHasTag(TEXT("WHGround"))) continue;
+			const FString Cls = Ow->GetClass()->GetName();
+			if (Cls.Contains(TEXT("WHLife")) || Cls.Contains(TEXT("Brute"))) continue;   // traffic / crowd / our own fx
+			if (C->Bounds.GetBox().ComputeSquaredDistanceToPoint(CenterCm) > Rcm * Rcm) continue;
+			const FBox MB = C->GetStaticMesh()->GetBoundingBox();
+			const TArray<int32> Hits = C->GetInstancesOverlappingSphere(CenterCm, float(Rcm), true);
+			for (int32 Idx : Hits)
+			{
+				FTransform Xf; if (!C->GetInstanceTransform(Idx, Xf, true)) continue;
+				const FVector S = Xf.GetScale3D().GetAbs();
+				if (S.GetMin() < 0.02f) continue;                                    // already broken
+				const FVector Ext = MB.GetExtent() * S;
+				static const bool bDbg = FParse::Param(FCommandLine::Get(), TEXT("WHBruteDebugBreak"));
+				if (bDbg) UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE break? %s ext (%.0f %.0f %.0f) z %.0f owner %s"), *C->GetStaticMesh()->GetName(), Ext.X, Ext.Y, Ext.Z, Xf.GetLocation().Z, *Ow->GetName());
+				const FString MName = C->GetStaticMesh()->GetName();
+				const bool bLeaves = MName.Contains(TEXT("_leaves")), bBark = MName.Contains(TEXT("_bark"));
+				if (bLeaves) continue;                                               // a crown goes with its bark instance
+				if (!bBark && (Ext.GetMax() > 900.f || Ext.X * Ext.Y * Ext.Z * 8.f > 2.5e7f)) continue;   // big things (buildings, bridges) stay
+				if (Ext.Z < 30.f && FMath::Max(Ext.X, Ext.Y) > 40.f) continue;      // flat plates (tree pits, grates, markings)
+				const FVector P = Xf.GetLocation();
+				const FVector Base = Xf.TransformPosition(FVector(MB.GetCenter().X, MB.GetCenter().Y, MB.Min.Z));
+				if (FMath::Abs(Base.Z - CenterCm.Z) > 450.f && Base.Z > CenterCm.Z - 300.f) continue;   // street level only (not fire escapes / roof kit)
+				FVector H = P - CenterCm; H.Z = 0; const double Dm = H.Size() * 0.01; H = H.SizeSquared() > 1.0 ? H.GetSafeNormal() : (CF.IsNearlyZero() ? FVector::ForwardVector : CF);
+				if (!CF.IsNearlyZero() && FVector::DotProduct(H, CF) < ConeCos) continue;
+				while (L.Num() >= MaxLive) { if (ABruteDebris* Old = L[0].Get()) Old->Destroy(); L.RemoveAt(0); }
+				const float K = FMath::Max(0.3f, 1.f - float(Dm) / RadiusM);
+				FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+				UInstancedStaticMeshComponent* LC = nullptr; int32 LIdx = -1; FTransform LXf;
+				if (bBark)
+				{	// its crown: the leaves instance standing at the same spot in the same tile actor
+					TArray<UInstancedStaticMeshComponent*> Sib; Ow->GetComponents(Sib);
+					for (UInstancedStaticMeshComponent* S2 : Sib)
+					{
+						if (!S2 || S2 == C || !S2->GetStaticMesh() || !S2->GetStaticMesh()->GetName().Contains(TEXT("_leaves"))) continue;
+						for (int32 J : S2->GetInstancesOverlappingSphere(P, 80.f, true))
+						{
+							FTransform T2; if (S2->GetInstanceTransform(J, T2, true) && T2.GetScale3D().GetMin() > 0.02f && FVector::Dist2D(T2.GetLocation(), P) < 60.f) { LC = S2; LIdx = J; LXf = T2; break; }
+						}
+						if (LC) break;
+					}
+				}
+				if (ABruteDebris* D = W->SpawnActor<ABruteDebris>(P, Xf.Rotator(), SP))
+				{
+					FRandomStream& R = Rng();
+					const float Kv = bBark ? 0.35f : 1.f;   // trees are heavy: they lean over and crash down rather than fly
+					D->Init(C, Xf, (H * SpeedMps * R.FRandRange(0.7f, 1.2f) * Kv + FVector(0, 0, (UpMps * R.FRandRange(0.6f, 1.3f) + 3.f) * Kv)) * K * 100.f, LC, LXf);
+					L.Add(D);
+				}
+				if (LC) { FTransform G2 = LXf; G2.SetScale3D(FVector(0.001f)); G2.AddToTranslation(FVector(0, 0, -5000.f)); LC->UpdateInstanceTransform(LIdx, G2, true, true, true); }
+				FTransform Gone = Xf; Gone.SetScale3D(FVector(0.001f)); Gone.AddToTranslation(FVector(0, 0, -5000.f));
+				C->UpdateInstanceTransform(Idx, Gone, true, true, true);
+				Collateral() += 1500.0; Names.FindOrAdd(C->GetStaticMesh()->GetName())++;
+				if (++N >= MaxPer) break;
+			}
+		}
+		if (N)
+		{
+			FString Ls; for (const auto& KV : Names) Ls += FString::Printf(TEXT(" %s x%d"), *KV.Key, KV.Value);
+			UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE break_props %d (r %.0f m):%s"), N, RadiusM, *Ls);
+		}
+		return N;
+	}
+
 	int32 Blast(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir, float ConeCos, AActor* Ignore, bool bScare)
 	{
 		if (!W) return 0;
+		// owner 2026-10-16: cars flying away is "really cool" -> push them harder; everything else around breaks too
+		SpeedMps *= 1.3f; UpMps *= 1.35f;
 		TArray<ABruteCar*> New;
-		TakeCars(W, CenterCm, RadiusM, 14, New);
+		TakeCars(W, CenterCm, RadiusM, 20, New);
+		if (bScare && RadiusM >= 3.f) BreakProps(W, CenterCm, RadiusM, SpeedMps * 0.6f, UpMps * 0.8f, ConeDir, ConeCos);
 		if (bScare)
 		{	// the crowd: knocked over near the blast, running away further out
 			TArray<FWHFlungWalker> Knocked;
 			const bool bConeB = !ConeDir.IsNearlyZero();
-			for (TActorIterator<AWHLifeCrowd> It(W); It; ++It) It->Panic(CenterCm, RadiusM * (bConeB ? 0.5f : 0.7f), RadiusM * 2.5f + 15.f, Knocked);
+			// everyone inside the blast goes flying (owner 2026-10-16), the rest run; at most ~60 flung bodies alive at once
+			int32 Alive = 0; for (TActorIterator<ABruteFlung> F(W); F; ++F) ++Alive;
+			for (TActorIterator<AWHLifeCrowd> It(W); It; ++It) It->Panic(CenterCm, Alive < 60 ? RadiusM : 0.f, RadiusM * 2.5f + 15.f, Knocked);
 			const FVector CF0 = FVector(ConeDir.X, ConeDir.Y, 0).GetSafeNormal();
 			for (const FWHFlungWalker& K : Knocked)
 			{
@@ -474,7 +614,7 @@ namespace BruteWorld
 			const float K = FMath::Max(0.3f, 1.f - Dist / RadiusM) * (C->bBig ? 0.45f : 1.f);
 			const FVector Dv = (H * SpeedMps + FVector(0, 0, UpMps)) * K * 100.f;
 			C->Body()->AddImpulse(Dv, NAME_None, true);
-			C->Body()->AddAngularImpulseInDegrees(FVector(FMath::FRandRange(-300.f, 300.f), FMath::FRandRange(-300.f, 300.f), FMath::FRandRange(-200.f, 200.f)) * K, NAME_None, true);
+			C->Body()->AddAngularImpulseInDegrees(FVector(FMath::FRandRange(-450.f, 450.f), FMath::FRandRange(-450.f, 450.f), FMath::FRandRange(-300.f, 300.f)) * K, NAME_None, true);
 			C->bThrown = true; C->ThrownT = 0.f;
 			Collateral() += 6000.0 * K;
 			++N;

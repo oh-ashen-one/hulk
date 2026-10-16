@@ -87,6 +87,25 @@ private:
 	float GroundZ = 0.f, Age = 0.f, RestT = -1.f, Scale = 1.f;
 };
 
+/** A street prop (lamp post, sign, hydrant, bench, tree, ...) knocked out of the city's instanced meshes: a physics box carrying a copy of
+ *  the instance's mesh; it tumbles, settles and after a while shrinks away. The source instance is hidden for good (the street stays wrecked). */
+UCLASS()
+class WEBHOMAGE_API ABruteDebris : public AActor
+{
+	GENERATED_BODY()
+public:
+	ABruteDebris();
+	/** Leaves (optional): a tree's crown instance riding on its bark instance (one falling tree). */
+	void Init(class UInstancedStaticMeshComponent* Src, const FTransform& InstWorld, const FVector& VelCm,
+		class UInstancedStaticMeshComponent* Leaves = nullptr, const FTransform& LeavesWorld = FTransform::Identity);
+	virtual void Tick(float Dt) override;
+private:
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UBoxComponent> Box;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Mesh;
+	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Mesh2;
+	float Age = 0.f, Life = 25.f; FVector Scale0 = FVector::OneVector;
+};
+
 /** World helpers shared by the Brute's moves. */
 namespace BruteWorld
 {
@@ -94,6 +113,8 @@ namespace BruteWorld
 	void TakeCars(UWorld* W, const FVector& CenterCm, float RadiusM, int32 MaxN, TArray<ABruteCar*>& Out);
 	/** Radial blast: lifts nearby traffic cars into physics and pushes every physics car in range outward + up. Returns cars affected. */
 	int32 Blast(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir = FVector::ZeroVector, float ConeCos = -2.f, AActor* Ignore = nullptr, bool bScare = true);
+	/** Breaks every small street-level instanced prop within RadiusM (cone optional) into flying physics debris; returns the count. */
+	int32 BreakProps(UWorld* W, const FVector& CenterCm, float RadiusM, float SpeedMps, float UpMps, const FVector& ConeDir = FVector::ZeroVector, float ConeCos = -2.f);
 	/** Collateral damage counter (dollars), shared for the HUD / telemetry. */
 	double& Collateral();
 }

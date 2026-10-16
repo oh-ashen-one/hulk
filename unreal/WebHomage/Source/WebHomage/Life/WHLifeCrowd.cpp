@@ -723,7 +723,7 @@ int32 AWHLifeCrowd::Panic(const FVector& CenterCm, float KnockM, float FleeM, TA
 		if (W.Edge < 0) continue;
 		const FVector2D D = W.Pos - C; const float Dist = D.Size();
 		if (Dist > FleeM) continue;
-		if (Dist < KnockM && W.Comp >= 0 && NKnock < 12)
+		if (Dist < KnockM && NKnock < 30 && Meshes.IsValidIndex(W.Model))   // Brute 2026-10-16: everyone in the blast flies, live or not
 		{
 			FWHFlungWalker F; F.Mesh = Meshes.IsValidIndex(W.Model) ? Meshes[W.Model].Get() : nullptr;
 			F.Material = MaterialOverrides.IsValidIndex(W.Model) ? MaterialOverrides[W.Model].Get() : nullptr; F.Anim = AnimClass;
