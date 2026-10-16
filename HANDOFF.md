@@ -87,6 +87,12 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
      breakable proxies or Chaos geometry collections swapped in near the impact), cars get blown away (owner: "that's really cool",
      keep and push it harder), and PEOPLE get flung too (currently only pedestrians very near an impact tumble via `ABruteFlung`;
      the rest just flee — make every walker in the blast radius fly, cartoon/non-gory). Scale radius + force by move.
+   - **FEATURE (owner 2026-10-16, backlog): latch onto a building from a jump.** Today the wall only catches when sprinting into
+     it (`StepGround` wall_run_start, `StepAir` wall_catch needs sprint held). Wanted: in the air, touching / sliding along a
+     facade + press ATTACK (LMB / pad X) = punch both fists in and latch (WallAttach clip + wall craters), then climb up FAST
+     (stick up / hold sprint). Implementation: in `StepAir`, when `PushOutCapsule` reports a side contact (or a short raycast along
+     velocity/facing finds a face within ~1.5 m) and `bAttack` is pressed (edge) -> enter Wall mode instead of the air punch; keep
+     the current sprint-catch too. Consider a brief "wall slide" state while airborne against a face so the press window is generous.
 2. Combat clips: punches/clap/smash/grab/throw are still procedural arm overlays on the new body — generate real clips (Meshy
    preset library has punches) if the owner wants them.
 3. No falling/landing clip: air uses the jump's arms-up hold. Generate JumpAir/Land if needed.
