@@ -1,6 +1,8 @@
 // Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
 #include "Brute/BruteCharacter.h"
 #include "Brute/BruteFx.h"
+#include "Core/WHSettings.h"
+#include "Core/WebHomagePlayerController.h"
 #include "WebHomage.h"
 
 #include "Camera/CameraComponent.h"
@@ -202,11 +204,18 @@ FBruteInput ABruteCharacter::ReadInput(float Dt)
 	const FVector2D Pad(PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftX), PC->GetInputAnalogKeyState(EKeys::Gamepad_LeftY));
 	if (Pad.Size() > 0.15f) I.Move = Pad;
 	if (I.Move.Size() > 1.f) I.Move.Normalize();
+	// look (owner playtest 2026-10-16: the mouse was inverted and ignored the settings menu): mouse / stick up = look up, Invert Y from
+	// the settings menu flips it; mouse look only while the game holds the mouse (free-cursor moves and capture warps gave huge deltas)
+	const FWHSettings& St = WHSettings();
+	const float YSign = St.bInvertY ? -1.f : 1.f;
+	const AWebHomagePlayerController* WPC = Cast<AWebHomagePlayerController>(PC);
 	float Mx = 0.f, My = 0.f; PC->GetInputMouseDelta(Mx, My);
+	if (WPC && !WPC->IsMouseCaptured()) Mx = My = 0.f;
+	Mx = FMath::Clamp(Mx, -60.f, 60.f); My = FMath::Clamp(My, -60.f, 60.f);
 	float Sens = 1.f; if (IConsoleVariable* CV = IConsoleManager::Get().FindConsoleVariable(TEXT("wh.MouseSensitivity"))) Sens = FMath::Max(0.05f, CV->GetFloat());
-	I.MouseDeg = FVector2D(Mx, My) * 0.14f * Sens;
+	I.MouseDeg = FVector2D(Mx, -My * YSign) * 0.14f * Sens;   // Tick: CamPitch -= MouseDeg.Y, so mouse up (My > 0) raises the view
 	const FVector2D RS(PC->GetInputAnalogKeyState(EKeys::Gamepad_RightX), PC->GetInputAnalogKeyState(EKeys::Gamepad_RightY));
-	if (RS.Size() > 0.15f) I.LookRate = FVector2D(RS.X * 160.f, RS.Y * 110.f);
+	if (RS.Size() > 0.15f) I.LookRate = FVector2D(RS.X * 160.f, -RS.Y * 110.f * YSign) * St.PadSens;
 	I.bJump = K(EKeys::SpaceBar) || K(EKeys::Gamepad_FaceButton_Bottom);
 	I.bSprint = K(EKeys::LeftShift) || K(EKeys::Gamepad_LeftThumbstick) || PC->GetInputAnalogKeyState(EKeys::Gamepad_RightTriggerAxis) > 0.4f;
 	I.bAttack = K(EKeys::LeftMouseButton) || K(EKeys::Gamepad_FaceButton_Left);
