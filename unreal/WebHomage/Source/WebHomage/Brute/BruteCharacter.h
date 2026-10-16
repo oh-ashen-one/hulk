@@ -38,7 +38,7 @@ struct FBruteInput
 	FVector2D Move = FVector2D::ZeroVector;   // x right, y forward (stick)
 	FVector2D LookRate = FVector2D::ZeroVector; // deg/s (scripted / pad)
 	FVector2D MouseDeg = FVector2D::ZeroVector; // deg this frame (mouse)
-	bool bJump = false, bSprint = false, bAttack = false, bHeavy = false, bClap = false, bGrab = false, bDash = false;
+	bool bJump = false, bSprint = false, bAttack = false, bHeavy = false, bClap = false, bGrab = false, bDash = false, bRespawn = false;
 };
 
 /** Joint angles (deg) and root offsets of the procedural rig. */
@@ -134,6 +134,14 @@ private:
 	void Impact(const FVector& AtM, float RadiusM, bool bCrater, float Strength, float CarSpeed, float CarUp);
 	FVector WishDir(const FVector2D& Move) const;
 	void SetMode(EBruteMode M) { Mode = M; ModeT = 0.0; }
+	// unstuck (owner playtest 2026-10-16: landed in a building and could not get out): speed-scaled substeps, a watchdog that rescues
+	// him (to the last outdoor spot, else onto the roof) when he is indoors > 1 s or pinned, and a manual respawn (hold R / d-pad down 1 s)
+	void Rescue(const TCHAR* Why);
+	float StuckT = 0.f, PinnedT = 0.f, RespawnHold = 0.f, IndoorCheckT = 0.f;
+	FVector PinRef = FVector::ZeroVector;
+	bool bIndoors = false, bLastSafeOutdoors = false;
+	/** Real-geometry test (not the box index, which misses some buildings): a roof overhead AND walls close on every side. */
+	bool IsIndoors(const FVector& FeetM, double* OutRoofZ = nullptr) const;
 
 	// ---- input
 	FBruteInput ReadInput(float Dt);

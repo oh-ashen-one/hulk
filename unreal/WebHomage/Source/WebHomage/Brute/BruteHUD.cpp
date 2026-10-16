@@ -63,7 +63,7 @@ void ABruteHUD::DrawHUD()
 			TEXT("In the air: Shift air dash   RMB / C = GRAND SLAM dive"),
 			TEXT("Sprint into a building = run up the wall   Space on the wall = kick off"),
 			TEXT("LMB punch, punch, SLAP   Sprint + LMB = LAUNCHER   RMB / C = ground smash   F = THUNDERCLAP"),
-			TEXT("E grab a car   E / LMB throw it where you look"),
+			TEXT("E grab a car   E / LMB throw it where you look      Hold R = back to the street (if stuck)"),
 			TEXT("Pad: A jump  X attack  Y slam  B grab/throw  R1 clap  R2 sprint/dash      H hide / show"),
 		};
 		const float A = 1.f;

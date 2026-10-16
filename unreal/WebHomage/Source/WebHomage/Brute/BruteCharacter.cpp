@@ -223,6 +223,7 @@ FBruteInput ABruteCharacter::ReadInput(float Dt)
 	I.bClap = K(EKeys::F) || K(EKeys::Gamepad_RightShoulder);
 	I.bGrab = K(EKeys::E) || K(EKeys::Gamepad_FaceButton_Right);
 	I.bDash = I.bSprint;
+	I.bRespawn = K(EKeys::R) || K(EKeys::Gamepad_DPad_Down);
 	return I;
 }
 
@@ -271,7 +272,7 @@ FBruteInput ABruteCharacter::SampleScript(double T) const
 	}
 	auto B = [&On](const TCHAR* N) { const float* V = On.Find(N); return V && *V > 0.5f; };
 	I.bJump = B(TEXT("jump")); I.bSprint = B(TEXT("sprint")); I.bAttack = B(TEXT("attack")); I.bHeavy = B(TEXT("heavy"));
-	I.bClap = B(TEXT("clap")); I.bGrab = B(TEXT("grab")); I.bDash = B(TEXT("dash")) || I.bSprint;
+	I.bClap = B(TEXT("clap")); I.bGrab = B(TEXT("grab")); I.bDash = B(TEXT("dash")) || I.bSprint; I.bRespawn = B(TEXT("respawn"));
 	return I;
 }
 
@@ -297,11 +298,30 @@ void ABruteCharacter::Tick(float Dt)
 	// fixed substeps (120 Hz) so fast falls never tunnel through a roof
 	// press edges: Step sees them on the first substep only; UpdateAct sees this frame's edges against the frame start
 	const FBruteInput FrameStart = Prev;
-	const int32 N = FMath::Clamp(FMath::CeilToInt(Dt * 120.f), 1, 8);
+	// at slam / leap speeds keep every substep under ~0.3 m of travel so a facade can't be skipped (owner: stuck inside a building)
+	const int32 N = FMath::Clamp(FMath::Max(FMath::CeilToInt(Dt * 120.f), FMath::CeilToInt(float(Vel.Size()) * Dt / 0.3f)), 1, 24);
 	for (int32 K = 0; K < N; ++K) { Step(Dt / N, I); if (K == 0) Prev = I; }
 	Prev = FrameStart;
 	UpdateAct(Dt, I);
 	Prev = I;
+	{	// unstuck watchdog + manual respawn
+		RespawnHold = I.bRespawn ? RespawnHold + Dt : 0.f;
+		if (RespawnHold > 1.0f) { RespawnHold = -1e9f; Rescue(TEXT("manual")); }
+		IndoorCheckT -= Dt;
+		if (IndoorCheckT <= 0.f && (Mode == EBruteMode::Ground || Mode == EBruteMode::Land || Mode == EBruteMode::Air))
+		{
+			IndoorCheckT = 0.25f;
+			bIndoors = IsIndoors(Pos);
+			if (!bIndoors && Mode != EBruteMode::Air && Floor(Pos, 0.5) > -50.0) { LastSafe = Pos; bLastSafeOutdoors = true; }
+		}
+		const bool bIn = bIndoors;   // (the building box index is not used here: some boxes overhang the sidewalk)
+		StuckT = bIn ? StuckT + Dt : 0.f;
+		if (StuckT > 1.0f) Rescue(TEXT("inside_building"));
+		// pinned in the air (resting on something that is not a floor) or held against geometry with no progress
+		const bool bTrying = Mode == EBruteMode::Air || (I.Move.Size() > 0.5f && Act == EBruteAct::None && !bCharging);
+		if (bTrying && FVector::Dist(Pos, PinRef) < 0.6) PinnedT += Dt; else { PinnedT = 0.f; PinRef = Pos; }
+		if (PinnedT > (Mode == EBruteMode::Air ? 1.5f : 4.0f)) { PinnedT = 0.f; PinRef = Pos; if (Mode == EBruteMode::Air || bIn) Rescue(TEXT("pinned")); }
+	}
 
 	SetActorLocationAndRotation(Pos * 100.0 + FVector(0, 0, GetCapsuleComponent()->GetScaledCapsuleHalfHeight()), FRotator(0.0, FMath::RadiansToDegrees(Facing), 0.0));
 	Animate(Dt);
@@ -406,7 +426,7 @@ void ABruteCharacter::StepGround(float Dt, const FBruteInput& I, const FVector& 
 		return;
 	}
 	NP.Z = G; Pos = NP;
-	if (G > -50.0) LastSafe = Pos;
+	// LastSafe: only a spot verified outdoors (Tick, every 0.25 s) -- never a street level inside a building
 	{	// heavy footfalls: a camera thump on every sprinting step
 		const float Before = StepPhase;
 		StepPhase += float(H2(Vel).Size() * Dt / 3.4 * 2.0 * PI);
@@ -1370,4 +1390,52 @@ void ABruteCharacter::WallPunchFx(int32 Side)
 	Trauma = FMath::Max(Trauma, 0.3);
 	BruteWorld::Collateral() += 4000.0;
 	Event(FString::Printf(TEXT("wall_punch %s"), Side == 0 ? TEXT("L") : TEXT("R")));
+}
+
+// ================================================================================================ unstuck
+bool ABruteCharacter::IsIndoors(const FVector& P, double* OutRoofZ) const
+{
+	UWorld* W = GetWorld(); if (!W) return false;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(BruteIndoors), false, this);
+	if (ABruteCar* C = Held.Get()) Q.AddIgnoredActor(C);
+	const FCollisionObjectQueryParams Obj(ECC_WorldStatic);
+	FHitResult Hit;
+	const FVector Chest = (P + FVector(0, 0, 1.6)) * 100.0;
+	// roof overhead: city roofs are often one-sided / not hit from below, so also look down from high above -- the first surface
+	// coming down being well above his head means he is under it
+	bool bUp = W->LineTraceSingleByObjectType(Hit, Chest, Chest + FVector(0, 0, 8000.0), Obj, Q);
+	double RoofZ = bUp ? Hit.ImpactPoint.Z / 100.0 : -1e9;
+	{
+		FHitResult Rh; const FVector Top(Chest.X, Chest.Y, Chest.Z + 30000.0);
+		if (W->LineTraceSingleByObjectType(Rh, Top, Chest, Obj, Q) && Rh.ImpactPoint.Z / 100.0 > P.Z + 3.0) { bUp = true; RoofZ = FMath::Max(RoofZ, Rh.ImpactPoint.Z / 100.0); }
+	}
+	const double UpD = bUp ? RoofZ - P.Z : -1.0;
+	int32 NH = 0; FString Ds;
+	for (int32 K = 0; K < 8; ++K)
+	{
+		const double A = K * PI / 4.0;
+		const bool bH = W->LineTraceSingleByObjectType(Hit, Chest, Chest + FVector(FMath::Cos(A), FMath::Sin(A), 0.0) * 2500.0, Obj, Q);
+		NH += (bH && Hit.Distance < 1500.0) ? 1 : 0; Ds += FString::Printf(TEXT(" %.0f"), bH ? Hit.Distance / 100.0 : -1.0);
+	}
+	static const bool bDbg = FParse::Param(FCommandLine::Get(), TEXT("WHBruteDebugIndoor"));
+	if (bDbg) UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE indoor? pos (%.1f %.1f %.1f) up %.1f walls %d:%s"), P.X, P.Y, P.Z, UpD, NH, *Ds);
+	if (!bUp || NH < 7) return false;   // open sky, or open on some side within 15 m (street, alley, plaza)
+	if (OutRoofZ) *OutRoofZ = RoofZ;
+	return true;
+}
+
+void ABruteCharacter::Rescue(const TCHAR* Why)
+{
+	double RoofZ = -1e9;
+	if (!bLastSafeOutdoors && IsIndoors(Pos, &RoofZ) && RoofZ > Pos.Z) LastSafe = FVector(Pos.X, Pos.Y, RoofZ);   // never been outside: the roof
+	Pos = LastSafe + FVector(0, 0, 0.1); Vel = FVector::ZeroVector; bIndoors = false; IndoorCheckT = 0.3f;
+	bSlamDive = false; bCharging = false; Act = EBruteAct::None; StuckT = 0.f; PinnedT = 0.f; PinRef = Pos;
+	if (ABruteCar* C = Held.Get()) { C->SetHeld(false); Held = nullptr; }
+	SetMode(EBruteMode::Ground);
+	if (UWorld* W = GetWorld())
+	{
+		FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>(Pos * 100.0, FRotator::ZeroRotator, SP)) S->Init(4.f, false, FVector::ZeroVector, 0.4f);
+	}
+	Event(FString::Printf(TEXT("rescue_%s"), Why));
 }
