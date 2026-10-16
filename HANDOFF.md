@@ -75,6 +75,13 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
 ## Next steps
 
 1. Owner playtest via `./Play-Brute.command`; turn feedback into fixes.
+   - **BUG (owner 2026-10-16, backlog): got stuck inside a building** after landing on / hitting a roof. Log copy
+     `~/hulk-logs/play-brute-stuck-20261016.log`: last events `super_jump` at (-310.8 -115.6 0.2) then `air_wall_smash` at
+     (-304.8 -115.6 9.1) moving +X at 26 m/s, then nothing — he ended up inside the facade. Likely causes: `StepAir` push-out
+     only bounces the velocity (no depenetration check after the 120 Hz substep at 26-60 m/s), and `PushOutCapsule` can resolve to
+     the inside of a box. Fix: after every air/ground step, if the capsule centre is inside a building box, push to the nearest
+     face (or the roof top); plus an "unstuck" watchdog (no progress for 1.5 s while inside geometry -> teleport to `LastSafe` or the
+     roof) and a manual key (e.g. hold R 1 s = respawn at last safe street spot). Reproduce with a scripted case from that spawn.
 2. Combat clips: punches/clap/smash/grab/throw are still procedural arm overlays on the new body — generate real clips (Meshy
    preset library has punches) if the owner wants them.
 3. No falling/landing clip: air uses the jump's arms-up hold. Generate JumpAir/Land if needed.
