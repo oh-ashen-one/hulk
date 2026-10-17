@@ -802,6 +802,7 @@ void ABruteCharacter::UpdateCamera(float Dt)
 	if (Mode == EBruteMode::Wall) WantDist = 9.0;
 	if (bCharging) WantDist += Charge / ChargeTime * 1.5;
 	if (Held.IsValid()) WantDist += 2.0;
+	else if (Act != EBruteAct::None && Mode != EBruteMode::Air) WantDist -= 1.4;   // fights read closer
 	if (CamDistOverride > 0.0) WantDist = CamDistOverride;
 	CamDist = Approach(CamDist, WantDist, 3.0, Dt);
 	FovKick = Approach(FovKick, 0.0, 2.5, Dt);
@@ -1352,7 +1353,7 @@ void ABruteCharacter::AnimateClips(float Dt)
 	else if (Mode == EBruteMode::Air)
 	{
 		// rising: the jump's launch (arms thrown up); falling: the Fall loop (arms spread, legs braced)
-		if (Vel.Z < -3.0) Play(CFall, 0.0, Len(CFall), true, 1.f, 0.35f, TEXT("fall"));
+		if (Vel.Z < 6.0) Play(CFall, 0.0, Len(CFall), true, 1.f, 0.45f, TEXT("fall"));   // past the launch the arms come down into the braced fall
 		else if (Cur.Tag != TEXT("air") && Cur.Tag != TEXT("fall")) Play(CJump, JLaunch, JApex, false, 1.3f, 0.1f, TEXT("air"));
 	}
 	else if ((Mode == EBruteMode::Land && LandHard > 0.5f) || (Cur.Tag == TEXT("land") && Cur.T < Cur.Hi - 0.05 && Hs < 3.0 && !bCharging))
@@ -1424,6 +1425,16 @@ void ABruteCharacter::AnimateClips(float Dt)
 		}
 	}
 
+	// ---- sprint: the run clip stays upright, so lean the whole upper body into a sprint (critic 2026-10-17: "no forward lean")
+	{
+		const float Lean = (Mode == EBruteMode::Ground && Cur.Tag == TEXT("run")) ? 16.f * FMath::Clamp(float((Hs - RunSpeed) / (SprintSpeed - RunSpeed)), 0.f, 1.f) + 5.f * FMath::Clamp(float(Hs / RunSpeed), 0.f, 1.f) : 0.f;
+		SprintLean = float(Approach(SprintLean, Lean, 6.0, Dt));
+		if (SprintLean > 0.3f)
+		{
+			const FQuat Q = BodyYawQ.Inverse() * FRotator(-SprintLean, 0.f, 0.f).Quaternion() * BodyYawQ;
+			FTransform Sp = CS[BSpine]; Sp.SetRotation(Q * Sp.GetRotation()); SetCS(BSpine, Sp); FK();
+		}
+	}
 	// ---- combat overlay: spine twist / bend and the arms aimed along the procedural joints (punch, slap, clap, smash, grab, carry, throw,
 	// uppercut, slam dive, air dash)
 	const bool bOv = bSlamDive || DashT > 0.f;   // every other move has its own clip now (2026-10-16)
@@ -1459,7 +1470,7 @@ void ABruteCharacter::WallPunchFx(int32 Side)
 	const FVector HandM = HandWorldCm(Side) / 100.0;
 	FTravHit Hit;
 	FVector At = HandM - WallN * 0.3, N = WallN;
-	if (bWorldReady && World.Raycast(HandM + WallN * 1.0, -WallN, 3.5, Hit)) { At = Hit.Point; N = Hit.Normal; }
+	if (bWorldReady && World.Raycast(HandM + WallN * 1.0, -WallN, 3.5, Hit)) At = Hit.Point;   // N stays the climb's facade normal: hit normals off mullions / sills stood the cracks out of the wall
 	FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>(At * 100.0, FRotator::ZeroRotator, SP)) S->InitWall(N, 0.9f);
 	Trauma = FMath::Max(Trauma, 0.3);

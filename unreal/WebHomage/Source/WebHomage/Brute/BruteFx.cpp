@@ -128,8 +128,8 @@ void ABruteShockwave::Init(float RadiusM, bool bCrater, const FVector& ConeDir, 
 		const float A = bCone ? FMath::DegreesToRadians(R.FRandRange(-34.f, 34.f) + CYaw) : (I + R.FRand() * 0.6f) / NPuff * 2.f * PI;
 		const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.f);
 		const float S = (bCone ? 0.8f : 0.6f + Radius * 0.03f) * R.FRandRange(0.7f, 1.3f);
-		FPart Pt; Pt.Kind = 0; Pt.P = O + Dir * 120.f + FVector(0, 0, bCone ? 150.f : 60.f);
-		Pt.V = Dir * (Radius * 100.f / (bCone ? 0.5f : 0.8f)) * R.FRandRange(0.6f, 1.05f) + FVector(0, 0, R.FRandRange(20.f, 180.f));
+		FPart Pt; Pt.Kind = 0; Pt.P = O + Dir * 120.f + FVector(0, 0, bCone ? 45.f : 35.f);   // dust rolls along the ground, not at head height
+		Pt.V = Dir * (Radius * 100.f / (bCone ? 0.5f : 0.8f)) * R.FRandRange(0.6f, 1.05f) + FVector(0, 0, R.FRandRange(10.f, 90.f));
 		Pt.S0 = FVector(S, S, S * 0.7f); Pt.Life = (bCone ? 0.7f : 1.4f) * R.FRandRange(0.85f, 1.2f); Pt.Op0 = R.FRandRange(0.18f, 0.32f);
 		Pt.M = PuffM ? BruteFx::FxMat(this, true, DustC * R.FRandRange(0.8f, 1.15f), Pt.Op0, 3.2f) : nullptr;
 		Pt.C = Add(PuffM ? PuffM : BruteFx::Sphere(), Pt.M ? Pt.M.Get() : BruteFx::Mat(this, DustC * 0.4f), Pt.P, Pt.S0 * 0.3f);

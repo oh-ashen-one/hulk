@@ -199,7 +199,7 @@ private:
 	TArray<int32> SkelIdx, BoneParent;
 	TArray<FTransform> RefLocal, PoseA, PoseB, CS;
 	bool bClipRig = false;
-	FClipPlay Cur, Old; float Fade = 1.f, FadeDur = 0.2f, OverlayW = 0.f;
+	FClipPlay Cur, Old; float Fade = 1.f, FadeDur = 0.2f, OverlayW = 0.f, SprintLean = 0.f;
 	double RefFootZ = 0.0; FVector RefHipsCS = FVector::ZeroVector; FQuat BodyYawQ = FQuat::Identity;
 	int32 BHips = 0, BSpine = 0, BArm[2] = { 0, 0 }, BFore[2] = { 0, 0 }, BHand[2] = { 0, 0 }, BFoot[4] = { 0, 0, 0, 0 };
 	// markers (s) measured by tools/brute/analyze_clips.py; defaults are the 2026-10-15 measurements
