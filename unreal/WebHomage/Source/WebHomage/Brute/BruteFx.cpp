@@ -196,23 +196,22 @@ void ABruteShockwave::InitWall(const FVector& Normal, float SizeM)
 	UMaterialInstanceDynamic* Dark = BruteFx::Mat(this, FLinearColor(0.012f, 0.011f, 0.010f));
 	UStaticMesh* PuffM = BruteFx::FxMesh(TEXT("SM_BruteFx_Puff"));
 	UStaticMesh* RockM = BruteFx::FxMesh(TEXT("SM_BruteFx_Rock"));
-	UStaticMesh* CraterM = BruteFx::FxMesh(TEXT("SM_BruteFx_Crater"));
 	const FLinearColor DustC(0.30f, 0.28f, 0.25f);
 	bHasCrater = true; CraterLife = 25.f;
 	const float CR = FMath::Clamp(SizeM, 0.5f, 2.5f);
 	{	// crater: the ground crater mesh turned onto the wall (its up axis = the wall normal), sunk a little into the face
-		FPart Pt; Pt.Kind = 2; Pt.P = O + N * 3.f; Pt.Life = CraterLife;
-		if (CraterM) { Pt.S0 = FVector(CR, CR, FMath::Min(CR * 0.12f, 0.25f)); Pt.C = Add(CraterM, Dark, Pt.P, Pt.S0); }
-		else { Pt.S0 = FVector(CR * 2.f, CR * 2.f, 0.04f); Pt.C = Add(BruteFx::Cylinder(), Dark, Pt.P, Pt.S0); }
+		FPart Pt; Pt.Kind = 2; Pt.P = O + N * 1.5f; Pt.Life = CraterLife;
+		// a flat dark impact disc flush with the facade (the ground crater mesh, even flattened, read as a bulging grey dome with teeth)
+		Pt.S0 = FVector(CR * 2.f, CR * 2.f, 0.02f); Pt.C = Add(BruteFx::Cylinder(), Dark, Pt.P, Pt.S0);
 		Pt.C->SetWorldRotation(FRotationMatrix::MakeFromZX(N, U.RotateAngleAxis(R.FRandRange(0.f, 360.f), N)).Rotator());
 		Parts.Add(Pt);
 	}
-	const int32 NCrack = 7 + int32(CR * 3.f);
+	const int32 NCrack = 6 + int32(CR * 2.f);
 	for (int32 I = 0; I < NCrack; ++I)
 	{
 		const float A = (I + R.FRand() * 0.7f) / NCrack * 2.f * PI; const FVector Dir = U * FMath::Cos(A) + V * FMath::Sin(A);
-		const float L = CR * R.FRandRange(0.9f, 2.6f);
-		FPart K; K.Kind = 3; K.P = O + Dir * (CR * 80.f + L * 50.f) + N * 2.f; K.S0 = FVector(L, R.FRandRange(0.05f, 0.14f), 0.025f); K.Life = CraterLife;
+		const float L = CR * R.FRandRange(0.5f, 1.5f);
+		FPart K; K.Kind = 3; K.P = O + Dir * (CR * 80.f + L * 50.f) + N * 1.f; K.S0 = FVector(L, R.FRandRange(0.025f, 0.06f), 0.01f); K.Life = CraterLife;
 		K.C = Add(BruteFx::Cube(), Dark, K.P, K.S0); K.C->SetWorldRotation(FRotationMatrix::MakeFromXZ(Dir, N).Rotator()); Parts.Add(K);
 	}
 	for (int32 I = 0; I < 10; ++I)
@@ -223,11 +222,11 @@ void ABruteShockwave::InitWall(const FVector& Normal, float SizeM)
 		Pt.S0 = FVector(S, S * R.FRandRange(0.7f, 1.2f), S * R.FRandRange(0.6f, 1.f)); Pt.Life = 2.4f; Pt.Spin = R.FRandRange(-700.f, 700.f);
 		Pt.C = Add(RockM ? RockM : BruteFx::Cube(), Rock, Pt.P, Pt.S0); Parts.Add(Pt);
 	}
-	for (int32 I = 0; I < 6; ++I)
-	{	// dust burst out of the hole
+	for (int32 I = 0; I < 4; ++I)
+	{	// dust burst out of the hole (small and quick: a big cluster read as a grey dome stuck on the facade)
 		FPart Pt; Pt.Kind = 0; Pt.P = O + N * 40.f;
 		Pt.V = (N * R.FRandRange(1.f, 2.f) + U * R.FRandRange(-1.f, 1.f) + V * R.FRandRange(-0.6f, 1.f)).GetSafeNormal() * R.FRandRange(250.f, 650.f);
-		const float S = R.FRandRange(0.7f, 1.3f) * (0.6f + CR * 0.4f); Pt.S0 = FVector(S, S, S * 0.8f); Pt.Life = R.FRandRange(0.8f, 1.4f); Pt.Op0 = R.FRandRange(0.16f, 0.28f);
+		const float S = R.FRandRange(0.4f, 0.8f) * (0.6f + CR * 0.4f); Pt.S0 = FVector(S, S, S * 0.8f); Pt.Life = R.FRandRange(0.5f, 0.9f); Pt.Op0 = R.FRandRange(0.12f, 0.2f);
 		Pt.M = PuffM ? BruteFx::FxMat(this, true, DustC * R.FRandRange(0.85f, 1.1f), Pt.Op0, 3.2f) : nullptr;
 		Pt.C = Add(PuffM ? PuffM : BruteFx::Sphere(), Pt.M ? Pt.M.Get() : BruteFx::Mat(this, DustC * 0.4f), Pt.P, Pt.S0 * 0.3f);
 		Parts.Add(Pt);

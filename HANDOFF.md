@@ -95,6 +95,24 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
    `tools/brute/clap_fix.py`, `throw_splice.py`; palms meet at the chest, Throw = hard overhead hurl). Still weak: Slap (spins, back to
    camera). Meshy balance 1,064.
 
+
+## Look + animation quality pass (2026-10-16/17, owner: "focus heavily on the animations and the visual look ... highest quality")
+
+- Anim worker (`tools/brute/anim_*.py`): forward Slap (twist limited, arm arc in front), mirrored Clap (rig is 6 cm asymmetric),
+  heavy Throw recovery, frame 0-1 bind-pose pops removed on all Cartwheel clips + loop seams 0 deg, foot locking with leg IK on
+  combat clips, Uppercut crouch lifted. 30 Meshy credits (balance 1,034).
+- Mesh worker (`tools/brute/mesh_*.py`, report `~/hulk-scratch/brute_mesh/REPORT.md`): bone-heat re-weight of arms / shoulders /
+  chest / upper back, hair locked to the head, elbow smoothing (shoulder peak stretch 10.8x -> 5.6x, folded tris/frame 91 -> 70).
+  Then `mesh_subdiv.py`: 1 level Catmull-Clark applied under the skin (9.5k -> 55k verts) = `~/hulk-scratch/brute_mesh/brute_rigged_subd.glb`,
+  which is now the FIRST ARGUMENT of assemble_motion.py (`brute_v5` rebuilt from it).
+- Material (`build_brute.py`, `--material-only` for look-dev): baked AO (`tools/brute/bake_ao.py` on the subd mesh ->
+  `~/hulk-scratch/brute_look/T_Brute_AO.png`) as occlusion + cavity, normal x1.4, skin-masked emerald deepening. MSM_SUBSURFACE
+  was tried and rejected (washed the form out to flat lime).
+- Vision critic (subagent_general; subagent_explore cannot view images) scored LOOK 5 / ANIM 4 before the fixes; fixed after it:
+  ground-level dust, no beige arc tubes on cones, flat wall cracks + flat impact disc, Fall pose right after launch, sprint lean,
+  closer combat camera, deeper skin. Not done (owner-approved clips / bigger work): more menacing idle / walk posture, veins /
+  pore roughness map, cloth folds on the shorts, glass breaking at wall impacts, camera fade for vehicles between camera and him.
+
 ## Next steps (after the list)
 
 - Independent critic pass, desktop fps measurement.

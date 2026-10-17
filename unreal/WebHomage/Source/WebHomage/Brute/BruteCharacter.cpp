@@ -1472,7 +1472,7 @@ void ABruteCharacter::WallPunchFx(int32 Side)
 	FVector At = HandM - WallN * 0.3, N = WallN;
 	if (bWorldReady && World.Raycast(HandM + WallN * 1.0, -WallN, 3.5, Hit)) At = Hit.Point;   // N stays the climb's facade normal: hit normals off mullions / sills stood the cracks out of the wall
 	FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>(At * 100.0, FRotator::ZeroRotator, SP)) S->InitWall(N, 0.9f);
+	if (ABruteShockwave* S = W->SpawnActor<ABruteShockwave>(At * 100.0, FRotator::ZeroRotator, SP)) S->InitWall(N, 0.65f);
 	Trauma = FMath::Max(Trauma, 0.3);
 	BruteWorld::Collateral() += 4000.0;
 	Event(FString::Printf(TEXT("wall_punch %s"), Side == 0 ? TEXT("L") : TEXT("R")));
