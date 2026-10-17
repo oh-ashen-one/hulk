@@ -201,6 +201,8 @@ private:
 	bool bClipRig = false;
 	FClipPlay Cur, Old; float Fade = 1.f, FadeDur = 0.2f, OverlayW = 0.f, SprintLean = 0.f;
 	double RefFootZ = 0.0; FVector RefHipsCS = FVector::ZeroVector; FQuat BodyYawQ = FQuat::Identity;
+	int32 BHead = 0, BSpine2 = 0;
+	float MenaceW = 0.f;
 	int32 BHips = 0, BSpine = 0, BArm[2] = { 0, 0 }, BFore[2] = { 0, 0 }, BHand[2] = { 0, 0 }, BFoot[4] = { 0, 0, 0, 0 };
 	// markers (s) measured by tools/brute/analyze_clips.py; defaults are the 2026-10-15 measurements
 	float JChargeLo = 0.17f, JChargeHi = 2.45f, JLaunch = 2.55f, JApex = 3.17f, JFallHi = 3.6f, LandFrom = 1.6f, WAttachImpact = 0.7f, WClimbLo = 0.55f, WClimbHi = 1.85f;

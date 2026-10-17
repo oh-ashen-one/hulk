@@ -1,6 +1,7 @@
 // Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
 #include "Brute/BruteCharacter.h"
 #include "Brute/BruteFx.h"
+#include "Life/WHLifeTraffic.h"
 #include "Core/WHSettings.h"
 #include "Core/WebHomagePlayerController.h"
 #include "WebHomage.h"
@@ -870,6 +871,14 @@ void ABruteCharacter::UpdateCamera(float Dt)
 			if (Mode != EBruteMode::Wall)
 			{
 				const double Plain = Room(CamPitch);
+				// something dynamic (a parked / thrown car, a truck) between the lens and him: go high over it
+				FHitResult Oc; FCollisionQueryParams Q2(SCENE_QUERY_STAT(BruteCamOcc), false, this);
+				const FVector Lens = (Pivot + Back * Arm) * 100.0;
+				const bool bOccluded = W->LineTraceSingleByObjectType(Oc, Lens, (Pos + FVector(0, 0, 1.6)) * 100.0, FCollisionObjectQueryParams(ECC_PhysicsBody) , Q2)
+					|| W->LineTraceSingleByObjectType(Oc, Lens, (Pos + FVector(0, 0, 1.6)) * 100.0, FCollisionObjectQueryParams(ECC_Vehicle), Q2);
+				bool bCarOcc = false;
+				for (TActorIterator<AWHLifeTraffic> It(W); It && !bCarOcc; ++It) bCarOcc = It->SegmentHitsCar(Lens, (Pos + FVector(0, 0, 1.6)) * 100.0, 170.f);
+				if (bOccluded || bCarOcc) { WantLift = 1.0; if (CamLift < 0.05) CamAltPitch = -38.0; }
 				if (Plain < 3.5)
 				{	// try a high view (over walls) and a low one (under awnings / scaffolds); keep the roomier if clearly better
 					const double Hi = Room(-55.0), Lo = Room(6.0);
@@ -1259,6 +1268,8 @@ bool ABruteCharacter::BuildClipRig()
 	BHips = Bi(TEXT("Hips")); BSpine = Bi(TEXT("Spine1"));
 	BArm[0] = Bi(TEXT("LeftArm")); BArm[1] = Bi(TEXT("RightArm")); BFore[0] = Bi(TEXT("LeftForeArm")); BFore[1] = Bi(TEXT("RightForeArm"));
 	BHand[0] = Bi(TEXT("LeftHand")); BHand[1] = Bi(TEXT("RightHand"));
+	BHead = Bi(TEXT("Head")); BSpine2 = Bi(TEXT("Spine2"));
+	if (BHead == INDEX_NONE || BSpine2 == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: Head / Spine2 missing")); Clips.Reset(); return false; }
 	BFoot[0] = Bi(TEXT("LeftFoot")); BFoot[1] = Bi(TEXT("RightFoot")); BFoot[2] = Bi(TEXT("LeftToeBase")); BFoot[3] = Bi(TEXT("RightToeBase"));
 	for (int32 B : { BHips, BSpine, BArm[0], BArm[1], BFore[0], BFore[1], BHand[0], BHand[1], BFoot[0], BFoot[1], BFoot[2], BFoot[3] })
 		if (B == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: SK_Brute lacks a Mixamo-named bone")); Clips.Reset(); return false; }
@@ -1433,6 +1444,38 @@ void ABruteCharacter::AnimateClips(float Dt)
 		{
 			const FQuat Q = BodyYawQ.Inverse() * FRotator(-SprintLean, 0.f, 0.f).Quaternion() * BodyYawQ;
 			FTransform Sp = CS[BSpine]; Sp.SetRotation(Q * Sp.GetRotation()); SetCS(BSpine, Sp); FK();
+		}
+	}
+	// ---- menace (critic 2026-10-17: idle / walk read "passive, tired"): a brute posture layered on Idle / Walk -- chest forward and
+	// hunched, head pushed forward with the eyes kept level, upper arms flared out off the lats, elbows bent, fists held forward
+	{
+		const bool bMen = Mode == EBruteMode::Ground && (Cur.Tag == TEXT("idle") || Cur.Tag == TEXT("walk")) && Act == EBruteAct::None;
+		MenaceW = float(Approach(MenaceW, bMen ? 1.0 : 0.0, 5.0, Dt));
+		if (MenaceW > 0.01f)
+		{
+			auto RotAct = [&](int32 B, const FRotator& R)
+			{	// rotate bone B (and its children) by an actor-frame rotation about its own pivot
+				const FQuat Q = FQuat::Slerp(FQuat::Identity, BodyYawQ.Inverse() * R.Quaternion() * BodyYawQ, MenaceW);
+				FTransform X = CS[B]; X.SetRotation(Q * X.GetRotation()); SetCS(B, X); FK();
+			};
+			RotAct(BSpine2, FRotator(-9.f, 0.f, 0.f));    // hunch the chest forward
+			RotAct(BHead, FRotator(7.f, 0.f, 0.f));       // ...head comes forward with it, chin back up so he glares ahead
+			const FVector Fwd = BodyYawQ.Inverse().RotateVector(FVector::ForwardVector);
+			for (int32 Sd = 0; Sd < 2; ++Sd)
+			{
+				const float Out = Sd == 0 ? 1.f : -1.f;   // left arm sits at -Y (actor), so flaring is +roll on the left, -roll on the right
+				RotAct(BArm[Sd], FRotator(0.f, 0.f, 13.f * Out));
+				// elbow: swing the forearm about the axis perpendicular to the upper arm and forward, so the fist comes forward / up
+				const FVector Ua = (CS[BFore[Sd]].GetLocation() - CS[BArm[Sd]].GetLocation()).GetSafeNormal();
+				const FVector Fa = (CS[BHand[Sd]].GetLocation() - CS[BFore[Sd]].GetLocation()).GetSafeNormal();
+				FVector Ax = FVector::CrossProduct(Ua, Fwd).GetSafeNormal();
+				if (!Ax.IsNearlyZero())
+				{
+					FQuat Q(Ax, FMath::DegreesToRadians(22.f));
+					if (FVector::DotProduct(Q.RotateVector(Fa), Fwd) < FVector::DotProduct(Fa, Fwd)) Q = FQuat(Ax, -FMath::DegreesToRadians(22.f));
+					FTransform X = CS[BFore[Sd]]; X.SetRotation(FQuat::Slerp(FQuat::Identity, Q, MenaceW) * X.GetRotation()); SetCS(BFore[Sd], X); FK();
+				}
+			}
 		}
 	}
 	// ---- combat overlay: spine twist / bend and the arms aimed along the procedural joints (punch, slap, clap, smash, grab, carry, throw,

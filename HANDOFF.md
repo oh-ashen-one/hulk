@@ -110,8 +110,11 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
   was tried and rejected (washed the form out to flat lime).
 - Vision critic (subagent_general; subagent_explore cannot view images) scored LOOK 5 / ANIM 4 before the fixes; fixed after it:
   ground-level dust, no beige arc tubes on cones, flat wall cracks + flat impact disc, Fall pose right after launch, sprint lean,
-  closer combat camera, deeper skin. Not done (owner-approved clips / bigger work): more menacing idle / walk posture, veins /
-  pore roughness map, cloth folds on the shorts, glass breaking at wall impacts, camera fade for vehicles between camera and him.
+  closer combat camera, deeper skin. Round 2 (owner "fix rest"): menace posture layer on Idle / Walk in game (chest hunched, head
+  forward, arms flared, elbows bent; `MenaceW` in AnimateClips), skin roughness noise + matte cloth on the shorts (material), wall
+  impacts = fist-sized charcoal dents + hairline cracks + glass shards + rubble, camera rises when a car / truck (traffic has no
+  collision: `AWHLifeTraffic::SegmentHitsCar`) or physics body blocks the view. Still not done: veins (needs a painted map), real
+  cloth folds on the shorts, decal-based cracks.
 
 ## Next steps (after the list)
 

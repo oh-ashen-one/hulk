@@ -956,6 +956,22 @@ void AWHLifeTraffic::PushInstances()
 }
 
 // ------------------------------------------------------------------------------------------------ Brute: lift cars out of the sim
+bool AWHLifeTraffic::SegmentHitsCar(const FVector& A, const FVector& B, float RadiusCm) const
+{
+	if (!bReady) return false;
+	auto Hit = [&](const FVector& P)
+	{	// car body ~ a sphere of RadiusCm around a point 1 m above the instance origin
+		const FVector C = P + FVector(0, 0, 100.f);
+		if (FVector::DistSquared(C, B) < 300.f * 300.f) return false;   // a car right beside him is not "in the way"
+		return FMath::PointDistToSegmentSquared(C, A, B) < RadiusCm * RadiusCm;
+	};
+	for (const WHLife::FCar& C : Cars)
+		if (C.bActive && C.Inst >= 0 && Xf.IsValidIndex(C.Type) && Xf[C.Type].IsValidIndex(C.Inst) && Hit(Xf[C.Type][C.Inst].GetLocation())) return true;
+	for (int32 I = 0; I < ParkedPts.Num(); ++I)
+		if (ParkedRefs.IsValidIndex(I) && !ParkedRefs[I].bTaken && Hit(FVector(ParkedPts[I].X, ParkedPts[I].Y, B.Z - 160.f))) return true;   // parked Z is nominal: street level = B (his chest) - 1.6 m
+	return false;
+}
+
 int32 AWHLifeTraffic::TakeCarsInRadius(const FVector& CenterCm, float RadiusCm, int32 MaxN, TArray<FWHTakenCar>& Out)
 {
 	if (!bReady || MaxN <= 0) return 0;

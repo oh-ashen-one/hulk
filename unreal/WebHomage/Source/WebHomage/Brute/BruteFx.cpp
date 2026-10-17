@@ -202,7 +202,7 @@ void ABruteShockwave::InitWall(const FVector& Normal, float SizeM)
 	{	// crater: the ground crater mesh turned onto the wall (its up axis = the wall normal), sunk a little into the face
 		FPart Pt; Pt.Kind = 2; Pt.P = O + N * 1.5f; Pt.Life = CraterLife;
 		// a flat dark impact disc flush with the facade (the ground crater mesh, even flattened, read as a bulging grey dome with teeth)
-		Pt.S0 = FVector(CR * 2.f, CR * 2.f, 0.02f); Pt.C = Add(BruteFx::Cylinder(), Dark, Pt.P, Pt.S0);
+		Pt.S0 = FVector(CR * 1.25f, CR * 1.25f, 0.02f); Pt.C = Add(BruteFx::Cylinder(), BruteFx::Mat(this, FLinearColor(0.035f, 0.032f, 0.03f)), Pt.P, Pt.S0);   // fist-sized dented hole, charcoal not pitch black
 		Pt.C->SetWorldRotation(FRotationMatrix::MakeFromZX(N, U.RotateAngleAxis(R.FRandRange(0.f, 360.f), N)).Rotator());
 		Parts.Add(Pt);
 	}
@@ -210,9 +210,9 @@ void ABruteShockwave::InitWall(const FVector& Normal, float SizeM)
 	for (int32 I = 0; I < NCrack; ++I)
 	{
 		const float A = (I + R.FRand() * 0.7f) / NCrack * 2.f * PI; const FVector Dir = U * FMath::Cos(A) + V * FMath::Sin(A);
-		const float L = CR * R.FRandRange(0.5f, 1.5f);
-		FPart K; K.Kind = 3; K.P = O + Dir * (CR * 80.f + L * 50.f) + N * 1.f; K.S0 = FVector(L, R.FRandRange(0.025f, 0.06f), 0.01f); K.Life = CraterLife;
-		K.C = Add(BruteFx::Cube(), Dark, K.P, K.S0); K.C->SetWorldRotation(FRotationMatrix::MakeFromXZ(Dir, N).Rotator()); Parts.Add(K);
+		const float L = CR * R.FRandRange(0.4f, 1.1f);
+		FPart K; K.Kind = 3; K.P = O + Dir * (CR * 55.f + L * 50.f) + N * 1.f; K.S0 = FVector(L, R.FRandRange(0.012f, 0.03f), 0.008f); K.Life = CraterLife;
+		K.C = Add(BruteFx::Cube(), BruteFx::Mat(this, FLinearColor(0.05f, 0.046f, 0.042f)), K.P, K.S0);   // hairline cracks K.C->SetWorldRotation(FRotationMatrix::MakeFromXZ(Dir, N).Rotator()); Parts.Add(K);
 	}
 	for (int32 I = 0; I < 10; ++I)
 	{	// rubble knocked out of the wall: flies out, then falls (no floor at punch height: it just drops away and shrinks)
@@ -221,6 +221,17 @@ void ABruteShockwave::InitWall(const FVector& Normal, float SizeM)
 		const float S = R.FRandRange(0.15f, 0.45f) * (RockM ? 1.f : 0.6f) * FMath::Sqrt(CR);
 		Pt.S0 = FVector(S, S * R.FRandRange(0.7f, 1.2f), S * R.FRandRange(0.6f, 1.f)); Pt.Life = 2.4f; Pt.Spin = R.FRandRange(-700.f, 700.f);
 		Pt.C = Add(RockM ? RockM : BruteFx::Cube(), Rock, Pt.P, Pt.S0); Parts.Add(Pt);
+	}
+	{	// window glass: shards burst out and rain down, glinting (critic 2026-10-17: "the glass doesn't break")
+		UMaterialInstanceDynamic* Glass = BruteFx::Mat(this, FLinearColor(0.55f, 0.68f, 0.75f), 0.25f);
+		for (int32 I = 0; I < 14; ++I)
+		{
+			FPart Pt; Pt.Kind = 8; Pt.P = O + N * 20.f + (U * R.FRandRange(-1.f, 1.f) + V * R.FRandRange(-0.6f, 1.f)) * CR * 120.f;
+			Pt.V = N * R.FRandRange(150.f, 500.f) + U * R.FRandRange(-200.f, 200.f) + FVector(0, 0, R.FRandRange(-50.f, 250.f));
+			const float S = R.FRandRange(0.08f, 0.22f);
+			Pt.S0 = FVector(S, S * R.FRandRange(0.5f, 1.2f), 0.006f); Pt.Life = R.FRandRange(1.6f, 2.6f); Pt.Spin = R.FRandRange(-900.f, 900.f);
+			Pt.C = Add(BruteFx::Cube(), Glass, Pt.P, Pt.S0); Parts.Add(Pt);
+		}
 	}
 	for (int32 I = 0; I < 4; ++I)
 	{	// dust burst out of the hole (small and quick: a big cluster read as a grey dome stuck on the facade)
