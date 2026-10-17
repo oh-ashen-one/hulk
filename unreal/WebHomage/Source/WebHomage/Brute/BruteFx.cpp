@@ -110,9 +110,9 @@ void ABruteShockwave::Init(float RadiusM, bool bCrater, const FVector& ConeDir, 
 			FPart W; W.Kind = bCone ? 7 : (I == 0 ? 5 : 6); W.P = O + FVector(0, 0, bCone ? 40.f : 5.f) + (bCone ? FVector(CF * 100.f) : FVector::ZeroVector);
 			W.Delay = I * (bCone ? 0.07f : 0.05f); W.Life = (bCone ? 0.55f : (I == 0 ? 0.45f : 0.9f)) * FMath::Sqrt(FMath::Max(Strength, 0.4f));
 			W.R1 = Radius * (bCone ? 1.f : (I == 0 ? 1.f : 0.7f));
-			const float Hgt = bCone ? 4.0f : (I == 0 ? 1.1f + Radius * 0.04f : 2.2f + Radius * 0.08f);
+			const float Hgt = bCone ? 2.6f : (I == 0 ? 0.8f + Radius * 0.03f : 1.6f + Radius * 0.06f);
 			W.S0 = FVector(1.f, 1.f, Hgt);
-			W.Op0 = W.Kind == 6 ? 0.38f : (bCone ? 0.7f : 0.55f);
+			W.Op0 = W.Kind == 6 ? 0.22f : (bCone ? 0.28f : 0.3f);   // 2026-10-16 look pass: the bands read as opaque beige slabs at the old 0.55-0.7
 			W.M = BruteFx::FxMat(this, W.Kind == 6, W.Kind == 6 ? DustC : ShockC, W.Op0, W.Kind == 6 ? 3.2f : (bCone ? 20.f : 9.f));
 			W.C = Add(bCone ? ArcM : RingM, nullptr, W.P, FVector(0.01f));
 			if (W.M) W.C->SetMaterial(0, W.M);
