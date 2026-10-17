@@ -31,7 +31,8 @@ def build_material(src_dir, tools, dest=None):
     tex = {}
     for kind, comp, srgb in (('BaseColor', unreal.TextureCompressionSettings.TC_DEFAULT, True),
                              ('Normal', unreal.TextureCompressionSettings.TC_NORMALMAP, False),
-                             ('ORM', unreal.TextureCompressionSettings.TC_MASKS, False)):
+                             ('ORM', unreal.TextureCompressionSettings.TC_MASKS, False),
+                             ('AO', unreal.TextureCompressionSettings.TC_GRAYSCALE, False)):   # tools/brute/bake_ao.py (optional)
         f = os.path.join(src_dir, 'T_Brute_%s.png' % kind)
         if not os.path.isfile(f):
             unreal.log_warning('[brute] texture missing ' + f); continue
@@ -46,21 +47,69 @@ def build_material(src_dir, tools, dest=None):
         unreal.EditorAssetLibrary.save_asset(a.get_path_name())
         tex[kind] = a
     if 'BaseColor' not in tex: return None
+    if unreal.EditorAssetLibrary.does_asset_exist(dest + '/M_Brute'): unreal.EditorAssetLibrary.delete_asset(dest + '/M_Brute')
     m = tools.create_asset('M_Brute', dest, unreal.Material, unreal.MaterialFactoryNew())
     m.set_editor_property('used_with_skeletal_mesh', True)   # without the usage flag -game silently falls back to the default grey
     def sample(kind, x, y, stype):
         n = MEL.create_material_expression(m, unreal.MaterialExpressionTextureSample, x, y)
         n.set_editor_property('texture', tex[kind]); n.set_editor_property('sampler_type', stype)
         return n
-    bc = sample('BaseColor', -500, -200, unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
-    MEL.connect_material_property(bc, 'RGB', unreal.MaterialProperty.MP_BASE_COLOR)
+    def const3(x, y, v):
+        n = MEL.create_material_expression(m, unreal.MaterialExpressionConstant3Vector, x, y); n.set_editor_property('constant', unreal.LinearColor(v[0], v[1], v[2], 1)); return n
+    def const1(x, y, v):
+        n = MEL.create_material_expression(m, unreal.MaterialExpressionConstant, x, y); n.set_editor_property('r', v); return n
+    def op(cls, x, y, a, b=None, ai='', bi=''):
+        n = MEL.create_material_expression(m, cls, x, y)
+        MEL.connect_material_expressions(a, ai, n, 'A' if b is not None else '')
+        if b is not None: MEL.connect_material_expressions(b, bi, n, 'B')
+        return n
+    # 2026-10-16 look pass (owner: "the visual look of the hulk ... highest quality"): the raw Customuse albedo reads lime / plastic.
+    #   skin mask = how much greener than red / blue a texel is (shorts purple, hair black, nails / teeth stay as authored)
+    #   skin: a little more contrast, pulled from yellow-lime toward a deep emerald; subsurface scattering (dark green-red) so it
+    #   reads as flesh, not plastic; roughness lifted slightly; normal detail strengthened
+    bc = sample('BaseColor', -1400, -300, unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    if os.environ.get('BRUTE_LOOK_PLAIN') == '1':   # A/B reference: the raw maps, default lit
+        MEL.connect_material_property(bc, 'RGB', unreal.MaterialProperty.MP_BASE_COLOR)
+        if 'Normal' in tex: MEL.connect_material_property(sample('Normal', -1000, 200, unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL), 'RGB', unreal.MaterialProperty.MP_NORMAL)
+        if 'ORM' in tex:
+            orm = sample('ORM', -1000, 500, unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+            MEL.connect_material_property(orm, 'G', unreal.MaterialProperty.MP_ROUGHNESS); MEL.connect_material_property(orm, 'B', unreal.MaterialProperty.MP_METALLIC)
+        MEL.recompile_material(m); unreal.EditorAssetLibrary.save_asset(m.get_path_name()); return m
+    # (MSM_SUBSURFACE was tried 2026-10-16: it washed the muscle definition out into flat bright lime -- default lit keeps the form)
+    mr = op(unreal.MaterialExpressionComponentMask, -1150, -500, bc, None, 'R'); mr.set_editor_property('r', True); mr.set_editor_property('g', False); mr.set_editor_property('b', False); mr.set_editor_property('a', False)
+    mg = op(unreal.MaterialExpressionComponentMask, -1150, -420, bc, None, 'RGB'); mg.set_editor_property('r', False); mg.set_editor_property('g', True); mg.set_editor_property('b', False); mg.set_editor_property('a', False)
+    mb = op(unreal.MaterialExpressionComponentMask, -1150, -340, bc, None, 'RGB'); mb.set_editor_property('r', False); mb.set_editor_property('g', False); mb.set_editor_property('b', True); mb.set_editor_property('a', False)
+    # skin = green over blue AND not redder than green (the olive skin is ~(64,65,33)/255; shorts purple, hair black, nails / lips orange)
+    gb = op(unreal.MaterialExpressionSubtract, -1000, -440, mg, mb)
+    rg_ = op(unreal.MaterialExpressionSubtract, -1000, -360, mr, mg)
+    a1 = op(unreal.MaterialExpressionMultiply, -880, -440, gb, const1(-1000, -520, 6.0))
+    a2 = op(unreal.MaterialExpressionMultiply, -880, -360, rg_, const1(-1000, -280, 8.0))
+    mk = op(unreal.MaterialExpressionSubtract, -760, -420, a1, a2)
+    mask = op(unreal.MaterialExpressionSaturate, -640, -420, mk)
+    # skin: only a slight deepening (the authored olive already reads right; a lime push looked cheap)
+    skin = op(unreal.MaterialExpressionMultiply, -860, -220, bc, const3(-1000, -120, (0.93, 0.97, 0.90)), 'RGB')
+    lerp = MEL.create_material_expression(m, unreal.MaterialExpressionLinearInterpolate, -520, -260)
+    MEL.connect_material_expressions(bc, 'RGB', lerp, 'A'); MEL.connect_material_expressions(skin, '', lerp, 'B'); MEL.connect_material_expressions(mask, '', lerp, 'Alpha')
+    MEL.connect_material_property(lerp, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(const1(-300, 80, 0.42), '', unreal.MaterialProperty.MP_SPECULAR)
     if 'Normal' in tex:
-        nm = sample('Normal', -500, 150, unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
-        MEL.connect_material_property(nm, 'RGB', unreal.MaterialProperty.MP_NORMAL)
+        nm = sample('Normal', -1000, 200, unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        nb = op(unreal.MaterialExpressionMultiply, -700, 200, nm, const3(-860, 300, (1.4, 1.4, 1.0)), 'RGB')
+        MEL.connect_material_property(nb, '', unreal.MaterialProperty.MP_NORMAL)
+    if 'AO' in tex:
+        # baked occlusion: real depth in the muscle grooves / armpits / fingers -- as occlusion AND a soft cavity darkening of the albedo
+        ao = sample('AO', -1000, 820, unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+        MEL.connect_material_property(ao, 'R', unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
+        cav = MEL.create_material_expression(m, unreal.MaterialExpressionLinearInterpolate, -380, -160)
+        MEL.connect_material_expressions(const1(-520, -120, 1.0), '', cav, 'A'); MEL.connect_material_expressions(ao, 'R', cav, 'B'); MEL.connect_material_expressions(const1(-520, -80, 0.55), '', cav, 'Alpha')
+        bcf = op(unreal.MaterialExpressionMultiply, -260, -240, lerp, cav)
+        MEL.connect_material_property(bcf, '', unreal.MaterialProperty.MP_BASE_COLOR)
     if 'ORM' in tex:
-        orm = sample('ORM', -500, 450, unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
-        MEL.connect_material_property(orm, 'R', unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
-        MEL.connect_material_property(orm, 'G', unreal.MaterialProperty.MP_ROUGHNESS)
+        orm = sample('ORM', -1000, 500, unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+        if 'AO' not in tex: MEL.connect_material_property(orm, 'R', unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
+        rg = op(unreal.MaterialExpressionMultiply, -700, 520, orm, const1(-860, 600, 0.9), 'G')
+        ra = op(unreal.MaterialExpressionAdd, -560, 520, rg, const1(-700, 620, 0.08))
+        MEL.connect_material_property(ra, '', unreal.MaterialProperty.MP_ROUGHNESS)
         MEL.connect_material_property(orm, 'B', unreal.MaterialProperty.MP_METALLIC)
     MEL.recompile_material(m)
     unreal.EditorAssetLibrary.save_asset(m.get_path_name())
@@ -180,6 +229,16 @@ def build_in_ue():
     one SkeletalMesh /Game/Brute/Body/SK_Brute + its AnimSequences A_Brute_<Clip> + M_Brute; the old rigid parts are removed"""
     fbx = os.environ['BRUTE_FBX']
     EAL = unreal.EditorAssetLibrary
+    if os.environ.get('BRUTE_PHASE') == 'material':
+        # look-dev: rebuild only M_Brute from the already imported textures (the mesh / skeletal mesh keep referencing it by path)
+        tools = unreal.AssetToolsHelpers.get_asset_tools()
+        mat = build_material(os.path.dirname(fbx), tools, SKEL)
+        mesh = unreal.load_asset(SKEL + '/SK_Brute')
+        if mat and mesh:
+            mats = mesh.get_editor_property('materials')
+            for sm in mats: sm.set_editor_property('material_interface', mat)
+            mesh.set_editor_property('materials', mats); EAL.save_asset(mesh.get_path_name())
+        unreal.log('SM2_BUILD_OK: build_brute.py'); return
     for d in (DEST, OLD_SKEL, SKEL):
         if EAL.does_directory_exist(d): EAL.delete_directory(d)
     if os.environ.get('BRUTE_PHASE') == 'clean':
@@ -256,6 +315,8 @@ def orchestrate():
     ap = argparse.ArgumentParser()
     ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_v5/brute_anim.fbx'))
     ap.add_argument('--tex-dir', default=os.path.join(HOME, 'hulk-scratch/brute_v2/rig/textures'), help='Customuse auto-rig export textures (SM_Character_Brute_{D,N,ORM}.png)')
+    ap.add_argument('--ao', default=os.path.join(HOME, 'hulk-scratch/brute_look/T_Brute_AO.png'), help='baked AO (tools/brute/bake_ao.py)')
+    ap.add_argument('--material-only', action='store_true', help='look-dev: rebuild only M_Brute')
     ap.add_argument('--fx-fbx', default=os.path.join(HOME, 'hulk-scratch/brute_fx/brute_fx.fbx'))
     a = ap.parse_args()
     # stage the FBX + its maps under the names build_material expects (T_Brute_<Kind>.png beside the FBX)
@@ -266,6 +327,8 @@ def orchestrate():
     for kind, suf in (('BaseColor', 'D'), ('Normal', 'N'), ('ORM', 'ORM')):
         src = os.path.join(a.tex_dir, 'SM_Character_Brute_%s.png' % suf)
         if os.path.isfile(src): shutil.copy2(src, os.path.join(stage, 'T_Brute_%s.png' % kind))
+    if a.ao and os.path.isfile(a.ao): shutil.copy2(a.ao, os.path.join(stage, 'T_Brute_AO.png'))
+    elif os.path.exists(os.path.join(stage, 'T_Brute_AO.png')): os.remove(os.path.join(stage, 'T_Brute_AO.png'))
     a.fbx = os.path.join(stage, 'brute_anim.fbx')
     if subprocess.run(['pgrep', '-f', UPROJECT], capture_output=True).returncode == 0:
         raise SystemExit('an Unreal process of this project is running; stop it first (SIGTERM, wait up to 60 s)')
@@ -279,9 +342,12 @@ def orchestrate():
            '-script=' + os.path.abspath(__file__), '-unattended', '-nullrhi', '-nosplash', '-RenderOffScreen', '-NoSound', '-NoCrashReports', '-abslog=' + lg]
     env = {**os.environ, 'BRUTE_FBX': os.path.abspath(a.fbx), 'BRUTE_FX_FBX': os.path.abspath(a.fx_fbx), 'GPU_SLOT_DIR': root, 'GPU_SLOT_CAPTURE_MAX_HOLD': '1800'}
     t0 = time.time()
-    rc = subprocess.run(cmd, env={**env, 'BRUTE_PHASE': 'clean'}).returncode
-    if os.path.exists(lg): os.rename(lg, lg + '.clean')
-    rc = subprocess.run(cmd, env={**env, 'BRUTE_PHASE': 'import'}).returncode
+    if a.material_only:
+        rc = subprocess.run(cmd, env={**env, 'BRUTE_PHASE': 'material'}).returncode
+    else:
+        rc = subprocess.run(cmd, env={**env, 'BRUTE_PHASE': 'clean'}).returncode
+        if os.path.exists(lg): os.rename(lg, lg + '.clean')
+        rc = subprocess.run(cmd, env={**env, 'BRUTE_PHASE': 'import'}).returncode
     txt = open(lg, errors='replace').read() if os.path.exists(lg) else ''
     for l in txt.splitlines():
         if '[brute]' in l or 'SM2_BUILD' in l or 'Error' in l: print(l.split('LogPython: ')[-1])

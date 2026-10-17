@@ -239,6 +239,7 @@ void ABruteCharacter::LoadScript(const FString& Path)
 		if ((*Sp)->TryGetArrayField(TEXT("pos"), PA) && PA->Num() >= 3) { SpawnPos = FVector((*PA)[0]->AsNumber(), (*PA)[1]->AsNumber(), (*PA)[2]->AsNumber()); bHasSpawn = true; }
 		(*Sp)->TryGetNumberField(TEXT("yaw"), SpawnYaw);
 		double CP; if ((*Sp)->TryGetNumberField(TEXT("camPitch"), CP)) CamPitch = CP;
+		double CD; if ((*Sp)->TryGetNumberField(TEXT("camDist"), CD)) CamDistOverride = CD;   // look-dev close-ups
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Keys;
 	if (Root->TryGetArrayField(TEXT("keys"), Keys))
@@ -801,6 +802,7 @@ void ABruteCharacter::UpdateCamera(float Dt)
 	if (Mode == EBruteMode::Wall) WantDist = 9.0;
 	if (bCharging) WantDist += Charge / ChargeTime * 1.5;
 	if (Held.IsValid()) WantDist += 2.0;
+	if (CamDistOverride > 0.0) WantDist = CamDistOverride;
 	CamDist = Approach(CamDist, WantDist, 3.0, Dt);
 	FovKick = Approach(FovKick, 0.0, 2.5, Dt);
 	const double WantFov = 70.0 + FMath::Clamp((Spd - 10.0) / 35.0, 0.0, 1.0) * 18.0 + FovKick;
