@@ -91,13 +91,15 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
    the skeleton). `ABruteCharacter::ActClip` maps each act to its clip segment (from / to / rate) and the act's hit time + duration
    now come from the clip's contact time (clips.json `hit`): punches alternate PunchR / PunchL, Slap, Clap, Smash, Uppercut, Grab =
    Lift, Carry = Lift hold, Throw. Falling = Fall loop, hard landing = Land (superhero landing, then he rises). Procedural arm overlay
-   only for slam dive + air dash now. Case `v3_combat`. Known weak clips (owner told): Clap (hands not palm-to-palm), Throw (soft),
-   Slap (spins, back to camera). Meshy balance 1,104.
+   only for slam dive + air dash now. Case `v3_combat`. Clap + Throw redone 2026-10-16 (Meshy takes corrected in Blender:
+   `tools/brute/clap_fix.py`, `throw_splice.py`; palms meet at the chest, Throw = hard overhead hurl). Still weak: Slap (spins, back to
+   camera). Meshy balance 1,064.
 
 ## Next steps (after the list)
 
 - Independent critic pass, desktop fps measurement.
-- Wall top-out right at the start of a wall run seen in m11 (pre-existing, 215,-8): face raycast misses on some facades.
+- Wall run face test now probes at 3 heights (`14c091e`); at m11's (224,-8) he now pops onto a ~4 m storefront ledge, then re-catches.
+- Camera: real-geometry sweep + boxed-in view (rises over walls / drops under awnings + tree crowns), `-WHBruteDebugCam` logs it.
 
 ## Gotchas (learned the hard way)
 

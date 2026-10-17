@@ -18,14 +18,15 @@ CLIPS = [('Idle', r'idle', True), ('Walk', r'walk', True), ('Run', r'(?<!sk)run(
          ('Jump', r'_jump', False), ('WallAttach', r'attach', False), ('WallClimb', r'climb|attach', True),
          # 2026-10-16 combat + air clips (Meshy Text-to-Motion raw SMPL clips -> retarget_motion.py; files Brute_<name>.glb)
          ('PunchL', r'brute_punchl', False), ('PunchR', r'brute_punchr', False), ('Slap', r'brute_slap', False), ('Clap', r'brute_clap', False),
-         ('Smash', r'brute_smash', False), ('Lift', r'brute_liftthrow', False), ('Throw', r'brute_liftthrow', False),
+         ('Smash', r'brute_smash', False), ('Lift', r'brute_liftthrow', False), ('Throw', r'brute_throw', False),
          ('Uppercut', r'brute_uppercut', False), ('Fall', r'brute_fall', True), ('Land', r'brute_land', False)]
 INPLACE = {'Walk', 'Run', 'StopLunge', 'PunchL', 'PunchR', 'Slap', 'Clap', 'Smash', 'Lift', 'Throw', 'Uppercut', 'Fall', 'Land'}
-# keep only [a, b] frames (offsets from the clip's first frame), re-based to the first frame: Lift / Throw are the two halves of one
-# lift-hold-hurl take (Throw starts exactly on Lift's overhead hold); punches / clap drop a messy generated tail
-TRIM = {'PunchL': (0, 46), 'PunchR': (0, 46), 'Clap': (0, 62), 'Lift': (19, 109), 'Throw': (109, 174)}
+# keep only [a, b] frames (offsets from the clip's first frame), re-based to the first frame: Lift is the lift-and-hold half of the
+# lift-hold-hurl take; punches drop a messy generated tail. 2026-10-16 redo: Clap = tools/brute/clap_fix.py (procedural palm-to-palm
+# arms on a Meshy take), Throw = its own take (Brute_throw.glb, tools/brute/throw_splice.py) cross-faded from Lift's last frame (109)
+TRIM = {'PunchL': (0, 46), 'PunchR': (0, 46), 'Lift': (19, 109)}
 # contact moment (seconds from the clip start, after TRIM): fist / palm / ground contact, measured from hand telemetry
-HIT = {'PunchL': 1.0, 'PunchR': 1.0, 'Slap': 0.83, 'Clap': 0.8, 'Smash': 1.17, 'Uppercut': 0.6, 'Throw': 1.0, 'Land': 0.5}
+HIT = {'PunchL': 1.0, 'PunchR': 1.0, 'Slap': 0.83, 'Clap': 0.7, 'Smash': 1.17, 'Uppercut': 0.6, 'Throw': 0.45, 'Land': 0.5}
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.context.scene.render.fps = 30
