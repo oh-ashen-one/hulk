@@ -603,7 +603,10 @@ void ABruteCharacter::StepWall(float Dt, const FBruteInput& I)
 	FVector NP = Pos + Vel * Dt - WallN * 0.6 * Dt;
 	StepPhase += float(Up * Dt / 2.6 * 2.0 * PI);
 	FTravHit Hit;
-	const bool bFace = bWorldReady && World.Raycast(NP + FVector(0, 0, 0.6), -WallN, R + 1.2, Hit);
+	// the face: a ray at the shins, else at the chest (recessed storefronts / plinths), and for the first instant also higher up --
+	// a single low ray missed some facades and popped him "over the top" 1 m up a 53 m wall
+	const bool bFace = bWorldReady && (World.Raycast(NP + FVector(0, 0, 0.6), -WallN, R + 1.2, Hit) || World.Raycast(NP + FVector(0, 0, 1.8), -WallN, R + 2.0, Hit)
+		|| (ModeT < 0.3 && World.Raycast(NP + FVector(0, 0, 3.0), -WallN, R + 3.0, Hit)));
 	if (I.bJump && !Prev.bJump)
 	{
 		Vel = WallN * 15.0 + FVector(0, 0, 16.0); Facing = FMath::Atan2(WallN.Y, WallN.X);
@@ -812,6 +815,8 @@ void ABruteCharacter::UpdateCamera(float Dt)
 	else if (Mode != EBruteMode::Air && LookIdle > 1.2 && CamPitch < -14.0) CamPitch = Approach(CamPitch, -12.0, 1.2, Dt);   // ease back after a jump
 	double Pitch = CamPitch;
 	if (Mode == EBruteMode::Wall) Pitch = FMath::Max(Pitch, 10.0);   // look up the facade
+	// boxed in (narrow gap / courtyard, the arm crushed to ~2 m): the view rises over him to look down instead (CamLift 0..1)
+	Pitch = FMath::Lerp(Pitch, CamAltPitch, CamLift);   // (under an awning / scaffold the better view is LOW: CamAltPitch picks)
 	const FRotator Rot(Pitch, CamYaw, 0.0);
 	if (PC) PC->SetControlRotation(Rot);
 
@@ -830,6 +835,46 @@ void ABruteCharacter::UpdateCamera(float Dt)
 			double Lo = 3.2, Hi = Arm;   // leaves: never closer than 3.2 m (under a canopy the body would fill the screen)
 			for (int32 K = 0; K < 6; ++K) { const double M = 0.5 * (Lo + Hi); if (Leaves(Pivot, Pivot + Back * (M + 0.6))) Hi = M; else Lo = M; }
 			Arm = FMath::Min(Arm, FMath::Max(3.2, Lo));
+		}
+		// the traversal solids skip some buildings (2026-10-16: after a landing beside one the lens sat inside the facade): also sweep
+		// the real static geometry
+		if (UWorld* W = GetWorld())
+		{
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(BruteCam), false, this);
+			if (ABruteCar* C = Held.Get()) Q.AddIgnoredActor(C);
+			FHitResult Hit;
+			const FVector A = Pivot * 100.0, B = (Pivot + Back * (Arm + 0.4)) * 100.0;
+			const double Arm0 = Arm;
+			const bool bHitR = W->SweepSingleByObjectType(Hit, A, B, FQuat::Identity, FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeSphere(30.f), Q) && !Hit.bStartPenetrating;
+			if (bHitR) Arm = FMath::Min(Arm, FMath::Max(1.6, Hit.Distance / 100.0 - 0.3));
+			static const bool bDbgCam = FParse::Param(FCommandLine::Get(), TEXT("WHBruteDebugCam"));
+			if (bDbgCam && (Frame % 15) == 0)
+				UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE cam t=%.2f dist %.1f solid/leaves %.1f real %.1f hit %s lift %.2f"), TelT, CamDist, Arm0, Arm,
+					bHitR ? *FString::Printf(TEXT("%s/%s"), Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("?"), Hit.GetComponent() ? *Hit.GetComponent()->GetName() : TEXT("?")) : TEXT("-"), CamLift);
+			// how much room would the plain (unlifted) view and a high view get?
+			auto Room = [&](double P) {   // clear arm length at pitch P: real geometry, then tree crowns (no collision, the lens must not sit in leaves)
+				const FVector Bk = -FRotator(P, CamYaw, 0.0).Vector(); FHitResult H2;
+				double D = W->SweepSingleByObjectType(H2, A, (Pivot + Bk * (CamDist + 0.4)) * 100.0, FQuat::Identity, FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeSphere(30.f), Q)
+					? H2.Distance / 100.0 - 0.3 : CamDist;
+				if (Leaves(Pivot, Pivot + Bk * (D + 0.6)))
+				{
+					double Lo = 0.0, Hi = D;
+					for (int32 K = 0; K < 6; ++K) { const double M = 0.5 * (Lo + Hi); if (Leaves(Pivot, Pivot + Bk * (M + 0.6))) Hi = M; else Lo = M; }
+					D = Lo;
+				}
+				return D; };
+			double WantLift = 0.0;
+			if (Mode != EBruteMode::Wall)
+			{
+				const double Plain = Room(CamPitch);
+				if (Plain < 3.5)
+				{	// try a high view (over walls) and a low one (under awnings / scaffolds); keep the roomier if clearly better
+					const double Hi = Room(-55.0), Lo = Room(6.0);
+					const double Best = FMath::Max(Hi, Lo);
+					if (Best > Plain + 1.5) { WantLift = 1.0; if (CamLift < 0.05) CamAltPitch = Hi >= Lo ? -55.0 : 6.0; }
+				}
+			}
+			CamLift = Approach(CamLift, WantLift, WantLift > CamLift ? 4.0 : 1.5, Dt);
 		}
 	}
 	CameraBoom->TargetArmLength = float(Arm * 100.0);
