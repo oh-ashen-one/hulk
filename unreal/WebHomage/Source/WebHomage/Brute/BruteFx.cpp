@@ -104,7 +104,7 @@ void ABruteShockwave::Init(float RadiusM, bool bCrater, const FVector& ConeDir, 
 	// shockwave walls: a fast bright band + a slower dusty one (full ring), or stacked forward arcs (clap cone)
 	if (RingM && ArcM)
 	{
-		const int32 NW = bCone ? 3 : 2;
+		const int32 NW = bCone ? 0 : 2;   // cones (punch / slap / thunderclap): the arc bands read as a solid beige tube -> dust wave + debris only
 		for (int32 I = 0; I < NW; ++I)
 		{
 			FPart W; W.Kind = bCone ? 7 : (I == 0 ? 5 : 6); W.P = O + FVector(0, 0, bCone ? 40.f : 5.f) + (bCone ? FVector(CF * 100.f) : FVector::ZeroVector);
@@ -112,7 +112,7 @@ void ABruteShockwave::Init(float RadiusM, bool bCrater, const FVector& ConeDir, 
 			W.R1 = Radius * (bCone ? 1.f : (I == 0 ? 1.f : 0.7f));
 			const float Hgt = bCone ? 2.6f : (I == 0 ? 0.8f + Radius * 0.03f : 1.6f + Radius * 0.06f);
 			W.S0 = FVector(1.f, 1.f, Hgt);
-			W.Op0 = W.Kind == 6 ? 0.22f : (bCone ? 0.28f : 0.3f);   // 2026-10-16 look pass: the bands read as opaque beige slabs at the old 0.55-0.7
+			W.Op0 = W.Kind == 6 ? 0.12f : (bCone ? 0.28f : 0.18f);   // 2026-10-16 look pass: the bands read as opaque beige slabs at the old 0.55-0.7
 			W.M = BruteFx::FxMat(this, W.Kind == 6, W.Kind == 6 ? DustC : ShockC, W.Op0, W.Kind == 6 ? 3.2f : (bCone ? 20.f : 9.f));
 			W.C = Add(bCone ? ArcM : RingM, nullptr, W.P, FVector(0.01f));
 			if (W.M) W.C->SetMaterial(0, W.M);
@@ -122,15 +122,15 @@ void ABruteShockwave::Init(float RadiusM, bool bCrater, const FVector& ConeDir, 
 		}
 	}
 	// dust puffs (soft translucent balls rolling outward, growing and fading)
-	const int32 NPuff = bCone ? 18 : FMath::Clamp(int32(Radius * 1.8f), 14, 40);
+	const int32 NPuff = bCone ? FMath::Clamp(int32(Radius * 1.2f), 10, 36) : FMath::Clamp(int32(Radius * 1.8f), 14, 40);   // the cone wave is now all dust
 	for (int32 I = 0; I < NPuff; ++I)
 	{
 		const float A = bCone ? FMath::DegreesToRadians(R.FRandRange(-34.f, 34.f) + CYaw) : (I + R.FRand() * 0.6f) / NPuff * 2.f * PI;
 		const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.f);
-		const float S = (bCone ? 1.1f : 0.7f + Radius * 0.04f) * R.FRandRange(0.7f, 1.3f);
+		const float S = (bCone ? 0.8f : 0.6f + Radius * 0.03f) * R.FRandRange(0.7f, 1.3f);
 		FPart Pt; Pt.Kind = 0; Pt.P = O + Dir * 120.f + FVector(0, 0, bCone ? 150.f : 60.f);
 		Pt.V = Dir * (Radius * 100.f / (bCone ? 0.5f : 0.8f)) * R.FRandRange(0.6f, 1.05f) + FVector(0, 0, R.FRandRange(20.f, 180.f));
-		Pt.S0 = FVector(S, S, S * 0.7f); Pt.Life = (bCone ? 0.7f : 1.4f) * R.FRandRange(0.85f, 1.2f); Pt.Op0 = R.FRandRange(0.25f, 0.45f);
+		Pt.S0 = FVector(S, S, S * 0.7f); Pt.Life = (bCone ? 0.7f : 1.4f) * R.FRandRange(0.85f, 1.2f); Pt.Op0 = R.FRandRange(0.18f, 0.32f);
 		Pt.M = PuffM ? BruteFx::FxMat(this, true, DustC * R.FRandRange(0.8f, 1.15f), Pt.Op0, 3.2f) : nullptr;
 		Pt.C = Add(PuffM ? PuffM : BruteFx::Sphere(), Pt.M ? Pt.M.Get() : BruteFx::Mat(this, DustC * 0.4f), Pt.P, Pt.S0 * 0.3f);
 		Parts.Add(Pt);
@@ -142,7 +142,7 @@ void ABruteShockwave::Init(float RadiusM, bool bCrater, const FVector& ConeDir, 
 		{
 			const float A = R.FRand() * 2.f * PI; const float D = R.FRandRange(0.f, Radius * 30.f);
 			FPart Pt; Pt.Kind = 0; Pt.P = O + FVector(FMath::Cos(A) * D, FMath::Sin(A) * D, 80.f); Pt.V = FVector(FMath::Cos(A), FMath::Sin(A), 0.6f) * R.FRandRange(60.f, 160.f);
-			const float S = 1.4f + Radius * 0.07f; Pt.S0 = FVector(S, S, S * 0.75f); Pt.Life = R.FRandRange(2.2f, 3.2f); Pt.Op0 = 0.25f; Pt.Delay = R.FRandRange(0.f, 0.25f);
+			const float S = 1.0f + Radius * 0.04f; Pt.S0 = FVector(S, S, S * 0.7f); Pt.Life = R.FRandRange(1.8f, 2.6f); Pt.Op0 = 0.14f; Pt.Delay = R.FRandRange(0.f, 0.25f);   // lighter: big landings filled the lens
 			Pt.M = PuffM ? BruteFx::FxMat(this, true, DustC * 0.9f, Pt.Op0, 3.0f) : nullptr;
 			Pt.C = Add(PuffM ? PuffM : BruteFx::Sphere(), Pt.M ? Pt.M.Get() : BruteFx::Mat(this, DustC * 0.4f), Pt.P, FVector(0.01f));
 			Parts.Add(Pt);
