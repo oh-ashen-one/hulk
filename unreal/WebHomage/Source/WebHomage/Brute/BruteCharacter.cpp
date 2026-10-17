@@ -1550,13 +1550,13 @@ ABruteCharacter::FActClip ABruteCharacter::ActClip(EBruteAct A) const
 	switch (A)
 	{
 	case EBruteAct::Punch: C.Clip = (Combo % 2 == 0) ? CPunchR : CPunchL; C.From = 0.45f; C.To = 1.40f; C.Rate = 1.6f; C.Hit = 1.0f; break;
-	case EBruteAct::Slap: C.Clip = CSlap; C.From = 0.30f; C.To = 1.60f; C.Rate = 1.5f; C.Hit = 0.83f; break;
+	case EBruteAct::Slap: C.Clip = CSlap; C.From = 0.30f; C.To = 1.70f; C.Rate = 1.5f; C.Hit = 0.90f; break;
 	case EBruteAct::Clap: C.Clip = CClap; C.From = 0.10f; C.To = 1.30f; C.Rate = 1.3f; C.Hit = 0.70f; break;
 	case EBruteAct::Smash: C.Clip = CSmash; C.From = 0.40f; C.To = 2.00f; C.Rate = 1.4f; C.Hit = 1.17f; break;
 	case EBruteAct::Uppercut: C.Clip = CUppercut; C.From = 0.15f; C.To = 1.40f; C.Rate = 1.4f; C.Hit = 0.60f; break;
 	case EBruteAct::Grab: C.Clip = CLift; C.From = 0.60f; C.To = 2.40f; C.Rate = 2.0f; C.Hit = 2.40f; break;
 	case EBruteAct::Carry: C.Clip = CLift; C.From = 2.40f; C.To = 2.95f; C.Rate = 0.f; break;
-	case EBruteAct::Throw: C.Clip = CThrow; C.From = 0.00f; C.To = 1.00f; C.Rate = 1.2f; C.Hit = 0.45f; break;
+	case EBruteAct::Throw: C.Clip = CThrow; C.From = 0.00f; C.To = 1.46f; C.Rate = 1.25f; C.Hit = 0.45f; break;   // incl. the heavy recovery
 	default: break;
 	}
 	if (C.Clip >= 0 && Clips.IsValidIndex(C.Clip) && Clips[C.Clip]) C.To = FMath::Min(C.To, Clips[C.Clip]->GetPlayLength());

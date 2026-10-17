@@ -28,7 +28,7 @@ sc.render.resolution_x, sc.render.resolution_y = 420, 560
 w = bpy.data.worlds.new('w'); sc.world = w; sc.display.shading.background_type = 'VIEWPORT'
 sh.background_type = 'VIEWPORT'; sh.background_color = (0.62, 0.66, 0.72)
 sc.render.film_transparent = False
-if os.environ.get('STRIP_GROUND', '1') == '1':   # ground plane at z=0 so contact / floating / sinking is visible
+if os.environ.get('STRIP_GROUND', '1') in ('1', 'auto'):   # ground plane at z=0 so contact / floating / sinking is visible
     bpy.ops.mesh.primitive_plane_add(size=12, location=(0, 0, 0))
     gp = bpy.context.active_object; gp.name = 'ground'
     gm = bpy.data.materials.new('ground'); gm.diffuse_color = (0.33, 0.35, 0.38, 1); gp.data.materials.append(gm)
@@ -58,11 +58,16 @@ for name, act in tracks.items():
     lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
     hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
     c = (lo + hi) / 2; size = max((hi - lo).length, 1e-3)
+    if os.environ.get('STRIP_GROUND') == 'auto': gp.location.z = lo.z   # unscaled per-clip GLBs: ground under the lowest point
     # front = -Y (glTF +Z): camera in front, rotated AZ toward +X, slightly above
     d = Vector((math.sin(AZ), -math.cos(AZ), float(os.environ.get("STRIP_ELEV", "0.15")))).normalized()
-    cam.location = c + d * size * 1.4
+    # env STRIP_ZOOM=k (>1 = closer), STRIP_AIM=z (aim height in m instead of the motion bbox centre)
+    if os.environ.get('STRIP_AIM'): c = Vector((c.x, c.y, float(os.environ['STRIP_AIM'])))
+    cam.location = c + d * size * 1.4 / float(os.environ.get('STRIP_ZOOM', '1'))
     cam.rotation_euler = (c - cam.location).to_track_quat('-Z', 'Y').to_euler()
     picks = [round(f0 + i * (f1 - f0) / (N - 1)) for i in range(N)]
+    if os.environ.get('STRIP_FRAMES'):   # env STRIP_FRAMES=a,b,c: exact frame offsets from the clip start instead of N even picks
+        picks = [f0 + int(x) for x in os.environ['STRIP_FRAMES'].split(',')]
     tiles = []
     for fr in picks:
         sc.frame_set(fr); p = os.path.join(OUT, '_%s_%03d.png' % (name, fr)); sc.render.filepath = p

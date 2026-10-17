@@ -7,6 +7,8 @@
 # Writes <out>/brute.glb (+ brute_anim.fbx) with the CLIPS below (locomotion/wall + combat/air) and clips.json (once/loop, hit times).
 # usage: Blender -b --factory-startup -P tools/brute/assemble_motion.py -- <rigged.fbx> <motion_dir> <out_dir>
 #   motion_dir holds the downloaded FBX files; the clip is found by keyword in the file name (idle, walk, run, stop, climb, jump, fall, land)
+#   2026-10-17 brute_v5 was built with <rigged> = a copy of Emerald_Behemoth_idle_30fps.glb (the Cartwheel export carries the rigged
+#   mesh; ~/hulk-scratch/brute_v2/motion_bak_anim/), motion_dir = ~/hulk-scratch/brute_v2/motion
 import bpy, sys, os, json, math, glob, re
 from mathutils import Vector, Quaternion
 
@@ -26,7 +28,12 @@ INPLACE = {'Walk', 'Run', 'StopLunge', 'PunchL', 'PunchR', 'Slap', 'Clap', 'Smas
 # arms on a Meshy take), Throw = its own take (Brute_throw.glb, tools/brute/throw_splice.py) cross-faded from Lift's last frame (109)
 TRIM = {'PunchL': (0, 46), 'PunchR': (0, 46), 'Lift': (19, 109)}
 # contact moment (seconds from the clip start, after TRIM): fist / palm / ground contact, measured from hand telemetry
-HIT = {'PunchL': 1.0, 'PunchR': 1.0, 'Slap': 0.83, 'Clap': 0.7, 'Smash': 1.17, 'Uppercut': 0.6, 'Throw': 0.45, 'Land': 0.5}
+HIT = {'PunchL': 1.0, 'PunchR': 1.0, 'Slap': 0.9, 'Clap': 0.7, 'Smash': 1.17, 'Uppercut': 0.6, 'Throw': 0.45, 'Land': 0.5}
+# 2026-10-17 foot lock (anim_lib.plant_targets kwargs) for the generated one-shots; locomotion / air / wall clips are left alone
+FOOTLOCK = {n: {} for n in ('PunchL', 'PunchR', 'Slap', 'Clap', 'Smash', 'Lift', 'Throw', 'Uppercut', 'Land')}
+# loops re-cut at the best-matching end frame within the last N frames (WallClimb keeps its old blend: the game loops a segment)
+LOOP_WIN = {'Idle': 60, 'Walk': 40, 'Run': 40, 'Fall': 20}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import anim_lib as L_
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.context.scene.render.fps = 30
@@ -82,6 +89,15 @@ for name, pat, loop in CLIPS:
     for fc in list(fcs(act)):
         m = re.match(r'pose\.bones\["(.+?)"\]', fc.data_path)
         if m and m.group(1) not in bones: remove_fc(act, fc)
+    if os.path.basename(f).startswith('Emerald_Behemoth'):
+        # 2026-10-17: every Cartwheel export starts with one bind-like frame (hands / arms / legs jump up to 120 deg into frame 1):
+        # and frame 1 is still ~20 % of it: frames 0 and 1 take frame 2's pose, so the clip timing is unchanged
+        fa_ = int(round(act.frame_range[0]))
+        for fc in fcs(act):
+            v2 = fc.evaluate(fa_ + 2)
+            for kp in fc.keyframe_points:
+                if int(round(kp.co.x)) in (fa_, fa_ + 1): kp.co.y = v2; kp.handle_left.y = v2; kp.handle_right.y = v2
+            fc.update()
     if name in TRIM:
         fa = int(round(act.frame_range[0])); ta, tb = TRIM[name]
         for fc in fcs(act):
@@ -167,7 +183,40 @@ for name, act in clips.items():
             dl = Rinv @ path[k_]
             for i in range(3): locs[i].keyframe_points.insert(fr, base[i][k_] - dl[i], options={'FAST'})
         for fc in locs: fc.update()
-    if meta[name]['loop']:
+    if name in FOOTLOCK:
+        # 2026-10-17 foot lock: the in-place pinning above slides planted feet whenever the generated hips travel; re-plant every
+        # foot contact (ankle pinned to the plant's average, 3-frame blends) with 2-bone leg IK (tools/brute/anim_lib.py)
+        L_.bind(arm, act)
+        fr_ = [L_.sample(fr) for fr in range(f0, f1 + 1)]
+        tg = {}; segs = {}
+        for s_ in ('Left', 'Right'): tg[s_], segs[s_] = L_.plant_targets(fr_, s_, **FOOTLOCK[name])
+        fr2 = L_.apply_feet(fr_, tg)
+        L_.rekey_bones(act, fr2, [s_ + b_ for s_ in ('Left', 'Right') for b_ in ('UpLeg', 'Leg', 'Foot', 'ToeBase')], f0)
+        print('FOOTLOCK', name, {s_: segs[s_] for s_ in segs})
+    if meta[name]['loop'] and name in LOOP_WIN:
+        # 2026-10-17 seamless loop: end the loop on the frame (within the last LOOP_WIN frames) whose pose + velocity best match the
+        # start, then offset-blend the last n frames so the end pose equals the start pose exactly (velocities stay continuous)
+        rfc = [fc for fc in fcs(act) if fc.data_path.endswith('rotation_quaternion')]
+        def cost(L):
+            c = 0.0
+            for fc in rfc:
+                a0, a1, b0, b1 = fc.evaluate(f0), fc.evaluate(f0 + 1), fc.evaluate(L - 1), fc.evaluate(L)
+                c += (b1 - a0) ** 2 + 0.5 * ((b1 - b0) - (a1 - a0)) ** 2
+            return c
+        Lend = min(range(f1 - LOOP_WIN[name], f1 + 1), key=cost)
+        print('LOOP', name, 'end frame', Lend, 'of', f1, 'mismatch %.4f (full length %.4f)' % (cost(Lend), cost(f1)))
+        n = 12 if name == 'Idle' else 8
+        for fc in fcs(act):
+            off = fc.evaluate(f0) - fc.evaluate(Lend)
+            new = {t: fc.evaluate(t) + L_.smooth(k / n) * off for k, t in enumerate(range(Lend - n, Lend + 1))}
+            for idx in range(len(fc.keyframe_points) - 1, -1, -1):
+                kp = fc.keyframe_points[idx]; t = int(round(kp.co.x))
+                if t > Lend: fc.keyframe_points.remove(kp)
+                elif t in new: kp.co.y = new[t]; kp.handle_left.y = new[t]; kp.handle_right.y = new[t]
+            fc.update()
+        act.frame_range = (f0, Lend); act.use_frame_range = True
+        f1 = Lend; meta[name]['dur'] = round((f1 - f0) / sc.render.fps, 3)
+    elif meta[name]['loop']:
         # seamless loop: blend the tail into the head (last 25 % of 0.5 s)
         n = max(2, min(8, (f1 - f0) // 4))
         for fc in fcs(act):

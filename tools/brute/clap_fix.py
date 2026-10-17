@@ -86,8 +86,9 @@ def frame_from(f, n):
         return Matrix((x, y, z)).transposed()
     return (M(f, n) @ M(HAND_s['f'], HAND_s['n']).inverted()).to_quaternion()
 
-def ik_arm(s, world, pos, T, n_des, pole):
-    """2-bone IK of s arm to wrist target T with palm normal n_des; returns overrides for Arm, ForeArm, Hand"""
+def ik_arm(s, world, pos, T, n_des, pole, f_over=None, fw=0.0):
+    """2-bone IK of s arm to wrist target T with palm normal n_des; returns overrides for Arm, ForeArm, Hand. f_over / fw: finger
+    axis to bend the wrist toward (0 = straight wrist along the forearm)"""
     global HAND_s; HAND_s = HAND[s]
     S = pos[s + 'Arm']; l1, l2 = L1[s], L2[s]
     dv = T - S; d = min(dv.length, (l1 + l2) * 0.999); u = dv.normalized()
@@ -95,6 +96,7 @@ def ik_arm(s, world, pos, T, n_des, pole):
     ca = max(-1.0, min(1.0, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)))
     E = S + l1 * (ca * u + math.sqrt(1 - ca * ca) * pn); T2 = S + u * d
     f_des = (T2 - E).normalized()
+    if f_over is not None and fw > 0: f_des = f_des.slerp(f_over.normalized(), fw)
     Hq = frame_from(f_des, n_des)
     hand = Hq @ RQ[s + 'Hand']
     fore0 = Hq @ RQ[s + 'ForeArm']
@@ -119,6 +121,13 @@ HEAD_DOWN = float(os.environ.get('CLAP_HEAD_DOWN', '-40'))   # deg: head pitch v
 w0, _, rh0 = sample(sf0 + SA)
 p0 = fk(w0, rh0)
 lat = p0['RightUpLeg'] - p0['LeftUpLeg']; lat.z = 0; lat.normalize()   # character left -> right
+# 2026-10-17 (owner: "one arm leads the other by ~1 frame"; the bind / take are not symmetric, the right shoulder sits ~6 cm ahead):
+# the right arm is re-solved every frame to the exact mirror image (about the sagittal plane at the hips) of the left wrist, elbow and
+# palm, so both palms travel and land on the same frame, flat palm to palm (palm normals = the lateral axis, wrists bent back). Weight: a small rise while loading, then the hips drop into the impact (knees give, feet stay planted)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import anim_lib as AL
+AL.bind(arm, sact)
+ORIG = rh0.copy()
+DIP = float(os.environ.get('CLAP_DIP', '0.06')) * AL.leg_len()
 UP = Vector((0, 0, 1)); FWD = UP.cross(lat); BACK = -FWD
 print('FRAME lat', tuple(round(x, 2) for x in lat), 'fwd', tuple(round(x, 2) for x in FWD))
 def pitch_in(v, fwd): return math.degrees(math.atan2(v.dot(fwd), v.z))
@@ -138,6 +147,16 @@ keys = []
 for k in range(N + 1):
     fsrc = sf0 + SA + (SB - SA) * k / N
     ws, hloc, rhead = sample(fsrc)
+    feet0 = {s_: fk(ws, rhead)[s_ + 'Foot'] for s_ in ('Left', 'Right')}
+    # hips: rise a little while the arms load, drop hard into the impact (2 frames), recover over 14
+    if k <= K_SWING: dz = 0.25 * DIP * smooth(k / K_SWING)
+    elif k <= K_HIT: dz = 0.25 * DIP * (1 - smooth((k - K_SWING) / (K_HIT - K_SWING)))
+    elif k <= K_HIT + 2: dz = -DIP * smooth((k - K_HIT) / 2)
+    else: dz = -DIP * (1 - smooth((k - K_HIT - 2) / 14))
+    rhead = rhead + Vector((0, 0, dz))
+    ws = rebuild(ws, {})
+    for s_ in ('Left', 'Right'):
+        ws = rebuild(ws, AL.leg_ik(ws, rhead, s_, feet0[s_]))
     # torso lean (about the hips-level lateral axis, at the Spine bone): back while loading, forward into the clap
     if k <= K_SWING: lean = -6 * smooth(k / K_SWING)
     elif k <= K_HIT: lean = -6 + 22 * smooth((k - K_SWING) / (K_HIT - K_SWING))
@@ -163,11 +182,15 @@ for k in range(N + 1):
         out = S - mid; out -= out.dot(up_b) * up_b; h = out.length; out.normalize()
         d_w1 = (out + BACK * 0.28 + up_b * 0.10).normalized()      # arms far out to the sides
         d_w2 = (out + BACK * 0.48 + up_b * 0.14).normalized()      # loaded: drawn further back, chest open
-        gap = (HAND[s]['palm'] + HAND['Right' if s == 'Left' else 'Left']['palm']) * 0.95
+        gap = (HAND[s]['palm'] + HAND['Right' if s == 'Left' else 'Left']['palm']) * 0.98
         zc = -0.06 * L
         lat_off = max(0.0, h - gap / 2)
         fc = math.sqrt(max(1e-4, (REACH * L) ** 2 - lat_off ** 2 - zc ** 2))
         Tc = mid + fwd_b * fc + up_b * zc + out * (gap / 2)
+        sgn = 1 if s == 'Right' else -1
+        Tc = Tc - ((Tc - ORIG).dot(lat) - sgn * gap / 2) * lat          # palm surfaces meet exactly on the mirror plane
+        n_hit = -sgn * lat                                               # flat palm, facing the other palm
+        f_hit = fwd_b * 0.8 + up_b * 0.55; f_hit = (f_hit - f_hit.dot(n_hit) * n_hit).normalized()   # fingers forward-up
         d_c = (Tc - S).normalized()
         d_rel = (fwd_b * 0.55 - up_b * 1.0 + out * 0.30).normalized()
         axis = d_w2.cross(d_c).normalized(); th = d_w2.angle(d_c)
@@ -176,20 +199,21 @@ for k in range(N + 1):
             d0 = (-up_b + out * 0.35 + fwd_b * 0.12).normalized()        # hanging at the sides (idle-like start)
             d = d_w1.slerp(d_w2, smooth((k - K_LOAD) / (K_SWING - K_LOAD))) if k > K_LOAD else d0.slerp(d_w1, smooth(k / K_LOAD))
             rch = 0.95
-            ax_ = d.cross(d_c).normalized(); n = ax_.cross(d).normalized()
+            ax_ = d.cross(d_c).normalized(); n = ax_.cross(d).normalized(); fw_ = 0.0
         elif k <= K_HIT:
             u = ((k - K_SWING) / (K_HIT - K_SWING)) ** 2       # accelerating: fastest at the impact
             d = Quaternion(axis, th * u) @ d_w2; rch = REACH
             n = axis.cross(d).normalized()
+            fw_ = smooth((k - K_SWING) / (K_HIT - K_SWING)); n = n.slerp(n_hit, fw_)
         elif k <= K_HOLD:
-            d = d_c; rch = REACH; n = tang_c
+            d = d_c; rch = REACH; n = n_hit; fw_ = 1.0
         else:
             v = smooth((k - K_HOLD) / (K_END - K_HOLD))
             d = d_c.slerp(d_rel, v); rch = REACH - 0.06 * v
-            n = tang_c.slerp(-out, v * 0.3)
+            n = n_hit.slerp(-out, v * 0.3); fw_ = 1.0 - v
         T = Tc if K_HIT <= k <= K_HOLD else S + d * rch * L
         pole = (-up_b + BACK * 0.35 + out * 0.6).normalized()
-        o = ik_arm(s, world, pos, T, n, pole)
+        o = ik_arm(s, world, pos, T, n, pole, f_hit, fw_)
         over.update(o)
         # open flat palms: straighten the four fingers in line with the hand (the bind fingers are curled)
         wf = 1.0 if k <= K_HOLD else 1.0 - 0.6 * smooth((k - K_HOLD) / (K_END - K_HOLD))
@@ -207,7 +231,18 @@ for k in range(N + 1):
                 over[bn] = Quaternion().slerp(q, wf) @ cur
                 hw = rebuild(ws, over)
     world = rebuild(ws, over)
+    # right arm = mirror image of the left wrist / elbow / palm positions
+    def mir(p): return p - 2 * (p - ORIG).dot(lat) * lat
+    def mirv(v): return v - 2 * v.dot(lat) * lat
+    pz_ = fk(world, rhead)
+    nL = (world['LeftHand'] @ RQ['LeftHand'].inverted()) @ HAND['Left']['n']
+    o = ik_arm('Right', world, pz_, mir(pz_['LeftHand']), mirv(nL), mir(pz_['LeftForeArm']) - pz_['RightArm'])
+    world = rebuild(world, o)
     if k in (0, K_HIT): print('HEADPITCH k %d hp %.1f' % (k, pitch_of(world['Head'] @ Vector((0, 1, 0)))))
+    pz_ = fk(world, rhead); mL = pz_['LeftHand'] - ORIG; mR = pz_['RightHand'] - ORIG
+    if k % 3 == 0 or K_SWING <= k <= K_HIT + 1:
+        print('SYM k %2d  wrist lateral L %+.3f R %+.3f  fwd L %.3f R %.3f  z L %.3f R %.3f' % (k, mL.dot(lat), mR.dot(lat), mL.dot(FWD), mR.dot(FWD), pz_['LeftHand'].z, pz_['RightHand'].z))
+    hloc = tR[ROOT].inverted() @ (W.inverted().to_3x3() @ (rhead - RH[ROOT]))
     keys.append((k, world, hloc))
     if k in (0, K_SWING, K_HIT, K_HOLD, N):
         pz = fk(world, rhead)
