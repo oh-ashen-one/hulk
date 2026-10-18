@@ -320,6 +320,7 @@ def build_in_ue():
     sk.set_editor_property('convert_scene', True)
     sk.set_editor_property('force_front_x_axis', False)
     sk.set_editor_property('normal_import_method', unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS)
+    sk.set_editor_property('import_morph_targets', True)   # corrective shapes (tools/brute/mesh_corrective.py)
     t = unreal.AssetImportTask()
     for k, v in (('filename', fbx), ('destination_path', SKEL), ('destination_name', 'SK_Brute'), ('automated', True), ('replace_existing', True),
                  ('save', True), ('options', ui)):

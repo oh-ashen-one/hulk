@@ -202,6 +202,12 @@ private:
 	FClipPlay Cur, Old; float Fade = 1.f, FadeDur = 0.2f, OverlayW = 0.f, SprintLean = 0.f;
 	double RefFootZ = 0.0; FVector RefHipsCS = FVector::ZeroVector; FQuat BodyYawQ = FQuat::Identity;
 	int32 BHead = 0, BSpine2 = 0;
+	// corrective shapes (tools/brute/mesh_corrective.py): CorrArmUp_L / _R (+ optional CorrArmSide_L / _R), weight from the upper-arm
+	// elevation (angle between the upper-arm bone and the torso-down axis Neck -> Spine1, deg): smoothstep(CorrUpA0, CorrUpA1) / (CorrSideA0, CorrSideA1)
+	TObjectPtr<class UMorphTarget> CorrUp[2] = { nullptr, nullptr }, CorrSide[2] = { nullptr, nullptr };
+	float CorrUpA0 = 100.f, CorrUpA1 = 150.f, CorrSideA0 = 50.f, CorrSideA1 = 85.f;   // = tools/brute/mesh_corrective_lib.py
+	int32 BNeck = 0;
+	void ApplyCorrectives();
 	float MenaceW = 0.f;
 	int32 BHips = 0, BSpine = 0, BArm[2] = { 0, 0 }, BFore[2] = { 0, 0 }, BHand[2] = { 0, 0 }, BFoot[4] = { 0, 0, 0, 0 };
 	// markers (s) measured by tools/brute/analyze_clips.py; defaults are the 2026-10-15 measurements

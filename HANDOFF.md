@@ -113,8 +113,13 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
   closer combat camera, deeper skin. Round 2 (owner "fix rest"): menace posture layer on Idle / Walk in game (chest hunched, head
   forward, arms flared, elbows bent; `MenaceW` in AnimateClips), skin roughness noise + matte cloth on the shorts (material), wall
   impacts = fist-sized charcoal dents + hairline cracks + glass shards + rubble, camera rises when a car / truck (traffic has no
-  collision: `AWHLifeTraffic::SegmentHitsCar`) or physics body blocks the view. Still not done: veins (needs a painted map), real
-  cloth folds on the shorts, decal-based cracks.
+  collision: `AWHLifeTraffic::SegmentHitsCar`) or physics body blocks the view. Round 3: veins + shorts folds baked into the
+  normal map (`tools/brute/tex_bake.py` -> `~/hulk-scratch/brute_tex/`, vein tint mask; normals now imported green-flipped =
+  OpenGL->UE), projected crack decals for wall punches + ground craters (`tools/brute/make_crack_decal.py`, `M_BruteCrackDecal`;
+  the body ignores decals), armpit corrective morphs CorrArmUp/CorrArmSide _L/_R (`tools/brute/mesh_corrective*.py`, mesh =
+  `~/hulk-scratch/brute_corr/brute_rigged_corr.glb` is now assemble_motion's first arg; driven in `ApplyCorrectives` by the
+  upper-arm angle to the Neck->Spine1 axis: Up = smoothstep(100,150), Side = smoothstep(50,85) x (1 - Up)). Correctives help Lift /
+  Smash / Throw / WallAttach / Clap, slightly worse folds in Jump / Land / Uppercut / PunchR; a true fix needs twist / helper bones.
 
 ## Next steps (after the list)
 

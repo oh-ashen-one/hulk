@@ -12,6 +12,7 @@
 #include "Components/PoseableMeshComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/Skeleton.h"
+#include "Animation/MorphTarget.h"
 #include "Engine/SkeletalMesh.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -1268,8 +1269,8 @@ bool ABruteCharacter::BuildClipRig()
 	BHips = Bi(TEXT("Hips")); BSpine = Bi(TEXT("Spine1"));
 	BArm[0] = Bi(TEXT("LeftArm")); BArm[1] = Bi(TEXT("RightArm")); BFore[0] = Bi(TEXT("LeftForeArm")); BFore[1] = Bi(TEXT("RightForeArm"));
 	BHand[0] = Bi(TEXT("LeftHand")); BHand[1] = Bi(TEXT("RightHand"));
-	BHead = Bi(TEXT("Head")); BSpine2 = Bi(TEXT("Spine2"));
-	if (BHead == INDEX_NONE || BSpine2 == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: Head / Spine2 missing")); Clips.Reset(); return false; }
+	BHead = Bi(TEXT("Head")); BSpine2 = Bi(TEXT("Spine2")); BNeck = Bi(TEXT("Neck"));
+	if (BHead == INDEX_NONE || BSpine2 == INDEX_NONE || BNeck == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: Head / Spine2 missing")); Clips.Reset(); return false; }
 	BFoot[0] = Bi(TEXT("LeftFoot")); BFoot[1] = Bi(TEXT("RightFoot")); BFoot[2] = Bi(TEXT("LeftToeBase")); BFoot[3] = Bi(TEXT("RightToeBase"));
 	for (int32 B : { BHips, BSpine, BArm[0], BArm[1], BFore[0], BFore[1], BHand[0], BHand[1], BFoot[0], BFoot[1], BFoot[2], BFoot[3] })
 		if (B == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: SK_Brute lacks a Mixamo-named bone")); Clips.Reset(); return false; }
@@ -1315,6 +1316,16 @@ bool ABruteCharacter::BuildClipRig()
 	Body->RegisterComponent();
 	Body->BoneSpaceTransforms = RefLocal;
 	PoseA = RefLocal; PoseB = RefLocal;
+	{	// corrective morph targets, if the mesh carries them
+		const TCHAR* Sd[2] = { TEXT("_L"), TEXT("_R") };
+		for (int32 I = 0; I < 2; ++I)
+		{
+			CorrUp[I] = M->FindMorphTarget(FName(FString(TEXT("CorrArmUp")) + Sd[I]));
+			CorrSide[I] = M->FindMorphTarget(FName(FString(TEXT("CorrArmSide")) + Sd[I]));
+		}
+		UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: correctives up L/R %d/%d side L/R %d/%d (mesh has %d morphs)"), CorrUp[0] != nullptr, CorrUp[1] != nullptr,
+			CorrSide[0] != nullptr, CorrSide[1] != nullptr, M->GetMorphTargets().Num());
+	}
 	WImpacts = { WAttachImpact, 1.5f };
 	bClipRig = true;
 	Play(CIdle, 0.05, Clips[CIdle]->GetPlayLength(), true, 1.f, 0.f, TEXT("idle"));
@@ -1506,6 +1517,7 @@ void ABruteCharacter::AnimateClips(float Dt)
 	}
 	Body->BoneSpaceTransforms = PoseA;
 	Body->MarkRefreshTransformDirty();
+	ApplyCorrectives();
 }
 
 void ABruteCharacter::WallPunchFx(int32 Side)
@@ -1616,4 +1628,31 @@ ABruteCharacter::FActClip ABruteCharacter::ActClip(EBruteAct A) const
 	}
 	if (C.Clip >= 0 && Clips.IsValidIndex(C.Clip) && Clips[C.Clip]) C.To = FMath::Min(C.To, Clips[C.Clip]->GetPlayLength());
 	return C;
+}
+
+void ABruteCharacter::ApplyCorrectives()
+{
+	// the poseable mesh has no anim instance to drive morphs: fill the component's active-morph table directly from the arm pose
+	if (!Body || !(CorrUp[0] || CorrUp[1] || CorrSide[0] || CorrSide[1])) return;
+	USkeletalMesh* M = Cast<USkeletalMesh>(Body->GetSkinnedAsset()); if (!M) return;
+	const TArray<TObjectPtr<UMorphTarget>>& All = M->GetMorphTargets();
+	Body->MorphTargetWeights.SetNumZeroed(All.Num());
+	Body->ActiveMorphTargets.Reset();
+	auto SetW = [&](UMorphTarget* T, float W)
+	{
+		if (!T || W <= 0.001f) return;
+		const int32 Idx = All.IndexOfByKey(T); if (Idx == INDEX_NONE) return;
+		Body->MorphTargetWeights[Idx] = W; Body->ActiveMorphTargets.Add(T, Idx);
+	};
+	auto SS = [](float A, float B, float X) { const float T = FMath::Clamp((X - A) / FMath::Max(B - A, 1e-3f), 0.f, 1.f); return T * T * (3.f - 2.f * T); };
+	const FVector Down = (CS[BSpine].GetLocation() - CS[BNeck].GetLocation()).GetSafeNormal();   // torso-down (Neck -> Spine1), as fitted
+	for (int32 Sd = 0; Sd < 2; ++Sd)
+	{
+		const FVector Ua = (CS[BFore[Sd]].GetLocation() - CS[BArm[Sd]].GetLocation()).GetSafeNormal();
+		const float Ang = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Ua, Down), -1.0, 1.0)));
+		const float Up = SS(CorrUpA0, CorrUpA1, Ang);
+		SetW(CorrUp[Sd], Up);
+		SetW(CorrSide[Sd], SS(CorrSideA0, CorrSideA1, Ang) * (1.f - Up));
+	}
+	Body->MarkRenderDynamicDataDirty();
 }
