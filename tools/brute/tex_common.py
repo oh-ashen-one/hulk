@@ -9,7 +9,8 @@ computes smooth per-vertex region attributes from the Mixamo skin weights:
   vein_sec   0..1   where the thinner secondary branch layer is allowed (limbs)
   limb_dir   vec3   per-vertex vessel run direction from the bone chain
   shorts_v   0..1   purple-shorts mask sampled from the D texture at vertices
-  hem        0..1   band around the shorts/skin border (torn hem fraying)
+  hem_d      m      geodesic distance inside the shorts from the leg-opening edge
+  hem        0/1    hem_d < 8 cm
 
 Attributes are smoothed over a position-welded graph, so duplicated seam
 vertices (glTF splits at every UV seam) always get identical values -> no seams.
@@ -154,14 +155,16 @@ def compute_attributes(obj):
         * _smoothstep(0.15, 0.5, nf) * _smoothstep(zsp2 - 0.22, zsp2 - 0.10, z) \
         * (1 - _smoothstep(zsp2 + 0.04, zsp2 + 0.12, z))
     chest *= _smoothstep(0.13, 0.25, np.abs(co[:, 1]))
-    amt = np.clip(1.0 * forearm + 0.85 * hand + 0.65 * upper + 0.8 * neck + 0.55 * chest, 0, 1)
+    # v2: upper arm / shoulder toned down (scratchy up close); forearms stay strong
+    amt = np.clip(1.0 * forearm + 0.85 * hand + 0.45 * upper + 0.8 * neck + 0.45 * chest, 0, 1)
     amt *= 1.0 - _smoothstep(0.5, 0.85, head)   # face / skull
     # torso back (shoulder blades, traps) never gets veins
     torso = W['Spine2'] + W['Spine1'] + W['Spine'] + W['LeftShoulder'] + W['RightShoulder'] + W['Neck']
     amt *= 1.0 - np.clip(torso, 0, 1) * (1 - _smoothstep(-0.35, 0.05, nf))
     amt = np.clip(_smooth(amt, inv, eu, nu, 25), 0, 1)
     # secondary (thin branch) layer only on the limbs; neck/chest keep a few big vessels
-    sec = np.clip(1.0 * forearm + 0.9 * hand + 0.4 * upper, 0, 1) * (1.0 - _smoothstep(0.5, 0.85, head))
+    # forearm/hand share: thin branch layer only here, and denser trunks here
+    sec = np.clip(1.0 * forearm + 0.9 * (W['LeftHand'] + W['RightHand']), 0, 1) * (1.0 - _smoothstep(0.5, 0.85, head))
     axis = np.clip(_smooth(sec, inv, eu, nu, 25), 0, 1)
 
     # shorts mask at vertices from base colour
@@ -182,11 +185,49 @@ def compute_attributes(obj):
     hipw = W['Hips'] + W['LeftUpLeg'] + W['RightUpLeg'] + W['Spine']
     purple *= (hipw > 0.3)
     shorts = _smooth(purple, inv, eu, nu, 6)
-    hem = _smoothstep(0.15, 0.5, shorts) * (1 - _smoothstep(0.5, 0.9, shorts))
-    hem = np.clip(_smooth(hem, inv, eu, nu, 4) * 2.0, 0, 1)
-    print('[tex] vein verts>0.3', int((amt > 0.3).sum()), 'shorts verts', int((shorts > 0.5).sum()),
-          'hem verts', int((hem > 0.3).sum()))
-
+    # torn hem: geodesic distance (m) inside the shorts from the LEG-OPENING edge
+    # (waistband edge excluded), relaxed over the welded edge graph
+    pu = np.bincount(inv, weights=purple, minlength=nu) / np.maximum(np.bincount(inv, minlength=nu), 1)
+    cu = np.stack([np.bincount(inv, weights=co[:, i], minlength=nu) for i in range(3)], 1) \
+        / np.maximum(np.bincount(inv, minlength=nu), 1)[:, None]
+    inside = pu > 0.5
+    a_, b_ = eu[:, 0], eu[:, 1]
+    border = np.zeros(nu, bool)
+    cross = inside[a_] != inside[b_]
+    border[a_[cross & inside[a_]]] = True; border[b_[cross & inside[b_]]] = True
+    # the shorts are a separate cloth shell: its cut leg openings are OPEN mesh
+    # boundaries (welded edges used by a single face), not purple/skin borders
+    lt = np.empty(len(me.polygons), np.int64); me.polygons.foreach_get('loop_total', lt)
+    ls = np.empty(len(me.polygons), np.int64); me.polygons.foreach_get('loop_start', ls)
+    lvi = np.empty(len(me.loops), np.int64); me.loops.foreach_get('vertex_index', lvi)
+    nxt = np.arange(len(me.loops)) + 1
+    last = ls + lt - 1
+    nxt[last] = ls
+    wa, wb = inv[lvi], inv[lvi[nxt]]
+    key = np.minimum(wa, wb) * nu + np.maximum(wa, wb)
+    uk, cnt = np.unique(key, return_counts=True)
+    bk = uk[cnt == 1]
+    bnd = np.zeros(nu, bool); bnd[bk // nu] = True; bnd[bk % nu] = True
+    border |= bnd & inside
+    print('[tex] open-boundary shorts verts', int((bnd & inside).sum()))
+    zin = cu[inside, 2]
+    z_hip = cen('Hips')[2]
+    print('[tex] shorts z range %.3f..%.3f hips z %.3f' % (zin.min(), zin.max(), z_hip))
+    border &= cu[:, 2] < z_hip            # leg openings / tears only, not the waistband
+    el = np.linalg.norm(cu[a_] - cu[b_], axis=1)
+    dist = np.where(border, 0.0, 1e3)
+    for _ in range(400):
+        nd = dist.copy()
+        np.minimum.at(nd, a_, dist[b_] + el)
+        np.minimum.at(nd, b_, dist[a_] + el)
+        nd[~inside] = 1e3
+        nd[border] = 0.0
+        if np.allclose(nd, dist):
+            break
+        dist = nd
+    hem_d = np.clip(dist, 0, 0.2)[inv]
+    print('[tex] hem verts (<8cm)', int((hem_d < 0.08).sum()), 'seeds', int(border.sum()))
+    hem = (hem_d < 0.08).astype(np.float32)
     if 'limb_dir' in me.attributes:
         me.attributes.remove(me.attributes['limb_dir'])
     la = me.attributes.new('limb_dir', 'FLOAT_VECTOR', 'POINT')
@@ -195,7 +236,7 @@ def compute_attributes(obj):
         me.attributes.remove(me.attributes['limb_ctr'])
     lc = me.attributes.new('limb_ctr', 'FLOAT_VECTOR', 'POINT')
     lc.data.foreach_set('vector', ctr.astype(np.float32).ravel())
-    for name, val in (('vein_amt', amt), ('vein_sec', axis), ('shorts_v', shorts), ('hem', hem)):
+    for name, val in (('vein_amt', amt), ('vein_sec', axis), ('shorts_v', shorts), ('hem', hem), ('hem_d', hem_d)):
         if name in me.attributes:
             me.attributes.remove(me.attributes[name])
         a = me.attributes.new(name, 'FLOAT', 'POINT')
