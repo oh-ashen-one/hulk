@@ -32,7 +32,8 @@ def build_material(src_dir, tools, dest=None):
     for kind, comp, srgb in (('BaseColor', unreal.TextureCompressionSettings.TC_DEFAULT, True),
                              ('Normal', unreal.TextureCompressionSettings.TC_NORMALMAP, False),
                              ('ORM', unreal.TextureCompressionSettings.TC_MASKS, False),
-                             ('AO', unreal.TextureCompressionSettings.TC_GRAYSCALE, False)):   # tools/brute/bake_ao.py (optional)
+                             ('AO', unreal.TextureCompressionSettings.TC_GRAYSCALE, False),   # tools/brute/bake_ao.py (optional)
+                             ('Veins', unreal.TextureCompressionSettings.TC_GRAYSCALE, False)):   # tools/brute/tex_bake.py (optional)
         f = os.path.join(src_dir, 'T_Brute_%s.png' % kind)
         if not os.path.isfile(f):
             unreal.log_warning('[brute] texture missing ' + f); continue
@@ -43,7 +44,7 @@ def build_material(src_dir, tools, dest=None):
         a = unreal.load_asset('%s/T_Brute_%s' % (dest, kind))
         if not a: continue
         a.set_editor_property('compression_settings', comp); a.set_editor_property('srgb', srgb)
-        if kind == 'Normal': a.set_editor_property('flip_green_channel', False)   # Blender exports OpenGL normals (NormalGL)
+        if kind == 'Normal': a.set_editor_property('flip_green_channel', os.environ.get('BRUTE_NORMAL_FLIP', '1') == '1')   # OpenGL (+Y) maps -> UE's DirectX convention
         unreal.EditorAssetLibrary.save_asset(a.get_path_name())
         tex[kind] = a
     if 'BaseColor' not in tex: return None
@@ -90,6 +91,14 @@ def build_material(src_dir, tools, dest=None):
     skin = op(unreal.MaterialExpressionMultiply, -860, -220, bc, const3(-1000, -120, (0.80, 0.92, 0.76)), 'RGB')
     lerp = MEL.create_material_expression(m, unreal.MaterialExpressionLinearInterpolate, -520, -260)
     MEL.connect_material_expressions(bc, 'RGB', lerp, 'A'); MEL.connect_material_expressions(skin, '', lerp, 'B'); MEL.connect_material_expressions(mask, '', lerp, 'Alpha')
+    if 'Veins' in tex:
+        # raised veins (tools/brute/tex_bake.py) a touch darker and greener than the skin around them
+        vn = sample('Veins', -1000, -40, unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_GRAYSCALE)
+        vk = op(unreal.MaterialExpressionMultiply, -700, -40, vn, const1(-860, 20, 0.55), 'R')
+        vc = MEL.create_material_expression(m, unreal.MaterialExpressionLinearInterpolate, -420, -60)
+        MEL.connect_material_expressions(lerp, '', vc, 'A'); MEL.connect_material_expressions(op(unreal.MaterialExpressionMultiply, -560, -100, lerp, const3(-700, -120, (0.72, 0.86, 0.70))), '', vc, 'B')
+        MEL.connect_material_expressions(vk, '', vc, 'Alpha')
+        lerp = vc
     MEL.connect_material_property(lerp, '', unreal.MaterialProperty.MP_BASE_COLOR)
     MEL.connect_material_property(const1(-300, 80, 0.42), '', unreal.MaterialProperty.MP_SPECULAR)
     if 'Normal' in tex:
@@ -366,6 +375,8 @@ def orchestrate():
     ap.add_argument('--fbx', default=os.path.join(HOME, 'hulk-scratch/brute_v5/brute_anim.fbx'))
     ap.add_argument('--tex-dir', default=os.path.join(HOME, 'hulk-scratch/brute_v2/rig/textures'), help='Customuse auto-rig export textures (SM_Character_Brute_{D,N,ORM}.png)')
     ap.add_argument('--ao', default=os.path.join(HOME, 'hulk-scratch/brute_look/T_Brute_AO.png'), help='baked AO (tools/brute/bake_ao.py)')
+    ap.add_argument('--normal', default=os.path.join(HOME, 'hulk-scratch/brute_tex/T_Brute_Normal.png'), help='normal map with baked veins / cloth folds (tools/brute/tex_bake.py)')
+    ap.add_argument('--veins', default=os.path.join(HOME, 'hulk-scratch/brute_tex/T_Brute_Veins.png'), help='vein mask (tools/brute/tex_bake.py)')
     ap.add_argument('--material-only', action='store_true', help='look-dev: rebuild only M_Brute')
     ap.add_argument('--fx-fbx', default=os.path.join(HOME, 'hulk-scratch/brute_fx/brute_fx.fbx'))
     a = ap.parse_args()
@@ -377,6 +388,9 @@ def orchestrate():
     for kind, suf in (('BaseColor', 'D'), ('Normal', 'N'), ('ORM', 'ORM')):
         src = os.path.join(a.tex_dir, 'SM_Character_Brute_%s.png' % suf)
         if os.path.isfile(src): shutil.copy2(src, os.path.join(stage, 'T_Brute_%s.png' % kind))
+    for opt, kind in ((a.normal, 'Normal'), (a.veins, 'Veins')):   # detail-baked maps override the raw Customuse ones
+        if opt and os.path.isfile(opt): shutil.copy2(opt, os.path.join(stage, 'T_Brute_%s.png' % kind))
+        elif kind == 'Veins' and os.path.exists(os.path.join(stage, 'T_Brute_Veins.png')): os.remove(os.path.join(stage, 'T_Brute_Veins.png'))
     if a.ao and os.path.isfile(a.ao): shutil.copy2(a.ao, os.path.join(stage, 'T_Brute_AO.png'))
     elif os.path.exists(os.path.join(stage, 'T_Brute_AO.png')): os.remove(os.path.join(stage, 'T_Brute_AO.png'))
     a.fbx = os.path.join(stage, 'brute_anim.fbx')
