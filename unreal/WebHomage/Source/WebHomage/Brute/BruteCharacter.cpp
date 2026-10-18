@@ -1283,6 +1283,7 @@ bool ABruteCharacter::BuildClipRig()
 	Body->SetGenerateOverlapEvents(false);
 	Body->SetCastShadow(true);
 	Body->SetBoundsScale(2.f);   // leaps / overhead fists leave the reference bounds
+	Body->SetReceivesDecals(false);   // the crack decals he punches into walls / streets must not paint his skin
 
 	const int32 NB = Ref.GetNum();
 	USkeleton* Sk = M->GetSkeleton();

@@ -193,6 +193,37 @@ def fx_material(tools, name, dust):
     return m
 
 
+def crack_decal(tools, src_dir):
+    """M_BruteCrackDecal: deferred decal from tools/brute/make_crack_decal.py (crushed centre + branching cracks, alpha + normal)"""
+    MEL = unreal.MaterialEditingLibrary
+    tex = {}
+    for kind, comp, srgb in (('D', unreal.TextureCompressionSettings.TC_DEFAULT, True), ('N', unreal.TextureCompressionSettings.TC_NORMALMAP, False)):
+        f = os.path.join(src_dir, 'T_BruteCrack_%s.png' % kind)
+        if not os.path.isfile(f): unreal.log_warning('[brute] crack decal texture missing ' + f); return
+        t = unreal.AssetImportTask()
+        for k, v in (('filename', f), ('destination_path', FX_DEST), ('automated', True), ('replace_existing', True), ('save', True)): t.set_editor_property(k, v)
+        tools.import_asset_tasks([t])
+        a = unreal.load_asset('%s/T_BruteCrack_%s' % (FX_DEST, kind))
+        a.set_editor_property('compression_settings', comp); a.set_editor_property('srgb', srgb)
+        if kind == 'N': a.set_editor_property('flip_green_channel', False)
+        a.set_editor_property('never_stream', True)   # a streaming placeholder showed the whole decal box as a dark square for a frame
+        unreal.EditorAssetLibrary.save_asset(a.get_path_name()); tex[kind] = a
+    m = tools.create_asset('M_BruteCrackDecal', FX_DEST, unreal.Material, unreal.MaterialFactoryNew())
+    m.set_editor_property('material_domain', unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_TRANSLUCENT)
+    d = MEL.create_material_expression(m, unreal.MaterialExpressionTextureSample, -600, -100); d.set_editor_property('texture', tex['D'])
+    n = MEL.create_material_expression(m, unreal.MaterialExpressionTextureSample, -600, 200); n.set_editor_property('texture', tex['N'])
+    n.set_editor_property('sampler_type', unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+    MEL.connect_material_property(d, 'RGB', unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(d, 'A', unreal.MaterialProperty.MP_OPACITY)
+    MEL.connect_material_property(n, 'RGB', unreal.MaterialProperty.MP_NORMAL)
+    r = MEL.create_material_expression(m, unreal.MaterialExpressionConstant, -300, 120); r.set_editor_property('r', 0.92)
+    MEL.connect_material_property(r, '', unreal.MaterialProperty.MP_ROUGHNESS)
+    MEL.recompile_material(m)
+    unreal.EditorAssetLibrary.save_asset(m.get_path_name())
+    unreal.log('[brute] crack decal ' + m.get_path_name())
+
+
 def build_fx(tools):
     fbx = os.environ.get('BRUTE_FX_FBX', '')
     if not fbx or not os.path.isfile(fbx):
@@ -212,6 +243,7 @@ def build_fx(tools):
     tools.import_asset_tasks([t])
     fx_material(tools, 'M_BruteShock', False)
     fx_material(tools, 'M_BruteDust', True)
+    crack_decal(tools, os.path.dirname(fbx))
     for a in EAL.list_assets(FX_DEST, recursive=True):
         unreal.log('[brute] fx asset ' + a)
 

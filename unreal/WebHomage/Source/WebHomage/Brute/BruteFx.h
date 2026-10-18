@@ -23,6 +23,8 @@ namespace BruteFx
 	/** /Game/Brute/Fx assets (Scripts/build_brute.py); null when the fx content is not built. */
 	UStaticMesh* FxMesh(const TCHAR* Name);
 	UMaterialInstanceDynamic* FxMat(UObject* Outer, bool bDust, const FLinearColor& C, float Opacity, float Glow);
+	/** projected crack decal (crushed centre + branching cracks) on any surface; no-op when the decal material is not built */
+	void SpawnCrack(UWorld* W, const FVector& AtCm, const FVector& Normal, float SizeCm, float Life);
 }
 
 /** One impact: an expanding dust ring, flying debris chunks, a crater disk with radial cracks (persists), or a forward clap cone. */

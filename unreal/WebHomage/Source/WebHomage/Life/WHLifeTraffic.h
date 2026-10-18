@@ -174,10 +174,11 @@ public:
 	/** Night: registers the headlight / taillight provider with the city-lights actor (idempotent; called from either side's BeginPlay). */
 	void RegisterNightLights(AWHCityLights* Lights);
 	UFUNCTION(BlueprintCallable, Category="Life") int32 CountInCone(FVector Eye, FVector Forward, float HalfAngleDeg, float Range) const;
+	/** Brute camera: does the segment A -> B (cm; B = his chest, parked cars sit at B.Z - 1.6 m) pass within RadiusCm of a live or
+	 *  parked car body (cars have no collision)? Cars within 3 m of B do not count. */
+	bool SegmentHitsCar(const FVector& A, const FVector& B, float RadiusCm) const;
 	/** Brute: removes up to MaxN cars (moving and parked) whose centre lies within RadiusCm of CenterCm (horizontal distance, |dz| < 6 m),
 	 *  nearest first, and returns them. The simulation forgets them; parked instances are hidden. */
-	/** Brute camera: does the segment A -> B (cm) pass within RadiusCm of a live or parked car body (cars have no collision)? */
-	bool SegmentHitsCar(const FVector& A, const FVector& B, float RadiusCm) const;
 	int32 TakeCarsInRadius(const FVector& CenterCm, float RadiusCm, int32 MaxN, TArray<FWHTakenCar>& Out);
 
 private:

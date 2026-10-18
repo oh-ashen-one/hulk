@@ -9,6 +9,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "UObject/UObjectIterator.h"
+#include "Components/DecalComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -39,6 +41,23 @@ namespace BruteFx
 		TWeakObjectPtr<UStaticMesh>& W = Cache.FindOrAdd(Name);
 		if (!W.IsValid()) W = LoadObject<UStaticMesh>(nullptr, *FString::Printf(TEXT("/Game/Brute/Fx/%s.%s"), Name, Name));
 		return W.Get();
+	}
+	UMaterialInterface* CrackDecal()
+	{	// /Game/Brute/Fx/M_BruteCrackDecal (tools/brute/make_crack_decal.py + build_brute.py); null when not built
+		static TWeakObjectPtr<UMaterialInterface> W;
+		if (!W.IsValid()) W = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Fx/M_BruteCrackDecal.M_BruteCrackDecal"));
+		return W.Get();
+	}
+	void SpawnCrack(UWorld* W, const FVector& AtCm, const FVector& Normal, float SizeCm, float Life)
+	{
+		UMaterialInterface* M = CrackDecal(); if (!W || !M) return;
+		// decals project along their X axis: point it into the surface, random spin about the normal
+		const FRotator Rot = FRotationMatrix::MakeFromXZ(-Normal, FVector(0, 0, 1).Equals(Normal.GetAbs(), 0.1) ? FVector(1, 0, 0) : FVector(0, 0, 1)).Rotator();
+		if (UDecalComponent* D = UGameplayStatics::SpawnDecalAtLocation(W, M, FVector(60.f, SizeCm, SizeCm), AtCm, Rot + FRotator(0, 0, FMath::FRandRange(0.f, 360.f)), Life + 2.f))
+		{
+			D->SetFadeOut(Life, 2.f, false);
+			D->SetFadeScreenSize(0.0005f);
+		}
 	}
 	UMaterialInstanceDynamic* FxMat(UObject* Outer, bool bDust, const FLinearColor& C, float Opacity, float Glow)
 	{
@@ -167,7 +186,9 @@ void ABruteShockwave::Init(float RadiusM, bool bCrater, const FVector& ConeDir, 
 		if (CraterM) { Pt.S0 = FVector(CR, CR, FMath::Min(CR * 0.08f, 0.3f)); Pt.C = Add(CraterM, Dark, Pt.P, Pt.S0); Pt.C->SetWorldRotation(FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f)); }
 		else { Pt.S0 = FVector(CR * 2.f, CR * 2.f, 0.03f); Pt.C = Add(BruteFx::Cylinder(), Dark, Pt.P, Pt.S0); }
 		Parts.Add(Pt);
-		const int32 NCrack = 8 + int32(CR * 1.5f);
+		const bool bDecal = BruteFx::CrackDecal() != nullptr;
+		if (bDecal) BruteFx::SpawnCrack(GetWorld(), O + FVector(0, 0, 20.f), FVector::UpVector, CR * 330.f, CraterLife);
+		const int32 NCrack = bDecal ? 0 : 8 + int32(CR * 1.5f);
 		for (int32 I = 0; I < NCrack; ++I)
 		{
 			const float A = (I + R.FRand() * 0.7f) / NCrack * 2.f * PI; const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.f);
@@ -199,6 +220,9 @@ void ABruteShockwave::InitWall(const FVector& Normal, float SizeM)
 	const FLinearColor DustC(0.30f, 0.28f, 0.25f);
 	bHasCrater = true; CraterLife = 25.f;
 	const float CR = FMath::Clamp(SizeM, 0.5f, 2.5f);
+	const bool bDecal = BruteFx::CrackDecal() != nullptr;
+	if (bDecal) BruteFx::SpawnCrack(GetWorld(), O, N, CR * 260.f, CraterLife);   // projected cracks follow windows, mullions, brick
+	if (!bDecal)
 	{	// crater: the ground crater mesh turned onto the wall (its up axis = the wall normal), sunk a little into the face
 		FPart Pt; Pt.Kind = 2; Pt.P = O + N * 1.5f; Pt.Life = CraterLife;
 		// a flat dark impact disc flush with the facade (the ground crater mesh, even flattened, read as a bulging grey dome with teeth)
@@ -206,13 +230,13 @@ void ABruteShockwave::InitWall(const FVector& Normal, float SizeM)
 		Pt.C->SetWorldRotation(FRotationMatrix::MakeFromZX(N, U.RotateAngleAxis(R.FRandRange(0.f, 360.f), N)).Rotator());
 		Parts.Add(Pt);
 	}
-	const int32 NCrack = 6 + int32(CR * 2.f);
+	const int32 NCrack = bDecal ? 0 : 6 + int32(CR * 2.f);
 	for (int32 I = 0; I < NCrack; ++I)
 	{
 		const float A = (I + R.FRand() * 0.7f) / NCrack * 2.f * PI; const FVector Dir = U * FMath::Cos(A) + V * FMath::Sin(A);
 		const float L = CR * R.FRandRange(0.4f, 1.1f);
 		FPart K; K.Kind = 3; K.P = O + Dir * (CR * 55.f + L * 50.f) + N * 1.f; K.S0 = FVector(L, R.FRandRange(0.012f, 0.03f), 0.008f); K.Life = CraterLife;
-		K.C = Add(BruteFx::Cube(), BruteFx::Mat(this, FLinearColor(0.05f, 0.046f, 0.042f)), K.P, K.S0);   // hairline cracks K.C->SetWorldRotation(FRotationMatrix::MakeFromXZ(Dir, N).Rotator()); Parts.Add(K);
+		K.C = Add(BruteFx::Cube(), BruteFx::Mat(this, FLinearColor(0.05f, 0.046f, 0.042f)), K.P, K.S0); K.C->SetWorldRotation(FRotationMatrix::MakeFromXZ(Dir, N).Rotator()); Parts.Add(K);   // hairline cracks
 	}
 	for (int32 I = 0; I < 10; ++I)
 	{	// rubble knocked out of the wall: flies out, then falls (no floor at punch height: it just drops away and shrinks)
