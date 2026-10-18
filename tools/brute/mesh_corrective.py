@@ -8,7 +8,11 @@
 #      + 10 masked Taubin passes
 #   3. JOINT pose-space solve (CORR_SOLVE=joint, default): one bind-space delta per key minimising, over ALL kept frames at once,
 #        ARAP energy of  y_k = X_k + M_k * sum_key w_key,k d_key   (M_k = sum_i w_i BoneMatrix_i,k: exactly morph-then-skin)
-#        + 0.1 |y_k - repair_k|^2 + pin + 0.01 |d|^2,  Lift frames weighted x4 (CORR_CLIPW).  Fitting each frame's exact
+#        + 0.4 |y_k - repair_k|^2 + pin + 0.003 |d|^2,  Lift frames weighted x4 (CORR_CLIPW).
+#      v2 (default): 9 direction keys per side (mesh_corrective_lib CENTERS, RBF over arm direction in the torso frame) and 16
+#      NO-REGRESSION rounds: after each solve, frames of any clip whose verify-region creases rose get a pull of the correction
+#      towards the plain skin (proportional to how much the frame got worse) until every clip is <= -1% (cached frames).
+#      CORR_SCHEME=v1 reproduces the 2-key v1 mapping.  Fitting each frame's exact
 #      inverse-skinned repair (CORR_SOLVE=lsq) was tried first: per-frame corrections are incoherent (rel. difference ~1 between
 #      overhead frames, blended skin matrices near-singular at 160-180 deg) and the averaged key made things worse.
 #   4. deltas are zero outside the region and written as shape keys; exported glb = same mesh / skin / UVs / skeleton
@@ -374,15 +378,19 @@ def fit():
 #   ARAP energy of the corrected skin  sum_edges |(y_i - y_j) - R_k,ij (p_i - p_j)|^2   (R_k from the per-frame repair)
 # + GAMMA * |y - Y_k|^2 (pull to the per-frame repair target, which carries the volume)  + ALPHA pin + LAMBDA |d|^2
 #   with y = X_k + M_k * sum_key w_key,k d_key  (exactly what the game's morph + skinning produce)
-GAMMA = float(os.environ.get('CORR_GAMMA', '0.1'))
-JLAM = float(os.environ.get('CORR_JLAM', '0.01'))
+GAMMA = float(os.environ.get('CORR_GAMMA', '0.4'))
+JLAM = float(os.environ.get('CORR_JLAM', '0.003'))
 OUTER = int(os.environ.get('CORR_OUTER', '1'))
 MU = float(os.environ.get('CORR_MU', '0'))
 REWEIGHT = float(os.environ.get('CORR_REWEIGHT', '0'))
-DPOW = float(os.environ.get('CORR_DPOW', '0'))   # pull of the Laplacian (local shape) of the corrected skin to the per-frame target's
+DPOW = float(os.environ.get('CORR_DPOW', '0'))
+NOREG = int(os.environ.get('CORR_NOREG', '16'))          # no-regression rounds after the first solve
+NOREG_TOL = float(os.environ.get('CORR_NOREG_TOL', '-0.01'))  # target: every clip's creases change <= this fraction
+ZSTEP = float(os.environ.get('CORR_ZSTEP', '3.0'))
+ZUNI = float(os.environ.get('CORR_ZUNI', '0.0'))   # uniform part of the pull for every frame of a regressing clip   # pull of the Laplacian (local shape) of the corrected skin to the per-frame target's
 def fit_joint():
     SIDES = ('Left', 'Right')
-    nkey = 2 if K.USE_SIDE else 1
+    nkey = len(K.key_names('Left'))
     F = fidx; nF = len(F); loc = -np.ones(nW, int); loc[F] = np.arange(nF)
     side_of = np.where(MASK['Left'][F] > 0, 0, 1)
     # directed free-free edges, sorted by target row (for reduceat neighbour sums)
@@ -394,8 +402,17 @@ def fit_joint():
         r_ = np.add.reduceat(g_, np.minimum(starts, len(a_) - 1), axis=1); out[:, has] = r_[:, has]; return out
     cache = os.environ.get('CORR_FIT_CACHE')
     if cache and os.path.exists(cache):
-        z = np.load(cache, allow_pickle=True); Mk, Wk, Xk, Yk, Rk, log = z['Mk'], z['Wk'], z['Xk'], z['Yk'], z['Rk'], list(z['log'])
+        z = np.load(cache, allow_pickle=True); Mk, Xk, Yk, Rk, log = z['Mk'], z['Xk'], z['Yk'], z['Rk'], list(z['log'])
         print('loaded joint cache', cache, len(log))
+        # the cache holds every frame with any v1 weight >= 0.05 (= elevation above ~54 deg on either side), which covers the v2
+        # gate too; key weights are recomputed here from the bone heads with the CURRENT mapping
+        Wk = np.zeros((len(log), nF, nkey)); log2 = []
+        for k_, r in enumerate(log):
+            C.assign(arm, acts[str(r[0])]); sc.frame_set(int(r[1])); bpy.context.view_layer.update()
+            w = K.weights(arm)
+            for si, s in enumerate(SIDES): Wk[k_, side_of == si] = [w[n] for n in K.key_names(s)]
+            log2.append((str(r[0]), int(r[1]), {n: round(v, 3) for n, v in w.items()}))
+        log = log2
     else:
         Mk, Wk, Xk, Yk, Rk, log = [], [], [], [], [], []
         for clip, act in sorted(acts.items()):
@@ -412,9 +429,7 @@ def fit_joint():
                     for q_ in range(3): S[:, p_, q_] = np.bincount(I, weights=outer[:, p_, q_], minlength=nW)
                 R = polar(S)
                 ww = np.zeros((nF, nkey))
-                for si, s in enumerate(SIDES):
-                    ks = ['CorrArmUp_' + s[0]] + (['CorrArmSide_' + s[0]] if K.USE_SIDE else [])
-                    ww[side_of == si] = [w[k] for k in ks]
+                for si, s in enumerate(SIDES): ww[side_of == si] = [w[k] for k in K.key_names(s)]
                 Mk.append(Ml[F]); Wk.append(ww); Xk.append(X); Yk.append(Y[F]); Rk.append(R.astype(np.float32))
                 log.append((clip, f, {k: round(v, 3) for k, v in w.items()}))
             print('clip %-10s sampled, frames %d (%.0fs)' % (clip, len(log), time.time() - t0))
@@ -443,13 +458,13 @@ def fit_joint():
     ck = np.ones(Kf)
     CLIPW = dict((kv.split(':')[0], float(kv.split(':')[1])) for kv in os.environ.get('CORR_CLIPW', 'Lift:4').split(',') if kv)
     if CLIPW: ck = np.array([CLIPW.get(str(r[0]), 1.0) for r in log]); ck *= Kf / ck.sum(); print('clip weights', CLIPW)
-    ck0 = ck.copy()
+    ck0 = ck.copy(); zeta = np.zeros(Kf)
     def Aop(D):
         u = U(D)
         Lu = degF[None, :, None] * u - nsum(u)
         q = Lu + (alF[None, :, None] + GAMMA) * u
         if MU: q = q + MU * (degF[None, :, None] * Lu - nsum(Lu))
-        return Ut(ck[:, None, None] * q) + JLAM * ck.sum() * D
+        return Ut(ck[:, None, None] * q + zeta[:, None, None] * u) + JLAM * ck.sum() * D
     # region creases per frame (same definition as metrics()), NB-local
     TRm = TREG['Left'] | TREG['Right']; TAm = TRm[TA].all(1)
     trs = np.nonzero(TRm)[0]; tpos = -np.ones(len(Tw), int); tpos[trs] = np.arange(len(trs))
@@ -458,12 +473,29 @@ def fit_joint():
         e1 = Y[:, tl[:, 1]] - Y[:, tl[:, 0]]; e2 = Y[:, tl[:, 2]] - Y[:, tl[:, 0]]
         n = np.cross(e1, e2); n /= np.maximum(1e-12, np.linalg.norm(n, axis=2, keepdims=True))
         return ((n[:, ta0] * n[:, ta1]).sum(2) < -0.3).sum(1)
-    TRUSE = TRm.copy()
+    # creases on the mesh_corrective_verify.py region (arm-chain AND torso weight > 0.08, + 2 rings), pairs fully inside NB
+    VR = np.zeros(nW, bool)
+    for s in SIDES:
+        a = Wv[:, [g(s + 'Arm'), g(s + 'ForeArm')]].sum(1); t = Wv[:, [g('Spine'), g('Spine1'), g('Spine2'), g(s + 'Shoulder')]].sum(1)
+        m = (a > 0.08) & (t > 0.08)
+        for _ in range(2):
+            mm = m.copy(); mm[E[m[E[:, 0]], 1]] = True; mm[E[m[E[:, 1]], 0]] = True; m = mm
+        VR |= m
+    inNB = nbl >= 0
+    TRv = VR[Tw].all(1) & inNB[Tw].all(1); TAv = TRv[TA].all(1)
+    trv = np.nonzero(TRv)[0]; tposv = -np.ones(len(Tw), int); tposv[trv] = np.arange(len(trv))
+    tlv = nbl[Tw[trv]]; tv0, tv1 = tposv[TA[TAv, 0]], tposv[TA[TAv, 1]]
+    def vcreases(Y):
+        e1 = Y[:, tlv[:, 1]] - Y[:, tlv[:, 0]]; e2 = Y[:, tlv[:, 2]] - Y[:, tlv[:, 0]]
+        n = np.cross(e1, e2); n /= np.maximum(1e-12, np.linalg.norm(n, axis=2, keepdims=True))
+        return ((n[:, tv0] * n[:, tv1]).sum(2) < -0.3).sum(1)
+    clips_k = np.array([str(r[0]) for r in log]); uclips = sorted(set(clips_k))
+    vc0 = vcreases(Xk)
     c0 = creases(Xk)
     print('LBS region creases per frame: mean %.1f' % c0.mean())
     Rn = Rk.astype(np.float64)
     D = np.zeros((nF, nkey, 3))
-    for it in range(OUTER):
+    for it in range(OUTER + NOREG):
         T_ = Yk - XF; LT = degF[None, :, None] * T_ - nsum(T_)
         rhs = Ut(ck[:, None, None] * (rhs_arap(Rn) + GAMMA * T_ + (MU * (degF[None, :, None] * LT - nsum(LT)) if MU else 0)))
         r = rhs - Aop(D); p = r.copy(); rs = (r * r).sum()
@@ -476,9 +508,23 @@ def fit_joint():
               np.linalg.norm(D, axis=2).max(), np.sqrt((u ** 2).sum(2).mean()), time.time() - t0))
         yC = Xk.copy(); yC[:, nbl[F]] += u; c1 = creases(yC)
         print('   region creases per frame: LBS %.1f -> corrected %.1f; frames worse %d / %d' % (c0.mean(), c1.mean(), (c1 > c0).sum(), Kf))
+        vc1 = vcreases(yC); dv = vc1 - vc0
+        rep_ = []; worst = -1e9
+        for c in uclips:
+            m = clips_k == c; rel = dv[m].sum() / max(1, vc0[m].sum()); worst = max(worst, rel)
+            rep_.append('%s %+.1f%%' % (c, 100 * rel))
+        print('   verify-region creases per clip (cached frames):', ', '.join(rep_))
         if REWEIGHT:
             # frames whose creases got worse than the plain skin weigh more in the next solve
             ck = ck0 * (1.0 + REWEIGHT * np.maximum(0, c1 - c0) / (c0 + 5.0)); ck *= Kf / ck.sum()
+        if it >= OUTER - 1 and it < OUTER + NOREG - 1:
+            # no-regression round: every frame of a clip whose verify-region creases rose gets a pull of the correction towards 0
+            # (the plain skin) proportional to how much that frame got worse; clips that improve are left alone
+            if worst <= NOREG_TOL: print('   no-regression satisfied (worst %+.1f%%)' % (100 * worst)); break
+            for c in uclips:
+                m = clips_k == c
+                if dv[m].sum() > NOREG_TOL * vc0[m].sum():
+                    zeta[m] += ZSTEP * np.maximum(0, dv[m]) / (vc0[m] + 5.0) * 10 + ZSTEP * ZUNI
         if it + 1 < OUTER:
             # local step: new rotations of the corrected surface per frame (free vertices)
             yN = Xk.copy(); yN[:, nbl[F]] += u
@@ -490,8 +536,7 @@ def fit_joint():
             Rn[:, nbl[F]] = polar(S.reshape(-1, 3, 3)).reshape(Kf, nF, 3, 3)
     Dk = {}
     for si, s in enumerate(SIDES):
-        ks = ['CorrArmUp_' + s[0]] + (['CorrArmSide_' + s[0]] if K.USE_SIDE else [])
-        for j, key in enumerate(ks):
+        for j, key in enumerate(K.key_names(s)):
             d = np.zeros((nW, 3)); sel = side_of == si; d[F[sel]] = D[sel, j]
             d *= (np.minimum(1.0, MASK[s] / 0.05) * MASK[s] ** DPOW)[:, None]   # exact zero at the region edge (+ optional tighter falloff)
             Dk[key] = d
@@ -520,7 +565,8 @@ for a in list(bpy.data.actions): bpy.data.actions.remove(a)
 for o in bpy.data.objects: o.select_set(o.type in ('MESH', 'ARMATURE'))
 bpy.ops.export_scene.gltf(filepath=OUTF, export_format='GLB', use_selection=True, export_skins=True, export_animations=False,
                           export_morph=True, export_morph_normal=False)
-json.dump(dict(frames=[list(map(lambda x: x.tolist() if hasattr(x, "tolist") else x, r)) for r in log], keys=list(D), mapping=dict(elev='angle(ForeArm-Arm, Spine1-Neck) deg', up=[K.UP_A0, K.UP_A1], side=[K.SIDE_A0, K.SIDE_A1] if K.USE_SIDE else None),
+json.dump(dict(frames=[list(map(lambda x: x.tolist() if hasattr(x, "tolist") else x, r)) for r in log], keys=list(D), mapping=dict(scheme=K.SCHEME, sigma=K.SIGMA, gate=K.GATE, centers=K.CENTERS, nulls=K.NULLS, fwd_sign=K.FWD_SIGN) if K.SCHEME != 'v1' else dict(elev='angle(ForeArm-Arm, Spine1-Neck) deg', up=[K.UP_A0, K.UP_A1], side=[K.SIDE_A0, K.SIDE_A1]),
+               noreg=NOREG, noreg_tol=NOREG_TOL, zstep=ZSTEP, zuni=ZUNI,
                clipw=os.environ.get('CORR_CLIPW', 'Lift:4'), mode=os.environ.get('CORR_MODE'), solve=os.environ.get('CORR_SOLVE', 'joint'), gamma=GAMMA, jlam=JLAM, outer=OUTER, mu=MU, step=STEP, dqs_arap=DQS_ARAP, dqs_smooth=DQS_SMOOTH,
                arap_it=ARAP_IT, reg_r=REG_R), open(os.path.splitext(OUTF)[0] + '_build.json', 'w'), indent=0)
 print('WROTE', OUTF, 'frames', nfr, '%.0fs' % (time.time() - t0))

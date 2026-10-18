@@ -803,7 +803,7 @@ void ABruteCharacter::UpdateCamera(float Dt)
 	if (Mode == EBruteMode::Air) WantDist += FMath::Clamp((Pos.Z - LaunchZ) / 30.0, 0.0, 1.0) * 2.0;
 	if (Mode == EBruteMode::Wall) WantDist = 9.0;
 	if (bCharging) WantDist += Charge / ChargeTime * 1.5;
-	if (Held.IsValid()) WantDist += 2.0;
+	if (Held.IsValid()) WantDist += Held->bBig ? 7.0 : 2.0;   // a bus / truck overhead otherwise fills the screen
 	else if (Act != EBruteAct::None && Mode != EBruteMode::Air) WantDist -= 1.4;   // fights read closer
 	if (CamDistOverride > 0.0) WantDist = CamDistOverride;
 	CamDist = Approach(CamDist, WantDist, 3.0, Dt);
@@ -1317,14 +1317,12 @@ bool ABruteCharacter::BuildClipRig()
 	Body->BoneSpaceTransforms = RefLocal;
 	PoseA = RefLocal; PoseB = RefLocal;
 	{	// corrective morph targets, if the mesh carries them
-		const TCHAR* Sd[2] = { TEXT("_L"), TEXT("_R") };
-		for (int32 I = 0; I < 2; ++I)
-		{
-			CorrUp[I] = M->FindMorphTarget(FName(FString(TEXT("CorrArmUp")) + Sd[I]));
-			CorrSide[I] = M->FindMorphTarget(FName(FString(TEXT("CorrArmSide")) + Sd[I]));
-		}
-		UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: correctives up L/R %d/%d side L/R %d/%d (mesh has %d morphs)"), CorrUp[0] != nullptr, CorrUp[1] != nullptr,
-			CorrSide[0] != nullptr, CorrSide[1] != nullptr, M->GetMorphTargets().Num());
+		static const TCHAR* KN[NCorr] = { TEXT("Up"), TEXT("UpFwd"), TEXT("UpSide"), TEXT("Fwd"), TEXT("Side"), TEXT("MidFwd"), TEXT("LowFwd"), TEXT("MidSide"), TEXT("LowSide") };
+		int32 Found = 0;
+		for (int32 Sd = 0; Sd < 2; ++Sd)
+			for (int32 K = 0; K < NCorr; ++K)
+				if ((Corr[Sd][K] = M->FindMorphTarget(FName(FString::Printf(TEXT("CorrArm%s_%s"), KN[K], Sd == 0 ? TEXT("L") : TEXT("R")))))) ++Found;
+		UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %d / %d corrective morphs (mesh has %d)"), Found, 2 * NCorr, M->GetMorphTargets().Num());
 	}
 	WImpacts = { WAttachImpact, 1.5f };
 	bClipRig = true;
@@ -1633,26 +1631,46 @@ ABruteCharacter::FActClip ABruteCharacter::ActClip(EBruteAct A) const
 void ABruteCharacter::ApplyCorrectives()
 {
 	// the poseable mesh has no anim instance to drive morphs: fill the component's active-morph table directly from the arm pose
-	if (!Body || !(CorrUp[0] || CorrUp[1] || CorrSide[0] || CorrSide[1])) return;
+	// (exact port of tools/brute/mesh_corrective_lib.py weights())
+	if (!Body) return;
 	USkeletalMesh* M = Cast<USkeletalMesh>(Body->GetSkinnedAsset()); if (!M) return;
+	bool bAny = false; for (int32 Sd = 0; Sd < 2; ++Sd) for (int32 K = 0; K < NCorr; ++K) bAny |= Corr[Sd][K] != nullptr;
+	if (!bAny) return;
 	const TArray<TObjectPtr<UMorphTarget>>& All = M->GetMorphTargets();
 	Body->MorphTargetWeights.SetNumZeroed(All.Num());
+	for (float& W : Body->MorphTargetWeights) W = 0.f;
 	Body->ActiveMorphTargets.Reset();
-	auto SetW = [&](UMorphTarget* T, float W)
-	{
-		if (!T || W <= 0.001f) return;
-		const int32 Idx = All.IndexOfByKey(T); if (Idx == INDEX_NONE) return;
-		Body->MorphTargetWeights[Idx] = W; Body->ActiveMorphTargets.Add(T, Idx);
-	};
 	auto SS = [](float A, float B, float X) { const float T = FMath::Clamp((X - A) / FMath::Max(B - A, 1e-3f), 0.f, 1.f); return T * T * (3.f - 2.f * T); };
-	const FVector Down = (CS[BSpine].GetLocation() - CS[BNeck].GetLocation()).GetSafeNormal();   // torso-down (Neck -> Spine1), as fitted
+	auto P = [this](int32 B) { return CS[B].GetLocation(); };
+	const FVector T = (P(BNeck) - P(BSpine)).GetSafeNormal();
+	FVector L = P(BArm[0]) - P(BArm[1]); L = (L - FVector::DotProduct(L, T) * T).GetSafeNormal();
+	const FVector F = FVector::CrossProduct(L, T);
+	// centres (elevation, azimuth) deg: Up UpFwd UpSide Fwd Side MidFwd LowFwd MidSide LowSide, then NULL (normalisation only)
+	static const float CE[NCorr + 1] = { 180.f, 135.f, 135.f, 90.f, 85.f, 115.f, 70.f, 115.f, 65.f, 90.f };
+	static const float CA[NCorr + 1] = { 0.f, 60.f, 0.f, 70.f, 0.f, 65.f, 50.f, 0.f, 10.f, -90.f };
 	for (int32 Sd = 0; Sd < 2; ++Sd)
 	{
-		const FVector Ua = (CS[BFore[Sd]].GetLocation() - CS[BArm[Sd]].GetLocation()).GetSafeNormal();
-		const float Ang = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Ua, Down), -1.0, 1.0)));
-		const float Up = SS(CorrUpA0, CorrUpA1, Ang);
-		SetW(CorrUp[Sd], Up);
-		SetW(CorrSide[Sd], SS(CorrSideA0, CorrSideA1, Ang) * (1.f - Up));
+		const FVector O = Sd == 0 ? L : -L;
+		const FVector U = (P(BFore[Sd]) - P(BArm[Sd])).GetSafeNormal();
+		const FVector V(FVector::DotProduct(U, O), FVector::DotProduct(U, F), FVector::DotProduct(U, T));
+		const float Elev = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(-V.Z, -1.0, 1.0)));
+		const float Gate = SS(50.f, 85.f, Elev);
+		if (Gate <= 0.f) continue;
+		float Kj[NCorr + 1], Sum = 0.f;
+		for (int32 J = 0; J <= NCorr; ++J)
+		{
+			const float E = FMath::DegreesToRadians(CE[J]), A = FMath::DegreesToRadians(CA[J]);
+			const FVector C(FMath::Sin(E) * FMath::Cos(A), FMath::Sin(E) * FMath::Sin(A), -FMath::Cos(E));
+			const float D = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(V, C), -1.0, 1.0)));
+			Kj[J] = FMath::Exp(-FMath::Square(D / 28.f)); Sum += Kj[J];
+		}
+		for (int32 J = 0; J < NCorr; ++J)
+		{
+			UMorphTarget* Tg = Corr[Sd][J]; const float W = Gate * Kj[J] / FMath::Max(Sum, 1e-6f);
+			if (!Tg || W <= 0.001f) continue;
+			const int32 Idx = All.IndexOfByKey(Tg); if (Idx == INDEX_NONE) continue;
+			Body->MorphTargetWeights[Idx] = W; Body->ActiveMorphTargets.Add(Tg, Idx);
+		}
 	}
 	Body->MarkRenderDynamicDataDirty();
 }

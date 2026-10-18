@@ -119,7 +119,11 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
   the body ignores decals), armpit corrective morphs CorrArmUp/CorrArmSide _L/_R (`tools/brute/mesh_corrective*.py`, mesh =
   `~/hulk-scratch/brute_corr/brute_rigged_corr.glb` is now assemble_motion's first arg; driven in `ApplyCorrectives` by the
   upper-arm angle to the Neck->Spine1 axis: Up = smoothstep(100,150), Side = smoothstep(50,85) x (1 - Up)). Correctives help Lift /
-  Smash / Throw / WallAttach / Clap, slightly worse folds in Jump / Land / Uppercut / PunchR; a true fix needs twist / helper bones.
+  Smash / Throw / WallAttach / Clap. Round 4 ("fix leftovers"): correctives v2 = 18 morphs (CorrArm{Up,UpFwd,UpSide,Fwd,Side,
+  MidFwd,LowFwd,MidSide,LowSide}_L/_R) over elevation x azimuth, Gaussian kernels + NULL centre, gate smoothstep(50,85)
+  (`ApplyCorrectives` = port of `mesh_corrective_lib.py weights()`); every clip now has fewer armpit creases than no correctives
+  (Smash -42 %, Slap -33 %, WallAttach -32 %, Throw -30 %, ..., Idle unchanged). Veins re-baked smooth at 4x, seam-consistent
+  across UV islands (`tex_seams.py`), calmer upper arms, frayed torn hem. Camera backs up +7 m when carrying a bus / truck.
 
 ## Next steps (after the list)
 
