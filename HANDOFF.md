@@ -3,7 +3,7 @@
 - Owner played live via `Play-Brute.command`; requested: remove the background music, fix the rooftop camera lock.
 - `c1e19c2`: `UWHMusicSubsystem::EnsureStarted` now requires `-WHMusic` (silent by default; `SW_CuriousGroove` is the only audio asset in the project, there is no ambient-sound system to restore).
 - `c1e19c2`: `UpdateCamera` boxed-in lift no longer fires when the arm is crushed by an up-facing floor/roof slab (normal Z > 0.5); on roofs the pitch stays free, the boom just shortens. Occlusion check ignores a held car.
-- PENDING: not built or verified -- `build_editor.sh` refused while the owner session ran. Rebuild after that window closes, then owner playtest.
+- BUILT: `libUnrealEditor-WebHomage.dylib` relinked while the session ran (manifest already pointed at the unsuffixed dylib). Owner playtest of the fix pending -- the running window keeps the OLD code until relaunch.
 
 # Brute — rolling handoff (updated 2026-10-16, v2 body + clips integrated in Unreal)
 
