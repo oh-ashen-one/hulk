@@ -857,12 +857,16 @@ void ABruteCharacter::UpdateCamera(float Dt)
 				UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE cam t=%.2f dist %.1f solid/leaves %.1f real %.1f hit %s lift %.2f"), TelT, CamDist, Arm0, Arm,
 					bHitR ? *FString::Printf(TEXT("%s/%s"), Hit.GetActor() ? *Hit.GetActor()->GetName() : TEXT("?"), Hit.GetComponent() ? *Hit.GetComponent()->GetName() : TEXT("?")) : TEXT("-"), CamLift);
 			// how much room would the plain (unlifted) view and a high view get?
-			auto Room = [&](double P) {   // clear arm length at pitch P: real geometry, then tree crowns (no collision, the lens must not sit in leaves)
+			// OutNz: impact normal Z of the solid that limits the arm (+1 = the floor / roof slab under him, ~0 = a wall, -1 = none / only leaves)
+			auto Room = [&](double P, double* OutNz = nullptr) {   // clear arm length at pitch P: real geometry, then tree crowns (no collision, the lens must not sit in leaves)
+				if (OutNz) *OutNz = -1.0;
 				const FVector Bk = -FRotator(P, CamYaw, 0.0).Vector(); FHitResult H2;
-				double D = W->SweepSingleByObjectType(H2, A, (Pivot + Bk * (CamDist + 0.4)) * 100.0, FQuat::Identity, FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeSphere(30.f), Q)
-					? H2.Distance / 100.0 - 0.3 : CamDist;
+				double D = CamDist;
+				if (W->SweepSingleByObjectType(H2, A, (Pivot + Bk * (CamDist + 0.4)) * 100.0, FQuat::Identity, FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeSphere(30.f), Q))
+				{ D = H2.Distance / 100.0 - 0.3; if (OutNz) *OutNz = H2.ImpactNormal.Z; }
 				if (Leaves(Pivot, Pivot + Bk * (D + 0.6)))
 				{
+					if (OutNz) *OutNz = -1.0;
 					double Lo = 0.0, Hi = D;
 					for (int32 K = 0; K < 6; ++K) { const double M = 0.5 * (Lo + Hi); if (Leaves(Pivot, Pivot + Bk * (M + 0.6))) Hi = M; else Lo = M; }
 					D = Lo;
@@ -871,16 +875,22 @@ void ABruteCharacter::UpdateCamera(float Dt)
 			double WantLift = 0.0;
 			if (Mode != EBruteMode::Wall)
 			{
-				const double Plain = Room(CamPitch);
+				double PlainNz = -1.0;
+				const double Plain = Room(CamPitch, &PlainNz);
+				// roof / street slab under the lens is NOT "boxed in" (owner 2026-10-24): on a roof any level / up look swings the
+				// boom below the deck, the sweep crushes Plain against the up-facing floor, and the lift then stole the pitch into a
+				// locked look-down at the street. Floor blocks just shorten the arm; the user's pitch stays.
+				const bool bFloorBlock = PlainNz > 0.5;
 				// something dynamic (a parked / thrown car, a truck) between the lens and him: go high over it
 				FHitResult Oc; FCollisionQueryParams Q2(SCENE_QUERY_STAT(BruteCamOcc), false, this);
+				if (ABruteCar* HeldC = Held.Get()) Q2.AddIgnoredActor(HeldC);
 				const FVector Lens = (Pivot + Back * Arm) * 100.0;
 				const bool bOccluded = W->LineTraceSingleByObjectType(Oc, Lens, (Pos + FVector(0, 0, 1.6)) * 100.0, FCollisionObjectQueryParams(ECC_PhysicsBody) , Q2)
 					|| W->LineTraceSingleByObjectType(Oc, Lens, (Pos + FVector(0, 0, 1.6)) * 100.0, FCollisionObjectQueryParams(ECC_Vehicle), Q2);
 				bool bCarOcc = false;
 				for (TActorIterator<AWHLifeTraffic> It(W); It && !bCarOcc; ++It) bCarOcc = It->SegmentHitsCar(Lens, (Pos + FVector(0, 0, 1.6)) * 100.0, 170.f);
 				if (bOccluded || bCarOcc) { WantLift = 1.0; if (CamLift < 0.05) CamAltPitch = -38.0; }
-				if (Plain < 3.5)
+				if (Plain < 3.5 && !bFloorBlock)
 				{	// try a high view (over walls) and a low one (under awnings / scaffolds); keep the roomier if clearly better
 					const double Hi = Room(-55.0), Lo = Room(6.0);
 					const double Best = FMath::Max(Hi, Lo);

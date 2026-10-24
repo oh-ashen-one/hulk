@@ -17,6 +17,9 @@ UWHMusicSubsystem::UWHMusicSubsystem()
 
 void UWHMusicSubsystem::EnsureStarted(const UObject* WorldContextObject)
 {
+	// Owner 2026-10-24: no background music in normal play (the game has no other audio; this was the only
+	// track). -WHMusic re-enables it for tests.
+	if (!FParse::Param(FCommandLine::Get(), TEXT("WHMusic"))) return;
 	if (IsValid(MusicComponent) || !WorldContextObject || !GEngine || !GEngine->UseSound()) return;
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull);
 	if (!World || !World->IsGameWorld() || World->GetNetMode() == NM_DedicatedServer || World->GetGameInstance() != GetGameInstance()) return;
