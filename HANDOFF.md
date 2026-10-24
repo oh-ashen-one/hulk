@@ -1,3 +1,10 @@
+## Owner play session 2026-10-24 (live)
+
+- Owner played live via `Play-Brute.command`; requested: remove the background music, fix the rooftop camera lock.
+- `c1e19c2`: `UWHMusicSubsystem::EnsureStarted` now requires `-WHMusic` (silent by default; `SW_CuriousGroove` is the only audio asset in the project, there is no ambient-sound system to restore).
+- `c1e19c2`: `UpdateCamera` boxed-in lift no longer fires when the arm is crushed by an up-facing floor/roof slab (normal Z > 0.5); on roofs the pitch stays free, the boom just shortens. Occlusion check ignores a held car.
+- PENDING: not built or verified -- `build_editor.sh` refused while the owner session ran. Rebuild after that window closes, then owner playtest.
+
 # Brute — rolling handoff (updated 2026-10-16, v2 body + clips integrated in Unreal)
 
 Owner direction 2026-10-15: replace all of Spider-Man with a big green Hulk-like character; no swinging — he stomps, jumps and
