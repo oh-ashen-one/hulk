@@ -49,6 +49,9 @@ def mock(scenario, argv):
             assert body['resolution'] == '768P' and body['prompt_expansion_mode'] == 'disabled'
             assert body['image_url'].startswith('data:image/png;base64,') and body['sync_mode'] is False
             assert 'No visual effects of any kind' in body['prompt'] and isinstance(body['seed'], int)
+            assert 'very fast shutter speed: no motion blur at all, every frame is sharp.' in body['prompt']
+            assert 'the thin dark divider line stays in place' in body['prompt']
+            assert 'blade' not in body['prompt'] and 'held object' not in body['prompt']
             if scenario == 'balance403':
                 raise gf.ApiError(f'POST: HTTP 403 {locked}', 403, locked)
             if scenario == 'auth401':

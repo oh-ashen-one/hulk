@@ -66,11 +66,15 @@ MAX_FAILS = 8                        # errors in a row while waiting before the 
 
 EXIT_OTHER, EXIT_BALANCE, EXIT_AUTH, EXIT_CAP, EXIT_STOPPED = 2, 3, 4, 5, 6
 
-# Verbatim from ~/video2rig/docs/VIDEO.md ("No effects, ever") = video2rig/generate.py NO_EFFECTS.
-NO_EFFECTS = ('No visual effects of any kind: no dust, no smoke, no debris, no sparks, no particles, no speed lines, '
-              'no motion trails, no light trails, no motion blur, no camera shake. The blade and every limb stay sharp, '
-              'the flat floor stays perfectly clean, and every foot, hand and held object stays clearly visible in '
-              'every frame.')
+# Upstream's wording (~/video2rig/docs/VIDEO.md "No effects, ever" = video2rig/generate.py NO_EFFECTS), adapted for the Brute
+# (no blade, no held object: a thrown or lifted load is never drawn) plus the two sentences of ~/video2rig/TUTORIAL.md step 7
+# (fast shutter, divider line).
+NO_EFFECTS = ('Shot at a very fast shutter speed: no motion blur at all, every frame is sharp. '
+              'No visual effects of any kind: no dust, no smoke, no debris, no sparks, no particles, no speed lines, '
+              'no motion trails, no light trails, no motion blur, no camera shake. Both fists, both arms, both bare feet '
+              'and the torn shorts stay sharp, nothing is drawn that is not in the first frame (no object, no weapon, '
+              'no second figure), the flat floor stays perfectly clean, the thin dark divider line stays in place, '
+              'and every hand and foot stays clearly visible in every frame.')
 
 BALANCE_WORDS = ('balance', 'credit', 'exhausted', 'top up', 'top-up', 'insufficient', 'payment required',
                  'billing', 'funds', 'quota')
