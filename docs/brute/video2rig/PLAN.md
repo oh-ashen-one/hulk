@@ -37,8 +37,9 @@ Rule reconciliation, recorded so nobody re-litigates it:
 1. **fal.ai model id: VERIFIED 2026-10-29** with the key (read-only catalog query): `minimax/h3/image-to-video`
    (no `fal-ai/` prefix), inputs `prompt`, `image_url` (first frame), `resolution` enum 480P/768P/2K/4K (use 768P),
    `duration` (int seconds, default 5), `prompt_expansion_mode` (set `disabled`: we want the literal prompt), `seed`.
-2. **Price per second on fal** is not in the OpenAPI spec: read the real charge after the pilot clip, write it into the
-   ledger; stop if one 5 s clip costs over $2.
+2. **Price per second on fal** is not in the OpenAPI spec: read the real charge after the pilot clip and write it into
+   the ledger. Owner 2026-10-29: no per-clip stop; the fal balance (about $20) is to be used in full, then switch to
+   Higgsfield MiniMax H3 Max and keep going.
 3. **`fal_client` is not installed** anywhere. Plan: plain `urllib` against `https://queue.fal.run/<model>` (submit,
    poll, fetch) so the fork gains no dependency; the start frame is sent as a base64 data URI.
 
@@ -135,7 +136,7 @@ its credits in the ledger. A per-move quality failure is NOT a provider switch: 
 | Item | Estimate |
 | --- | --- |
 | Clips | 17 first takes + ~40 % regenerations = ~24 clips x 5-6 s |
-| USD at ~$0.08/s (house H3 price; fal's price unverified) | ~$10-15; hard cap $60 without re-approval |
+| Spend | fal balance (~$20) used in full, then Higgsfield credits; no per-clip stop; every clip in the ledger |
 | Reader training | ground ~3 h + air ~3 h MPS, unattended |
 | Wall-clock | Phase 0-2 one session (~6 h incl. reader); Phases 3-4 ~2 sessions; Phase 5 ~1 session |
 
@@ -152,6 +153,7 @@ its credits in the ledger. A per-move quality failure is NOT a provider switch: 
 ## Hard rules carried into execution
 
 - One paid clip at a time; review before the next; every clip's cost, model, resolution and verdict in the ledger.
+- fal first until its balance is exhausted or the API fails, then Higgsfield MiniMax H3 Max; never stop for money.
 - Blender headless `--background --factory-startup`; engine builds only through `gpu_slot`; cap 2 with Unreal, 4 Blender
   otherwise; never touch the other session's Blender or `~/hulk`; no windows; no captures while `STREAMING` exists.
 - Never rename rig bones (Unreal skeleton + reader are keyed to them). Never vendor video2rig into this repo.
