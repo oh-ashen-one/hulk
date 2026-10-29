@@ -10,6 +10,13 @@
 #     --trim THR             trim the still tail: trailing samples whose 9-sample mean rotation step < THR x median (default 0.4;
 #                            --trim 0 turns it off); never below half the clip
 #     --no-plant             skip the foot plant (IK bake while a foot is grounded) and the toe clamp
+#     --window A B           keep only fit samples A..B (inclusive, 0-based on the fit's key grid) before anything else, re-keyed to
+#                            start on the fit's first key: a loop cut from the steady stride (a walk that starts from and ends in the
+#                            stance has no steady cycle at its ends); trim / loop then work inside the window
+#     --treadmill            in-place locomotion (Walk / Run, the game moves the capsule): planted feet are pinned in a ground frame
+#                            that slides backward at ONE constant velocity (the median planted-toe velocity of the take), so they slide
+#                            evenly at the walk speed instead of being nailed under hips that never travel; foot_drift_mm is then
+#                            measured in that sliding frame (the treadmill speed is reported in the JSON as feet.treadmill)
 #     --floor Z              floor height in the fit scene (default 0.0: model.blend has the stance's soles on z=0)
 #     --max-lift M           the toe clamp lifts a foot by IK at most M metres (default 0.05); a deeper penetration means the whole
 #                            body sits low (a floor / root mismatch, not a toe problem): it is capped and reported, never folded away
@@ -59,6 +66,8 @@ def parse():
     ap.add_argument('--keep-travel', action='store_true')
     ap.add_argument('--trim', type=float, default=0.4)
     ap.add_argument('--no-plant', action='store_true')
+    ap.add_argument('--treadmill', action='store_true')
+    ap.add_argument('--window', type=int, nargs=2, default=None, metavar=('A', 'B'))
     ap.add_argument('--floor', type=float, default=0.0)
     ap.add_argument('--max-lift', type=float, default=0.05)
     ap.add_argument('--loop-win', type=float, default=2.0)
@@ -226,6 +235,16 @@ def main():
                sample_rate=sr, seconds=(N0 - 1) / sr), options=vars(a))
     print('REFINE %s: %d samples, %.3f s, sample rate %.3f /s (keys every %.4f frames at %g fps)' % (clip, N0, (N0 - 1) / sr, sr, spacing, fps))
     ch0 = read_channels(act, grid0)
+    if a.window:
+        wa, wb = max(0, a.window[0]), min(N0 - 1, a.window[1])
+        assert wb - wa >= 10, '--window keeps fewer than 11 samples'
+        ch0 = {b: {k: v[wa:wb + 1].copy() for k, v in d.items()} for b, d in ch0.items()}
+        grid0 = grid0[:wb - wa + 1]
+        N0 = len(grid0)
+        write_channels(arm, act, ch0, grid0)
+        REP['window'] = dict(samples=[wa, wb], seconds=[r3(wa / sr), r3(wb / sr)], kept=N0)
+        REP['grid']['samples'] = N0; REP['grid']['seconds'] = (N0 - 1) / sr
+        print('REFINE window', json.dumps(REP['window']))
     rotb = sorted(b for b in ch0 if 'q' in ch0[b])
     armb = [s + x for s in SIDES for x in ARM if s + x in ch0]
     legb = [s + x for s in SIDES for x in LEG]
@@ -444,6 +463,35 @@ def main():
             if a.loop and len(gs) >= 2 and segs[0][0] == 0 and segs[-1][1] == N - 1:
                 gs = [gs[0] + gs[-1]] + gs[1:-1]
             groups[s] = gs
+        # treadmill: per segment, the unwrapped sample index of its samples (a loop's tail plant, merged with the head plant across the
+        # wrap, counts from -(N-1) so it continues the head plant's time line) and one ground velocity for the whole take
+        seg_shift = {s: {} for s in SIDES}
+        for s in SIDES:
+            for g in groups[s]:
+                merged = len(g) >= 2 and g[0][0] == 0 and g[-1][1] == N - 1
+                for sg in g:
+                    seg_shift[s][tuple(sg)] = -(N - 1) if (merged and sg is g[-1]) else 0
+        Vg = Vector((0.0, 0.0, 0.0))
+        if a.treadmill:
+            P_ = [L.fk(w, rh) for w, rh in frames]
+            vx, vy = [], []
+            for s in SIDES:
+                for g in groups[s]:
+                    for a_, b_ in g:
+                        for i in range(a_, b_):
+                            d_ = P_[i + 1][s + 'ToeBase'] - P_[i][s + 'ToeBase']
+                            vx.append(d_.x * sr); vy.append(d_.y * sr)
+            if vx:
+                Vg = Vector((float(np.median(vx)), float(np.median(vy)), 0.0))
+            feet_rep['treadmill'] = dict(velocity_xy=[r3(Vg.x), r3(Vg.y)], speed=r3(Vg.length), speed_m_s_world=r3(Vg.length * sc_w),
+                                         samples=len(vx), note='fit-scene units per second (world: x armature scale)')
+            print('REFINE treadmill', json.dumps(feet_rep['treadmill']))
+
+        def off(s, sg, i):   # ground offset of sample i (planted on segment sg) in the sliding frame; zero without --treadmill
+            return Vg * ((i + seg_shift[s].get(tuple(sg), 0)) / sr)
+
+        def seg_of(g, i):
+            return next((sg for sg in g if sg[0] - 4 <= i <= sg[1] + 4), g[0])
 
         def drift(frs):
             res = {}
@@ -455,7 +503,7 @@ def main():
                     zmin = min(P[i][s + 'Foot'].z for i in idx)
                     down = [i for i in idx if P[i][s + 'Foot'].z - zmin < 0.01] or idx   # ankle counts while the heel is down
                     for key, bn, ii in (('ankle', s + 'Foot', down), ('toe', s + 'ToeBase', idx)):
-                        pts = np.array([[P[i][bn].x, P[i][bn].y] for i in ii])
+                        pts = np.array([[P[i][bn].x - off(s, seg_of(g, i), i).x, P[i][bn].y - off(s, seg_of(g, i), i).y] for i in ii])
                         if len(pts):
                             worst[key] = max(worst[key], float(np.linalg.norm(pts - pts.mean(0), axis=1).max()) * 1000)
                 res[s] = {k: r3(v) for k, v in worst.items()}
@@ -474,7 +522,7 @@ def main():
             tgt, wts, fr_ = [None] * N, [0.0] * N, [None] * N
             for g in groups[s]:
                 idx = [i for a_, b_ in g for i in range(a_, b_ + 1)]
-                c = sum((ank[i] for i in idx), Vector()) / len(idx)
+                c = sum((ank[i] - off(s, seg_of(g, i), i) for i in idx), Vector()) / len(idx)
                 zmin = min(ank[i].z for i in idx)
                 yc = math.atan2(sum(math.sin(yaw[i]) for i in idx), sum(math.cos(yaw[i]) for i in idx))
                 # flat-foot rotation of this plant: mean of the yaw-locked foot rotations over the heel-down samples
@@ -488,7 +536,7 @@ def main():
                 # frame instead of the mean, so frame 0 stays the start-picture stance the game blends from
                 a0 = 0 if 0 in idx else (N - 1 if (a.return_to_stance and N - 1 in idx) else None)
                 if a0 is not None:
-                    c, yc, qflat = ank[a0].copy(), yaw[a0], frames[a0][0][s + 'Foot'].copy()
+                    c, yc, qflat = ank[a0] - off(s, seg_of(g, a0), a0), yaw[a0], frames[a0][0][s + 'Foot'].copy()
                 # the ball pin is where the flat foot puts the toe joint (rigid offset in the foot's frame), so the heel-down and heel-up
                 # phases share one contact point
                 i0 = idx[0]
@@ -503,7 +551,8 @@ def main():
                             qpl = qflat.slerp(Quaternion((0, 0, 1), L.wrap(yc - yaw[i])) @ qf, u)   # heel down: flat; heel up: take's roll
                             qn = qf.slerp(qpl, w)
                             v = qpl @ (qf.inverted() @ (toe[i] - ank[i]))
-                            pin = Vector((ct.x - v.x, ct.y - v.y, c.z))   # toe joint on the contact point; heel down => pin == c
+                            o_ = off(s, (a_, b_), i)
+                            pin = Vector((ct.x + o_.x - v.x, ct.y + o_.y - v.y, c.z))   # toe joint on the contact point; heel down => pin == c
                             wts[i] = w; tgt[i] = Vector((ank[i].x + (pin.x - ank[i].x) * w, ank[i].y + (pin.y - ank[i].y) * w, ank[i].z))
                             fr_[i] = qn
             tg[s], frot[s] = tgt, fr_
@@ -514,7 +563,7 @@ def main():
                     (Vector(L.fk(*frames[i])[s + 'Foot'][:2]) - Vector(tg[s][i][:2])).length > 0.005]
             reach[s] = dict(samples_missing_pin=len(miss), first=miss[:8])
         d_after = drift(frames)
-        feet_rep = dict(plants={s: [[list(sg) for sg in g] for g in groups[s]] for s in SIDES},
+        feet_rep.update(plants={s: [[list(sg) for sg in g] for g in groups[s]] for s in SIDES},
                         planted_samples={s: int(sum(b_ - a_ + 1 for g in groups[s] for a_, b_ in g)) for s in SIDES},
                         drift_mm_before=d_before, drift_mm_after=d_after, ik_reach=reach)
 
