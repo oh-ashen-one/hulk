@@ -60,10 +60,10 @@ def processes():
         except Exception:  # noqa: BLE001
             return []
     out = {}
-    for ln in ps('pid=,stat=,comm='):
-        p = ln.strip().split(None, 2)
-        if len(p) == 3 and p[0].isdigit():
-            out[int(p[0])] = {'pid': int(p[0]), 'stat': p[1], 'comm': p[2], 'args': ''}
+    for ln in ps('pid=,ppid=,stat=,comm='):
+        p = ln.strip().split(None, 3)
+        if len(p) == 4 and p[0].isdigit():
+            out[int(p[0])] = {'pid': int(p[0]), 'ppid': int(p[1]) if p[1].isdigit() else 0, 'stat': p[2], 'comm': p[3], 'args': ''}
     for ln in ps('pid=,args='):
         p = ln.strip().split(None, 1)
         if len(p) == 2 and p[0].isdigit() and int(p[0]) in out:
@@ -96,8 +96,12 @@ def client_kind(p):
 
 
 def gpu_clients(procs=None):
+    """One entry per GPU job: a client whose parent is itself a listed client (reader.prepare -> reader.train, an engine's
+    helper) is folded into the parent, so one training job or one engine counts once."""
     me = {os.getpid(), os.getppid()}
-    return [dict(p, kind=client_kind(p)) for p in (procs if procs is not None else processes()) if p['pid'] not in me and client_kind(p)]
+    cl = [dict(p, kind=client_kind(p)) for p in (procs if procs is not None else processes()) if p['pid'] not in me and client_kind(p)]
+    pids = {p['pid'] for p in cl}
+    return [p for p in cl if p.get('ppid', 0) not in pids]
 
 
 def stuck_engines(procs=None):
