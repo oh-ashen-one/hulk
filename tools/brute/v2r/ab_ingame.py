@@ -38,8 +38,8 @@ RES = '960x540'               # the size the earlier -movie evidence (v2_loco, v
 MAP = '/Game/Maps/Manhattan'  # every spawn below is a Manhattan coordinate taken from an existing case
 MIN_FREE_GB = 8.0             # one movie capture writes ~0.5-1 GB of PNG frames before they are encoded and deleted
 # launch budget (owner 2026-10-29 after the 7-hour GPU wedge: 15 cold launches back to back, 0 s gaps): one `run` makes at most
-# LAUNCHES_PER_HOUR engine launches in any rolling hour and waits COOLDOWN_S after each case before the next launch.
-LAUNCHES_PER_HOUR = int(os.environ.get('AB_LAUNCHES_PER_HOUR', '6'))
+# LAUNCHES_PER_HOUR (10: owner 10:55 "cold launches are fine, just not 11 on your own") engine launches in any rolling hour and waits COOLDOWN_S after each case before the next launch.
+LAUNCHES_PER_HOUR = int(os.environ.get('AB_LAUNCHES_PER_HOUR', '10'))
 COOLDOWN_S = float(os.environ.get('AB_COOLDOWN_S', '30'))
 sys.path.insert(0, os.path.join(REPO, 'tools', 'gpu'))
 import gpu_gates  # noqa: E402  (machine-wide gates: stuck engine, GPU clients, util, launch gap)
