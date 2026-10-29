@@ -1,7 +1,7 @@
 # Brute video prompts (17 clips)
 
 Written 2026-10-29 by Claude Sonnet 5.5 (prompt pass, no generation, no spend). Hulk-in-Manhattan fan homage; prompts never name a character.
-Start picture: `Local/video2rig/brute-aligned/start/start.png` (front | side, idle stance, he faces -Y; the side panel shows his LEFT flank, he faces
+Start picture (all clips except Fall): `Local/video2rig/brute-aligned/start/start.png` (front | side, idle stance, he faces -Y; the side panel shows his LEFT flank, he faces
 image-left there; his left hand is on the image-right of the front panel). Every file is the prompt only: the generator appends the mandatory
 no-effects sentence (~330 chars), so file length (<= 1100 chars) + 330 stays under 1450. Fable reviews each prompt before it is spent.
 
@@ -26,7 +26,7 @@ MiniMax drifts, so Phase 5 re-measures every `HIT` / `C.Hit` from the new clip (
 | Lift | 6 | no | first-frame stance | Squat, grip invisible car-sized load at knee height, heave overhead, hold 1 s (3.6-4.6 s), lower. Game uses the lift-and-hold half and splices the throw. Risks: a car or box appears (prompt says none; if it does, keep the old clip and the car prop); arms drift off the overhead hold. |
 | Throw | 5 | no | first-frame stance | The start picture is the stance, not the overhead hold, so the prompt raises the load in 0.8 s, holds, then hurls with a left step; release requested at 1.5 s. The old `HIT` 0.45 s is measured from the spliced hold, so Phase 3 must trim the new clip to start at the hold and re-measure. Risk: invisible load drawn; he steps out of frame (heavy step forward, keep small). |
 | Uppercut | 5 | no | first-frame stance | Sprint-start lean, right fist hip to above head, small hop, contact 0.6 s (`HIT` 0.6). Right hand is on the left of the front panel. Risks: hop floats; the fist rises above the frame top (hands ~3.5 m up, margin exists). |
-| Fall | 5 | yes | first-frame stance | RISKY: a ground start cannot show a fall; asks for a small hop into a braced air pose, held as long as possible, then a heavy landing. Likely floats (that is the wanted hold) and the landing is generator-timed. Phase 4 may redo it from an air start picture and a second reader. Game loops the braced hold. |
+| Fall | 5 | yes | first-frame pose (hovering, braced) | AIR start picture: `Local/video2rig/brute-air/start/start.png` (the shipped Fall pose, frame 0.8, hovering 0.9 m above the floor; same cameras as the ground project; second reader `brute-air/reader`). Asks for a heavy body falling in place, camera falling with him (constant height in frame), limbs/shorts/hair reacting, seamless loop. Risks: the generator may drift down/up or let the floor/background move; the floor is edge-on in the start picture (horizontal orthographic cameras), so only the empty space under him shows the hover; the fit needs `brute-air` (floor -1.570372, legs free, no foot lock). Game loops the braced hold; the old ground-start prompt (hop, hold, landing) is replaced. |
 | Land | 5 | no | first-frame stance | Small hop (0.4-0.9 s), heavy crouched impact at 0.9 s, hold, rise. Game plays from 0.35 s with `HIT` 0.5 s in the old clip, so the impact time moves by ~0.4 s: re-measure `HIT` and `C.From` in Phase 5. Risk: hop too high and floaty; no crater or dust. |
 
 ## Cross-clip risks (for the director's review)
