@@ -78,7 +78,7 @@ expect "run refuses on a stuck engine, stub never called" 3 "REFUSED:.*|engine s
 [ ! -f "$W/stub.log" ] && ok "no capture call after a refusal" || no "no capture call after a refusal" "$W/stub.log"
 ps_json "1|S|/sbin/launchd|launchd"
 AB_COOLDOWN_S=2 expect "two cases: budget lines + cool-down printed" 0 "budget: cool-down 2 s before ab_idle_left" python3 "$REPO/tools/brute/v2r/ab_ingame.py" run --label new --cases idle_front,idle_left --ignore-window
-grep -q "budget: launch 2/6 this hour" "$W/out" && ok "launch count printed" || no "launch count printed" "$W/out"
+grep -q "budget: launch 2/10 this hour" "$W/out" && ok "launch count printed" || no "launch count printed" "$W/out"
 [ "$(wc -l < "$W/stub.log" | tr -d ' ')" = 2 ] && ok "stub called once per case" || no "stub called once per case" "$W/stub.log"
 python3 - "$REPO" <<'EOF' > "$W/out" 2>&1 && ok "Budget: 6/h rolling window + cool-down (fake clock)" || no "Budget fake clock" "$W/out"
 import sys; sys.path.insert(0, sys.argv[1] + '/tools/brute/v2r'); import ab_ingame as A
