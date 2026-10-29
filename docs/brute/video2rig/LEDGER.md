@@ -9,28 +9,33 @@ Companion to [PLAN.md](PLAN.md). Every reader, clip, check, fit, refine, A/B ver
 | clip | take | date | provider | model | res | seconds | cost | check % (body/limbs) | size gate | fit median px | fit warnings | refine (seam x, foot drift px) | A/B verdict | shipped? | notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Idle | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Walk | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Run | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| StopLunge | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| PunchL | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| PunchR | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Slap | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Clap | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Smash | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Uppercut | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Lift | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Throw | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Jump | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| Land | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| Walk | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 6 | 0.36 | - | PASS 1.23 | - | - | - | - | - | In place, six steps, panels in phase, returns to stance, nothing drawn. |
+| Run | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 6 | 0.36 | - | PASS 1.25 | - | - | - | - | - | Runs in place, strides read, panels in phase, ends in stance, nothing drawn. |
+| StopLunge | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.25 | - | - | - | - | - | FAIL visual: motion blur on fists in run-in, feet off floor mid-stride. |
+| StopLunge | v2 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.26 | - | - | - | - | - | FAIL visual: sharp now, but never rises; ends in deep crouch. Two failures, old clip kept. |
+| PunchL | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.25 | - | - | - | - | - | Left fist, correct hand; slow jab held ~2 s; returns to stance; clean. |
+| PunchR | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.24 | - | - | - | - | - | FAIL visual: body twists ~120 deg, panels disagree, arm across face, fist smeared. |
+| PunchR | v2 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.22 | - | - | - | - | - | PASS visual: right straight, sharp fist, big torso twist, returns to stance. |
+| Slap | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.19 | - | - | - | - | - | Left open palm sweeps wide and across chest, returns to stance; clean. |
+| Clap | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.10 | - | - | - | - | - | Arms spread, palms meet at chest, parts, returns to stance; clean, in frame. |
+| Smash | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.09 | - | - | - | - | - | Fists overhead, slam to floor, crouch, rise, stance; clean floor, slight slam smear. |
+| Uppercut | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.19 | - | - | - | - | - | Right fist rises overhead, held ~2 s, no real hop; returns to stance; clean. |
+| Lift | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 6 | 0.36 | - | PASS 1.07 | - | - | - | - | - | Squat, empty-air overhead hold, lowers to stance; no car or object drawn. |
+| Throw | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.21 | - | - | - | - | - | Overhead hold, arch, step and hurl, follow-through, stance; no object drawn. |
+| Jump | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.15 (top-edge WARN) | - | - | - | - | - | FAIL visual: rises ~1.5 m, long hang, hand leaves top of frame. |
+| Jump | v2 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | FAIL (hand leaves top edge, 30 frames) | - | - | - | - | - | FAIL: hands cut off at top, ~1.5 s hang. Two failures, old clip kept. |
+| Land | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.12 | - | - | - | - | - | Small hop, heavy one-knee crouch, hold, rises to stance; clean. |
 | Fall | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| WallAttach | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| WallClimb | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| WallAttach | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.23 | - | - | - | - | - | FAIL visual: drifts sideways ~2 body widths to panel edges, feet shuffle; no wall drawn. |
+| WallAttach | v2 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.15 | - | - | - | - | - | PASS visual: stays put, panels agree, both fists push forward, no wall drawn. |
+| WallClimb | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.16 (top-edge WARN) | - | - | - | - | - | FAIL visual: reaching hand fingers cut by top of frame; no wall drawn. |
+| WallClimb | v2 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.12 | - | - | - | - | - | PASS visual: hands inside frame, hangs off floor, weak hand-over-hand, no wall drawn. |
 
 ## Spend
 
 | provider | balance before | balance after | total |
 | --- | --- | --- | --- |
-| fal | ? | ? | ? |
+| fal | 23.65 (before Idle pilot) | about 16.99 (derived: 23.17 before walk_v1 minus 6.18 for the batch; the clips json balance_after field lags a clip) | 6.66 USD (Idle 0.48 + batch 6.18) |
 | Higgsfield | ? | ? | ? |
 
 ## Gate lines
@@ -117,3 +122,5 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
 34: # loops re-cut at the best-matching end frame within the last N frames (WallClimb keeps its old blend: the game loops a segment)
 35: LOOP_WIN = {'Idle': 60, 'Walk': 40, 'Run': 40, 'Fall': 20}
 ```
+
+- 2026-10-29 Phase 3 generation batch (reader still training; director decision 01:45: clips are independent of the reader, generated ahead to compress the night). Sonnet 5.5 high, one clip at a time, each reviewed on its sheet before the next. 20 takes, 6.18 USD. Size gate PASS on all but Jump v2 (top edge). Visual failures the gate missed: StopLunge v1 (motion blur), PunchR v1 (twist, arm across face), WallAttach v1 (drift). Two failures, old clip kept: StopLunge, Jump. Sheets in `Local/video2rig/brute-aligned/work/<clip>/sheet.jpg`, gate output beside them.
