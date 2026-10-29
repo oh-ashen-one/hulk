@@ -254,3 +254,14 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
   old -> new): Throw creases 25 -> 162, folded tris 281 -> 581, stretch>2 713 -> 1108 (worst; new overhead hold + arch); Clap creases
   28 -> 38, max stretch 12.7 -> 25.3; Run creases 30 -> 39; Uppercut 29 -> 37 creases but folds 206 -> 92. Better: PunchL/R, Slap,
   Lift, Land, Walk, Fall (folds -60 to -91 %). Logs `~/hulk-scratch/brute_v2r_candidate/corr/{old,new}.log`.
+
+### Phase 5 candidate r2 (2026-10-29 19:25, after the Sonnet refits)
+
+- Motion dir rebuilt (30 symlinks): Lift (19:18), Uppercut (19:15), WallClimb (19:16) refits, Throw = the burst refit (18:49),
+  **StopLunge v2r included** (director: check 1.24 % PASS, fit 4.60 px, seam 0.29; the A/B decides). Reassembled into
+  `~/hulk-scratch/brute_v2r_candidate/out/` (r1 kept in `out-r1/`): 14 v2r + Jump, WallAttach, Smash old. Lift now 6.40 s;
+  StopLunge 3.23 s after assemble's coil cut (frame 95), measured travel speed 0.00 m/s (the v2r take is in place; old 0.95).
+- Timing (rate rule, game-time windows kept): PunchR / PunchL / Slap / Clap / Uppercut / Grab rate 1.6, Throw 1.155; all From->Hit
+  and Hit->To game-time deltas 0.000 (Throw +0.001 rounding). Carry 3.267-6.367. Segments: LungeStart 0.566 (coil 1.133 - 0.567 cal;
+  the lunge plays at the game's fixed rate 2.0 to the clip end: 1.33 s game-time vs today's 0.92 s), WClimb 0-1.233 with fists
+  0.60 / 1.10, LandStart 0.00.

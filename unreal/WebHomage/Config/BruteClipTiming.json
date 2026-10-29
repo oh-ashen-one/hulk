@@ -1,6 +1,6 @@
 {
  "note": "Brute clip timing measured from the clips by tools/brute/v2r/measure_timing.py; read by ABruteCharacter (LoadClipTiming). Absent keys keep the C++ constants. Times in clip seconds.",
- "source": "/Users/midir/hulk-scratch/brute_v2r_candidate/out/telemetry.json",
+ "source": "/Users/midir/hulk-scratch/brute_v2r_candidate/out/brute.glb",
  "date": "2026-10-29",
  "clips": [
   "Clap",
@@ -12,6 +12,7 @@
   "PunchR",
   "Run",
   "Slap",
+  "StopLunge",
   "Throw",
   "Uppercut",
   "Walk",
@@ -70,7 +71,7 @@
   "Carry": {
    "clip": "Lift",
    "from": 3.2667,
-   "to": 6.2,
+   "to": 6.367,
    "rate": 0.0
   }
  },
@@ -79,7 +80,8 @@
   "WClimbImpact2": 1.1,
   "WClimbLo": 0.0,
   "WClimbHi": 1.2333,
-  "LandStart": 0.0
+  "LandStart": 0.0,
+  "LungeStart": 0.5663
  },
  "hit_table": {
   "PunchL": 1.3667,
@@ -174,14 +176,14 @@
    "feet_land": 0.0
   },
   "Lift": {
-   "dur": 6.2333,
+   "dur": 6.4,
    "peak_Left": [
     3.0333,
-    4.44
+    4.31
    ],
    "peak_Right": [
     5.2,
-    4.6
+    4.42
    ],
    "hips_low": 1.4667,
    "overhead": 3.2667,
@@ -288,19 +290,19 @@
    "len_scale": 1.0
   },
   "StopLunge": {
-   "dur": 2.8333,
+   "dur": 3.2333,
    "peak_Left": [
-    0.2333,
-    8.09
+    0.3667,
+    8.76
    ],
    "peak_Right": [
-    0.9667,
-    7.72
+    0.9,
+    11.24
    ],
-   "hips_low": 2.7333,
-   "feet_off": 0.3333,
-   "feet_on": null,
-   "coil": 1.5667
+   "hips_low": 3.0667,
+   "feet_off": 0.1667,
+   "feet_on": 0.3,
+   "coil": 1.1333
   },
   "Throw": {
    "dur": 5.0667,
@@ -328,11 +330,11 @@
    "dur": 5.0667,
    "peak_Left": [
     1.7,
-    5.11
+    5.07
    ],
    "peak_Right": [
     1.5333,
-    9.94
+    9.98
    ],
    "hips_low": 1.8333,
    "feet_off": 4.5667,
@@ -379,18 +381,18 @@
   "WallClimb": {
    "dur": 1.2333,
    "peak_Left": [
-    0.4667,
-    4.49
+    0.5,
+    4.64
    ],
    "peak_Right": [
-    1.0,
-    3.95
+    0.9667,
+    3.16
    ],
-   "hips_low": 0.9667,
+   "hips_low": 1.0,
    "overhead": 1.0,
    "feet_off": 0.3667,
    "feet_on": null,
-   "impact": 1.0,
+   "impact": 0.4333,
    "impact2": 1.2333,
    "mode": "cycle",
    "impact_left": 0.6,
