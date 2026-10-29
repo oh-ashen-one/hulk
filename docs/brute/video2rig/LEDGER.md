@@ -92,6 +92,19 @@ Checked by Haiku 5.5 (high) with the commands shown. No spend, no renderer launc
 | Fall | yes | 1.967 | 0.005 | Brute_fall.glb |
 | Land | no | 2.967 | 0.011 | Brute_land.glb |
 
+### In-game A/B: OLD baseline capture set (2026-10-29 03:45 EDT)
+
+- `ab_ingame.py run --label old --extra=-WHBruteNoClipTiming` (one capture at a time via gpu_slot, no STREAMING flag seen).
+- `check --label old`: ok 14/24 — idle front/left/tq, loco front/left/tq, lunge front/left/tq, jump front/left/tq, combat front/left.
+- MISSING 10/24: combat_tq (engine hung at start: ensure `OriginX <= OriginMax` in the distance-field scene update, rc=124,
+  no WH_BRUTE lines; the UnrealEditor stayed in macOS state `?E` for 25+ min after SIGTERM) plus uppercut x3, grab x3, wall x3
+  (not launched: never launch while an engine is stuck exiting).
+- ~2.5 min per capture with the GPU at 100 % from other sessions' work (64 min wall for 15 launches incl. the hang).
+- Captures: ~/hulk-scratch/ab-ingame/old/<case>/ (104 MB). Contact sheets angles_idle.png, angles_combat.png: three angles
+  differ, camYawOff active. Caveat for the critic: combat_front has him partly cut off at the bottom edge by a car and the
+  low camera; HUD help text and the damage counter are burned into every capture (same for old and new, so blind-fair).
+- Remaining 10 cases rerun once PID 68330 is gone; a second combat_tq hang = that case is dropped from both sets.
+
 ### Timing data to re-measure (before values, 2026-10-29)
 
 Integration phase (PLAN Phase 5) replaces these with values measured from the new clips. Copied verbatim with line numbers.
