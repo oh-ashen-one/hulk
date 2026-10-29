@@ -1,5 +1,16 @@
 ## video2rig animation upgrade — in progress (Claude Fable 5.1 overnight run, 2026-10-29)
 
+> **2026-10-29 04:30 EDT — PAUSED: Studio GPU wedged machine-wide.** Every Metal/MPS trainer (this reader at step 3400/9000,
+> two Markhor readers) is blocked in `MTLCommandBuffer waitUntilCompleted`; a fresh 512x512 MPS matmul hangs; ioreg shows
+> Device/Renderer/Tiler 100 %, recoveryCount 0; WindowServer + loginwindow restarted 03:28:37 (desktop session died).
+> Timeline: trainers stalled ~03:15-03:17 (a second engine, singapore source-world-r3, launched 03:14 beside this task's
+> capture engine and three MPS trainers); this task's ab_combat_tq engine hung at frame 0 at 03:23 and is still stuck
+> exiting (PID 68330, state ?E, unkillable). Nothing was restarted. Per the machine rule (dead desktop = pause, push WIP,
+> notify owner) the owner was pinged; a watch probes MPS every 5 min and the task resumes on its own when the GPU answers.
+> If a reboot happens: relaunch the reader with the same command (train.log keeps the step count; it restarts from step 0
+> unless prepare resumes — check `reader/` first), then rerun the 10 missing OLD captures (see LEDGER).
+
+
 **Goal:** re-animate and enhance every existing Brute clip through the video2rig route (first-frame MiniMax H3 video at 768P via fal.ai, joint reader, per-frame fit, Blender Action), as set out in the plan. [1]
 
 - Plan `docs/brute/video2rig/PLAN.md` · ledger `docs/brute/video2rig/LEDGER.md` · gates `docs/brute/video2rig/GATES-phase0-1.md` · prompts `docs/brute/video2rig/prompts/` (one `.txt` per clip plus `INDEX.md`). [2]
