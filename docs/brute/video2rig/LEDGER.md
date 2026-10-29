@@ -184,3 +184,15 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
   - Off-bone points (14): front 2.95, side 3.46 (median px)
 - **Gate**: `GATE reader-ground PASS median_px front 2.41 side 2.83 (bar <4)`.
 - **Next**: air reader (project `brute-air`, worktree `/Users/midir/video2rig-brute-air`, branch `brute-air-reader`) training 9000 steps with `--keep`; logs `reader/prepare-9000.log` and `reader/train.log`. Ground-clip fits (Phase 2/3) started via `tools/brute/v2r/run_clip.sh`, one clip at a time, Sonnet worker.
+
+### Air reader (brute-air): DONE (2026-10-29)
+
+- **Result**: 9000 steps, `Local/video2rig/brute-air/reader/reader.pt`, saved at `reader/train.log` time 7555.2 s. Final loss 2.38 at step 9000.
+- **Run**: project `brute-air`, worktree `/Users/midir/video2rig-brute-air` (branch `brute-air-reader`), launched 16:14 EDT with `--keep`. Uncontended rate 0.84 s/step (100 % of the time at step 9000).
+- **Held-out** (median px / p90 px / n):
+  - v2r_front: 2.85 / 13.52 / 5494
+  - v2r_side: 3.30 / 15.75 / 4865
+  - Off-bone points (14): front 3.40, side 3.91 (median px)
+- **Gate**: `GATE reader-air PASS median_px front 2.85 side 3.30 (bar <4)`.
+- **Next**: Fall (airborne loop) fitted through `tools/brute/v2r/run_clip.sh Local/video2rig/brute-air fall_v1 Fall --loop --fork-dir /Users/midir/video2rig-brute-air`; the fork worktree carries the lock_feet floor fix (head f8ba690).
+
