@@ -6,6 +6,8 @@
 # fractional frames 1 + k*0.8 exactly like a 30 fps video fit would.
 #   Blender -b --factory-startup -P tools/brute/v2r/make_test_fit.py -- <aligned_model.blend COPY> <assembled brute.glb> <Clip> <out.blend>
 #          [--spike BONE:SAMPLE:DEG ...]  inject a one-sample rotation spike (test for refine_brute's spike filter)
+#          [--twist BONE:SAMPLE:DEG[:N]]  inject a persistent twist-branch switch: DEG about the bone's local Y (its length axis),
+#                                         ramped over N samples (default 3) from SAMPLE, kept to the end (test for refine's burst pass)
 #          [--hold SEC]                   append SEC seconds of the last pose (a still tail, test for refine_brute's trim)
 #          [--cut N]                      drop the last N samples (opens a closed loop, test for refine_brute --loop)
 # The aligned model.blend is opened and saved under a NEW name only; pass a copy anyway (the reader may be using the original).
@@ -21,6 +23,7 @@ import v2r_rig as R  # noqa: E402
 argv = sys.argv[sys.argv.index('--') + 1:]
 MODEL, GLB, CLIP, OUT = argv[0], argv[1], argv[2], os.path.abspath(argv[3])
 SPIKES = [x.split(':') for i, x in enumerate(argv) if i > 0 and argv[i - 1] == '--spike']
+TWISTS = [x.split(':') for i, x in enumerate(argv) if i > 0 and argv[i - 1] == '--twist']
 HOLD = float(argv[argv.index('--hold') + 1]) if '--hold' in argv else 0.0
 CUT = int(argv[argv.index('--cut') + 1]) if '--cut' in argv else 0
 assert os.path.abspath(MODEL) != os.path.abspath(R.ALIGNED_BLEND), 'pass a COPY of the aligned model.blend'
@@ -55,6 +58,12 @@ for bn, k, deg in SPIKES:
     k = int(k)
     bases[k][bn] = bases[k][bn] @ Matrix.Rotation(math.radians(float(deg)), 4, 'X')
     print('TESTFIT injected spike: %s sample %d %+.1f deg about its local X' % (bn, k, float(deg)))
+for tw in TWISTS:
+    bn, k, deg = tw[0], int(tw[1]), float(tw[2]); n = int(tw[3]) if len(tw) > 3 else 3
+    for j in range(k, len(bases)):
+        f = min(1.0, (j - k + 1) / n)
+        bases[j][bn] = bases[j][bn] @ Matrix.Rotation(math.radians(deg * f), 4, 'Y')
+    print('TESTFIT injected twist switch: %s from sample %d, %+.1f deg about its local Y over %d samples, kept to the end' % (bn, k, deg, n))
 if CUT > 0:
     bases, frames = bases[:-CUT], frames[:-CUT]
     print('TESTFIT dropped the last %d samples (open loop)' % CUT)

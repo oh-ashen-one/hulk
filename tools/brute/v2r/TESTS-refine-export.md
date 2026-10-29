@@ -153,3 +153,28 @@ Blender ... export_clip.py -- work-tools/fake_fit/IdleOpen_fit_refined.blend Idl
 - Not imported into Unreal (`build_brute.py`); no engine was run.
 - Observation: in the start-picture stance the right foot hovers 33.5 mm above the floor (the lowest right-foot
   vertex at frame 0). Plants work relative to each foot's own lowest point, so this is not a problem for the tool.
+
+## 7. Burst pass (2026-10-29, after the Throw fit)
+
+The Throw refit's LeftArm turned 67 / 100 / 68 deg over frames 26-28 between 3 deg steps; RightArm did the same (71 / 106 / 71).
+Swing/twist decomposition: the upper arm's direction moved ~20 deg while its twist changed ~125 deg (path 235 deg, net 126 deg),
+at a frame where the fitter re-initialised (`fit-report` frame 27 `start: reset`). The single-frame spike test cannot catch it
+(the bone never comes back). `refine_brute.py` now finds runs of 1-4 big steps (> 8 x median and > 30 deg, smallest > 3 x the
+2 steps either side) whose bone direction moves <= 45 deg, removes the jump and re-adds its net change as a smoothstep offset
+over a window (peak <= 12 deg/step, at most 0.5 s). Throw's hurl (frames 98-101: arms overhead -> forward, 72 / 85 deg swing)
+passes the step tests but is real motion; the swing limit leaves it alone (`bursts.skipped_as_swing`). Without the swing
+limit the hurl was flattened and the right-hand peak moved from sample 98 to 56, which is why the limit exists.
+
+```
+Blender ... make_test_fit.py -- ... PunchL work-tools/fake_fit/PunchLBurst_fit.blend --twist LeftArm:8:120:2
+Blender ... refine_brute.py -- work-tools/fake_fit/PunchLBurst_fit.blend --return-to-stance --clip PunchLBurst --floor=-0.435
+Blender ... refine_brute.py -- (same) --no-burst --out work-tools/fake_fit/PunchLBurst_fit_noburst.blend
+```
+- `BURST_TEST bones ['LeftArm'] ... swing 5.2, steps 58.5/57.5, net 116.0, window [0, 15], peak_step_after 13.7 ... peakhand_L 30 (same fit, --no-burst: 30) PASS`
+- Only LeftArm is touched; the punch's own elbow snap and the injected LeftForeArm/Spine1 spikes of step 5 are unaffected
+  (step 5 still `REFINE spikes {"LeftForeArm": 3}`, `bursts {}`). Steps 0-6 reproduce the numbers above exactly.
+- The injection is 60 deg/step because this synthetic PunchL's LeftArm median step is 6.9 deg (8 x = 55); a 40 deg/step
+  injection is (correctly) below threshold there. Real fits are calmer (Throw LeftArm median 1.45 deg).
+- Tried and reverted: dropping plant edge samples the IK cannot reach (Throw left foot 52-56). The raw foot is still 0.9 m
+  back at sample 53, so the trimmed foot skated 0.9 m along the floor in 4 samples; the pinned version (36 mm toe settle
+  while the heel lands, leg at full reach) is better and stays.

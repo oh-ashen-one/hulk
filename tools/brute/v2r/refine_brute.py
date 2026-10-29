@@ -23,6 +23,18 @@
 #     --spike-k K --spike-min-deg D   single-frame spike test: deviation from the neighbours' midpoint > K x the bone's median
 #                            (default 4.0) and >= D deg (default 3), direction reverses, AND the in/out steps are > --spike-iso x
 #                            (default 3) the steps around them (isolated jitter; a fast extreme such as a punch snap is never touched)
+#     --burst-k K --burst-min-deg D --burst-iso I --burst-max M --burst-ease-deg E   (2026-10-29, after the Throw fit)
+#                            multi-sample burst test: a run of 1..M (default 4) consecutive steps, each > K x the bone's median step
+#                            (default 8) and > D deg (default 30), whose smallest step is > I x (default 3) the largest of the 2 steps
+#                            on either side. That is a solver reset landing in another twist branch (Throw LeftArm: 3/67/100/68/3 deg
+#                            at frames 25-29, the upper arm's direction moving ~20 deg while its twist turns ~125 deg; the single-frame
+#                            test cannot see it because the bone never comes back). The net change is KEPT but re-timed: the jump is
+#                            removed, then re-added as a smoothstep offset over a window sized so its peak step is <= E deg (default 12,
+#                            at least the burst + 2 samples, at most 0.5 s), centred on the burst; motion before/after is unchanged.
+#                            Only twist-dominated bursts: the bone's length axis must move <= --burst-max-swing-deg (default 45)
+#                            across the burst (Throw frame 27: ~20 deg; Throw's hurl at frames 98-101 moves the arms ~95 deg, real
+#                            motion, reported in bursts.skipped_as_swing and left alone).
+#                            --no-burst turns it off. Arms count these frames like spike frames in the untouched-arms proof.
 #     --action NAME --clip NAME --out PATH.blend   (defaults: active action; clip = action name; <fit>_refined.blend beside input)
 #     --stance-rig rig.json  the aligned rig.json whose start_pose is the start-picture stance (overlap check)
 # Writes <out>.blend and <out>.json; prints
@@ -76,6 +88,13 @@ def parse():
     ap.add_argument('--spike-k', type=float, default=4.0)
     ap.add_argument('--spike-min-deg', type=float, default=3.0)
     ap.add_argument('--spike-iso', type=float, default=3.0)
+    ap.add_argument('--burst-k', type=float, default=8.0)
+    ap.add_argument('--burst-min-deg', type=float, default=30.0)
+    ap.add_argument('--burst-iso', type=float, default=3.0)
+    ap.add_argument('--burst-max', type=int, default=4)
+    ap.add_argument('--burst-ease-deg', type=float, default=12.0)
+    ap.add_argument('--burst-max-swing-deg', type=float, default=45.0)
+    ap.add_argument('--no-burst', action='store_true')
     ap.add_argument('--action', default='')
     ap.add_argument('--clip', default='')
     ap.add_argument('--out', default='')
@@ -367,6 +386,74 @@ def main():
     REP['spikes'] = dict(bones=len(spikes), frames_touched=spikes, arm_bones_touched=[b for b in spikes if b in armb])
     print('REFINE spikes', json.dumps({b: len(v) for b, v in spikes.items()}))
     spike_frames_arm = {b: set(spikes.get(b, [])) for b in armb}
+
+    # ---------- 2b. bursts: 1..M samples of huge steps between quiet steps (a solver reset switching twist branch); keep the net change,
+    #           re-time it as a smoothstep offset (remove the jump: z = q after the burst @ X, X = q[e]^-1 q[s]; re-add X^-1 eased)
+    bursts, skipped = {}, []
+    if not a.no_burst:
+        thr_min = math.radians(a.burst_min_deg)
+        ease = math.radians(a.burst_ease_deg)
+        nmax = max(a.burst_max + 2, int(round(0.5 * sr)))
+        for b in rotb:
+            q = ch[b]['q']
+            found = []
+            i = 1
+            stp = np.array([qang(q[k], q[k + 1]) for k in range(N - 1)])
+            thr = max(a.burst_k * float(np.median(stp)), thr_min)   # the take's own median, fixed before any edit
+            while i < N - 2:
+                if stp[i] <= thr:
+                    i += 1
+                    continue
+                j = i
+                while j + 1 < N - 1 and stp[j + 1] > thr:
+                    j += 1
+                s_, e_ = i, j + 1                                    # keys before / after the burst
+                around = max(list(stp[max(0, i - 2):i]) + list(stp[j + 1:j + 3]) + [0.0])
+                if j - i + 1 > a.burst_max or e_ >= N - 1 or stp[i:j + 1].min() <= a.burst_iso * around:
+                    i = j + 1
+                    continue
+                # twist-dominated only: the bone's length axis (local Y) barely moves across the burst. A real fast swing between
+                # holds (Throw's hurl: arms overhead -> forward, ~95 deg in 3 samples) is motion and is never re-timed.
+                yb, ya = Quaternion(q[s_]) @ Vector((0, 1, 0)), Quaternion(q[e_]) @ Vector((0, 1, 0))
+                swing = math.degrees(yb.angle(ya, 0.0))
+                if swing > a.burst_max_swing_deg:
+                    skipped.append(dict(bone=b, keys=[int(s_), int(e_)], swing_deg=r3(swing), path_deg=r3(math.degrees(float(stp[i:j + 1].sum())))))
+                    i = j + 1
+                    continue
+                X = Quaternion(q[e_]).inverted() @ Quaternion(q[s_])
+                Xi = X.inverted()
+                net = Xi.angle if Xi.angle <= math.pi else 2 * math.pi - Xi.angle
+                n = int(min(nmax, max(j - i + 1 + 2, math.ceil(1.5 * net / ease))))
+                n = min(n, N - 1)
+                c = 0.5 * (s_ + e_)
+                w0 = int(max(0, min(s_, math.floor(c - n / 2.0))))
+                w1 = int(min(N - 1, max(e_, w0 + n)))
+                z = [Quaternion(q[k]) for k in range(N)]
+                for k in range(s_ + 1, e_):
+                    z[k] = Quaternion(q[s_])
+                for k in range(e_, N):
+                    z[k] = Quaternion(q[k]) @ X
+                for k in range(w0, N):
+                    wgt = sstep((k - w0) / max(1, (w1 - w0)))
+                    q[k] = np.array(z[k] @ Quaternion().slerp(Xi, wgt))
+                q[:] = fix_hemi(q)
+                stp2 = [qang(q[k], q[k + 1]) for k in range(w0, w1)]
+                found.append(dict(swing_deg=r3(swing), steps_deg=[r3(math.degrees(x)) for x in stp[i:j + 1]], keys=[int(s_), int(e_)], around_deg=r3(math.degrees(around)),
+                                  net_deg=r3(math.degrees(net)), path_deg=r3(math.degrees(float(stp[i:j + 1].sum()))), window=[w0, w1],
+                                  peak_step_after_deg=r3(math.degrees(max(stp2)))))
+                i = w1 + 1
+                stp = np.array([qang(q[k], q[k + 1]) for k in range(N - 1)])
+            ch[b]['q'] = fix_hemi(q)
+            if found:
+                bursts[b] = found
+                if b in spike_frames_arm:
+                    for f_ in found:
+                        spike_frames_arm[b].update(range(f_['window'][0], f_['window'][1] + 1))
+    REP['bursts'] = dict(bones=len(bursts), found=bursts, skipped_as_swing=skipped,
+                         options=dict(k=a.burst_k, min_deg=a.burst_min_deg, iso=a.burst_iso, max=a.burst_max, max_swing_deg=a.burst_max_swing_deg,
+                                      ease_deg=a.burst_ease_deg, off=a.no_burst))
+    print('REFINE bursts', json.dumps({b: [(f_['keys'], f_['net_deg'], f_['path_deg'], f_['window'], f_['peak_step_after_deg']) for f_ in v]
+                                       for b, v in bursts.items()}), 'skipped (real swing)', json.dumps([(x['bone'], x['keys'], x['swing_deg']) for x in skipped]))
 
     # ---------- 3a. loop: best end frame + offset blend
     blend_win = set()

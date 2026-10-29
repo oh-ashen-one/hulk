@@ -61,4 +61,17 @@ blender testfit_idleopen $V/make_test_fit.py -- $W/model_aligned_copy.blend $SHI
 blender refine_idleopen $V/refine_brute.py -- $W/fake_fit/IdleOpen_fit.blend --loop --clip IdleOpen
 rm -rf $W/motion_idleopen
 blender export_idleopen $V/export_clip.py -- $W/fake_fit/IdleOpen_fit_refined.blend Idle $W/motion_idleopen
+echo "== 7. burst pass: PunchL fit with a 120 deg LeftArm twist switch over 2 samples at sample 8 (Throw-like solver reset; 60 deg/step clears 8 x this busy arm's 6.9 deg median), --return-to-stance"
+blender testfit_burst $V/make_test_fit.py -- $W/model_aligned_copy.blend $SHIPPED PunchL $W/fake_fit/PunchLBurst_fit.blend --twist LeftArm:8:120:2
+blender refine_burst $V/refine_brute.py -- $W/fake_fit/PunchLBurst_fit.blend --return-to-stance --clip PunchLBurst --floor=-0.435
+blender refine_burst_off $V/refine_brute.py -- $W/fake_fit/PunchLBurst_fit.blend --return-to-stance --clip PunchLBurst --floor=-0.435 --no-burst --out $W/fake_fit/PunchLBurst_fit_noburst.blend
+python3 - "$W/fake_fit/PunchLBurst_fit_refined.json" "$W/fake_fit/PunchLBurst_fit_noburst.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1])); base = json.load(open(sys.argv[2]))
+b = r['bursts']['found']
+la = b.get('LeftArm', [])
+ok = len(la) == 1 and abs(la[0]['net_deg'] - 120) < 6 and la[0]['peak_step_after_deg'] < 30 and set(b) == {'LeftArm'}
+pk, pk0 = r['final']['peak_hand']['Left']['sample'], base['final']['peak_hand']['Left']['sample']
+print('BURST_TEST bones %s LeftArm %s peakhand_L %d (same fit, --no-burst: %d) %s' % (sorted(b), la, pk, pk0, 'PASS' if ok and pk == pk0 else 'FAIL'))
+PY
 echo "== done"
