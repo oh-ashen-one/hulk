@@ -2,8 +2,8 @@
 
 Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
 
-Written 2026-10-29 by Claude Fable 5.1 (director). Branch `chinese-animation-upgrades`, worktree `~/hulk-chinese-anim`
-(the shared `~/hulk` checkout belongs to another session; do not work there). Status: **PLAN ONLY, owner has not said go.**
+Written 2026-10-29 by Claude Fable 5.1 (director). Branch `chinese-animation-upgrades`, checkout `~/hulk` (released to this task by the owner 2026-10-29; the earlier
+worktree was removed). Status: **ready; owner go pending (via a /goal the owner will have me write).**
 
 ## Owner instruction (2026-10-29)
 
@@ -30,22 +30,22 @@ Rule reconciliation, recorded so nobody re-litigates it:
 | Timing data that must move with the clips | `HIT` / `TRIM` / `LOOP_WIN` / `FOOTLOCK` tables in assemble_motion.py; `C.From / C.To / C.Rate / C.Hit` per act in `BruteCharacter.cpp` ~1627-1634; speed matching from `clips_meta.json`; segment markers from `tools/brute/analyze_clips.py` |
 | video2rig | fork `~/video2rig` branch `mac-mps`, own `.venv`; `generate.py` is BytePlus/Seedance only (no fal provider yet); Mixamo hinge names are auto-detected, so `creature.json` is near-empty |
 | Dragon precedent | reader 9000 steps = ~3 h on MPS; clip -> Action ~4 min; good fit = median miss 2-4 px, two-view check < 1.5 %; MiniMax oversized a winged creature (size gate needed); airborne moves need their own start picture + reader; a raw fit is a base, never a deliverable (refine script closes loops, plants feet) |
-| Machine | Mac Studio M3 Ultra. Another session's Blender (`render_ab.py`) is running in `~/hulk`-adjacent work: our Blender budget is 4 minus theirs, and 2 total the moment an Unreal commandlet runs. `STREAMING` flag absent now; owner streams 11:00-13:00 ET (no captures then) |
+| Machine | Mac Studio M3 Ultra. Two other video2rig readers are training on the GPU tonight (Markhor mayor, dragon air): our reader runs 2-3x slower alongside them (owner accepted). Blender cap 4 minus others' instances, 2 total when an Unreal commandlet runs. APFS container free 17.5 GB (Finder shows more because of purgeable space): owner accepted the risk; keep `work/` renders trimmed, delete capture movies after measuring. `STREAMING` flag absent now; owner streams 11:00-13:00 ET (no captures then) |
 
 ## Unverified items that gate step 0
 
-1. **fal.ai model id for MiniMax H3.** A web check found `fal-ai/minimax/hailuo-2.3/standard/image-to-video` (768p) and
-   `hailuo-2.3-fast`; **no confirmed H3 endpoint on fal.** Step 0 queries fal's model catalog with the key (read-only).
-   If H3 is not on fal, STOP and ask the owner: (a) Hailuo 2.3 Standard 768p on fal, or (b) MiniMax H3 direct API via
-   the house wrapper `~/shorts-factory/h3.sh` (`MINIMAX_API_KEY`). Nothing is generated until the owner picks.
-2. **Price per second on fal** for the chosen model: read from the catalog, write it into the ledger before clip 1.
+1. **fal.ai model id: VERIFIED 2026-10-29** with the key (read-only catalog query): `minimax/h3/image-to-video`
+   (no `fal-ai/` prefix), inputs `prompt`, `image_url` (first frame), `resolution` enum 480P/768P/2K/4K (use 768P),
+   `duration` (int seconds, default 5), `prompt_expansion_mode` (set `disabled`: we want the literal prompt), `seed`.
+2. **Price per second on fal** is not in the OpenAPI spec: read the real charge after the pilot clip, write it into the
+   ledger; stop if one 5 s clip costs over $2.
 3. **`fal_client` is not installed** anywhere. Plan: plain `urllib` against `https://queue.fal.run/<model>` (submit,
    poll, fetch) so the fork gains no dependency; the start frame is sent as a base64 data URI.
 
 ## Architecture of the work
 
 ```
-~/hulk-chinese-anim/Local/video2rig/brute/          (gitignored; Local/ added to .gitignore on this branch)
+~/hulk/Local/video2rig/brute/          (gitignored; Local/ added to .gitignore on this branch)
   creature.json   rig/   start/ (ground)   start-air/   start-wall/   reader/   reader-air/   clips/   work/   out/
   refine/         (Brute refine scripts; ported from the dragon's refine/lib_anim.py, committed copy in tools/brute/v2r/)
 docs/brute/video2rig/   PLAN.md (this)  LEDGER.md (every clip: provider, model, res, seconds, USD, check %, fit px, verdict)
@@ -110,6 +110,11 @@ lift with an invisible load and keep the existing hand-splice for the car. Decid
 - WallAttach / WallClimb: wall start picture with a plain slab in frame; riskiest, done last; if two generations fail
   the check, the existing Cartwheel attach clip stays and the gap is reported.
 - Each still goes through check, size gate, fit, refine, A/B.
+
+### Provider fallback (owner, 2026-10-29)
+If MiniMax on fal runs out (credits exhausted, sustained API failure, or H3 withdrawn), fall back to **MiniMax H3 Max
+on Higgsfield** (the Higgs MCP, `start_image` role, 768p, 16:9, 5 s) exactly as the dragon did; record the switch and
+its credits in the ledger. A per-move quality failure is NOT a provider switch: two failed generations keep the old clip.
 
 ### Phase 5 — Integration and gates
 - [Opus 5.5 high] C++ pass: re-measure every `C.From / C.To / C.Hit` and the `HIT` table from the NEW clips with
