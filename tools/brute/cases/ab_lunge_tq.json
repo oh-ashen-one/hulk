@@ -1,0 +1,54 @@
+{
+ "name": "ab_lunge_tq",
+ "ab": {
+  "group": "lunge",
+  "angle": "tq",
+  "cam_offset_deg": 135.0,
+  "mode": "emulated: look-rate orbit + stick compensation, no C++ change",
+  "clips": [
+   "StopLunge",
+   "Jump"
+  ],
+  "purpose": "Running super jump: sprint, then hold jump at full speed (the only way the game plays StopLunge), release, first second of flight.",
+  "beats_s": [
+   [
+    1.5,
+    "sprint"
+   ],
+   [
+    3.3,
+    "jump held while sprinting: plant and coil (StopLunge)"
+   ],
+   [
+    4.25,
+    "release: running super jump, Jump air segment"
+   ]
+  ],
+  "film_s": [
+   1.5,
+   5.9
+  ],
+  "quit_s": 6.0,
+  "expect_events": [
+   "charge_floor_crack",
+   "super_jump"
+  ],
+  "forbid_events": [
+   "act_",
+   "rescue",
+   "wall_"
+  ],
+  "expect_travel_min_m": 60.0,
+  "expect_zmax_min_m": null
+ },
+ "spawn": {"pos": [249.0, 178.0, 0.0], "yaw": -90, "camPitch": -10, "camDist": 7.5},
+ "keys": [
+  {"t": 0.0, "move": [0, 0], "look": [135.0, 0]},
+  {"t": 0.999, "look": [0, 0]},
+  {"t": 1.5, "sprint": 1, "move": [-0.707107, -0.707107]},
+  {"t": 3.3, "jump": 1},
+  {"t": 4.25, "jump": 0},
+  {"t": 4.3, "sprint": 0},
+  {"t": 5.5, "move": [0, 0]}
+ ]
+}

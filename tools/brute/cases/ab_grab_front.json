@@ -1,0 +1,53 @@
+{
+ "name": "ab_grab_front",
+ "ab": {
+  "group": "grab",
+  "angle": "front",
+  "cam_offset_deg": 180.0,
+  "mode": "needs spawn.camYawOff (C++ patch, ab_ingame.md Gaps)",
+  "clips": [
+   "Lift",
+   "Throw"
+  ],
+  "purpose": "Grab the parked car, carry it overhead about 2 s, throw it.",
+  "beats_s": [
+   [
+    1.0,
+    "grab: lift the car overhead (Lift, Grab segment)"
+   ],
+   [
+    2.0,
+    "carry ~2 s (Lift held pose)"
+   ],
+   [
+    4.2,
+    "throw (Throw clip); film ends 0.4 s after release"
+   ]
+  ],
+  "film_s": [
+   0.8,
+   5.0
+  ],
+  "quit_s": 5.2,
+  "expect_events": [
+   "act_grab",
+   "act_throw",
+   "throw"
+  ],
+  "forbid_events": [
+   "grab_nothing",
+   "rescue"
+  ],
+  "expect_travel_min_m": null,
+  "expect_zmax_min_m": null
+ },
+ "spawn": {"pos": [244.6, 183.2, 0.0], "yaw": 180, "camPitch": -10, "camDist": 7.5, "camYawOff": 180.0},
+ "keys": [
+  {"t": 0.0, "move": [0, 0]},
+  {"t": 1.0, "grab": 1},
+  {"t": 1.15, "grab": 0},
+  {"t": 4.2, "grab": 1},
+  {"t": 4.35, "grab": 0},
+  {"t": 5.1, "move": [0, 0]}
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "name": "ab_loco_left",
+ "ab": {
+  "group": "loco",
+  "angle": "left",
+  "cam_offset_deg": 90.0,
+  "mode": "emulated: look-rate orbit + stick compensation, no C++ change",
+  "clips": [
+   "Walk",
+   "Run"
+  ],
+  "purpose": "Walk 4 s, run 4 s, sprint 3 s, stop. (There is no separate sprint clip and no stop clip: StopLunge is the jump-charge plant, see lunge.)",
+  "beats_s": [
+   [
+    2.0,
+    "walk 4 s (7 m/s)"
+   ],
+   [
+    6.0,
+    "run 4 s (13 m/s)"
+   ],
+   [
+    10.0,
+    "sprint 3 s (27 m/s, Run clip faster, upper body leans in)"
+   ],
+   [
+    13.0,
+    "stop, settles back to Idle"
+   ]
+  ],
+  "film_s": [
+   1.5,
+   14.5
+  ],
+  "quit_s": 14.6,
+  "expect_events": [],
+  "forbid_events": [
+   "act_",
+   "rescue",
+   "super_jump",
+   "hop",
+   "wall_"
+  ],
+  "expect_travel_min_m": 120.0,
+  "expect_zmax_min_m": null
+ },
+ "spawn": {"pos": [249.0, 178.0, 0.0], "yaw": -90, "camPitch": -8, "camDist": 7.5},
+ "keys": [
+  {"t": 0.0, "move": [0, 0], "look": [90.0, 0]},
+  {"t": 0.999, "look": [0, 0]},
+  {"t": 2.0, "move": [-0.45, 0.0]},
+  {"t": 6.0, "move": [-1.0, 0.0]},
+  {"t": 10.0, "sprint": 1, "move": [-1.0, 0.0]},
+  {"t": 13.0, "sprint": 0, "move": [0, 0]}
+ ]
+}

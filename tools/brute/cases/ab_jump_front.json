@@ -1,0 +1,60 @@
+{
+ "name": "ab_jump_front",
+ "ab": {
+  "group": "jump",
+  "angle": "front",
+  "cam_offset_deg": 180.0,
+  "mode": "emulated: look-rate orbit + stick compensation, no C++ change",
+  "clips": [
+   "Jump",
+   "Fall",
+   "Land"
+  ],
+  "purpose": "Charge to full, super jump (40 m apex, 100 m range), Fall loop in the air, hard crater landing.",
+  "beats_s": [
+   [
+    2.0,
+    "hold jump: charge crouch (Jump clip scrubbed by the charge)"
+   ],
+   [
+    3.0,
+    "release: full super jump (Jump air segment while rising)"
+   ],
+   [
+    4.6,
+    "past the apex: Fall loop (until touchdown ~6.6 s)"
+   ],
+   [
+    6.6,
+    "hard landing, crater (Land clip)"
+   ]
+  ],
+  "film_s": [
+   1.5,
+   9.0
+  ],
+  "quit_s": 9.1,
+  "expect_events": [
+   "charge_floor_crack",
+   "super_jump",
+   "crater_landing"
+  ],
+  "forbid_events": [
+   "act_",
+   "rescue",
+   "wall_",
+   "grand_slam",
+   "air_dash"
+  ],
+  "expect_travel_min_m": 60.0,
+  "expect_zmax_min_m": null
+ },
+ "spawn": {"pos": [249.0, 150.0, 0.0], "yaw": -90, "camPitch": -10, "camDist": 7.5},
+ "keys": [
+  {"t": 0.0, "move": [0, 0], "look": [180.0, 0]},
+  {"t": 0.999, "look": [0, 0]},
+  {"t": 2.0, "jump": 1},
+  {"t": 3.0, "jump": 0},
+  {"t": 9.0, "move": [0, 0]}
+ ]
+}
