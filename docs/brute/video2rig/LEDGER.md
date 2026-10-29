@@ -25,7 +25,7 @@ Companion to [PLAN.md](PLAN.md). Every reader, clip, check, fit, refine, A/B ver
 | Jump | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.15 (top-edge WARN) | - | - | - | - | - | FAIL visual: rises ~1.5 m, long hang, hand leaves top of frame. |
 | Jump | v2 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | FAIL (hand leaves top edge, 30 frames) | - | - | - | - | - | FAIL: hands cut off at top, ~1.5 s hang. Two failures, old clip kept. |
 | Land | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.12 | - | - | - | - | - | Small hop, heavy one-knee crouch, hold, rises to stance; clean. |
-| Fall | v1 | - | - | - | - | - | - | - | - | - | - | - | - | - | - |
+| Fall | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.05 | - | - | - | - | - | PASS visual (brute-air): constant height, no floor, subtle limb drift, loops to first frame. |
 | WallAttach | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.23 | - | - | - | - | - | FAIL visual: drifts sideways ~2 body widths to panel edges, feet shuffle; no wall drawn. |
 | WallAttach | v2 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.15 | - | - | - | - | - | PASS visual: stays put, panels agree, both fists push forward, no wall drawn. |
 | WallClimb | v1 | 2026-10-29 | fal | minimax/h3/image-to-video | 768P | 5 | 0.30 | - | PASS 1.16 (top-edge WARN) | - | - | - | - | - | FAIL visual: reaching hand fingers cut by top of frame; no wall drawn. |
@@ -35,7 +35,7 @@ Companion to [PLAN.md](PLAN.md). Every reader, clip, check, fit, refine, A/B ver
 
 | provider | balance before | balance after | total |
 | --- | --- | --- | --- |
-| fal | 23.65 (before Idle pilot) | about 16.99 (derived: 23.17 before walk_v1 minus 6.18 for the batch; the clips json balance_after field lags a clip) | 6.66 USD (Idle 0.48 + batch 6.18) |
+| fal | 23.65 (before Idle pilot) | about 16.69 (derived: 23.17 before walk_v1 minus 6.48 for the batch incl. Fall; the clips json balance_after field lags a clip) | 6.96 USD (Idle 0.48 + batch 6.48) |
 | Higgsfield | ? | ? | ? |
 
 ## Gate lines
