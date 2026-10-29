@@ -141,3 +141,15 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
 ```
 
 - 2026-10-29 Phase 3 generation batch (reader still training; director decision 01:45: clips are independent of the reader, generated ahead to compress the night). Sonnet 5.5 high, one clip at a time, each reviewed on its sheet before the next. 20 takes, 6.18 USD. Size gate PASS on all but Jump v2 (top edge). Visual failures the gate missed: StopLunge v1 (motion blur), PunchR v1 (twist, arm across face), WallAttach v1 (drift). Two failures, old clip kept: StopLunge, Jump. Sheets in `Local/video2rig/brute-aligned/work/<clip>/sheet.jpg`, gate output beside them.
+
+### Ground reader (brute-aligned): DONE (2026-10-29)
+
+- **Result**: 9000 steps, `Local/video2rig/brute-aligned/reader/reader.pt` (89.7 MB), saved at `reader/train.log` time 18298.7 s. Final loss 1.90 at step 9000.
+- **Run**: attempt 3 (log `reader/train.log`, launched 11:18 EDT with `--keep`). Attempt 1 wedged at step 3400 (`reader/train-attempt1-wedged-step3400.log`). Attempt 2 was stopped for the clean hour.
+- **Pauses**: the trainer was paused twice (SIGSTOP) at the owner's request during the run. Step-rate figures in the log are wall-clock contaminated; the true uncontended rate was 0.83 s/step.
+- **Held-out** (median px / p90 px / n):
+  - v2r_front: 2.41 / 11.38 / 5257
+  - v2r_side: 2.83 / 12.68 / 4927
+  - Off-bone points (14): front 2.95, side 3.46 (median px)
+- **Gate**: `GATE reader-ground PASS median_px front 2.41 side 2.83 (bar <4)`.
+- **Next**: air reader (project `brute-air`, worktree `/Users/midir/video2rig-brute-air`, branch `brute-air-reader`) training 9000 steps with `--keep`; logs `reader/prepare-9000.log` and `reader/train.log`. Ground-clip fits (Phase 2/3) started via `tools/brute/v2r/run_clip.sh`, one clip at a time, Sonnet worker.

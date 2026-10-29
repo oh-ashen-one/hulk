@@ -1,9 +1,7 @@
 ## video2rig animation upgrade — in progress (Claude Fable 5.1 overnight run, 2026-10-29)
 
-> **2026-10-29 10:40 EDT — RESUMED after reboot.** The Studio rebooted at 10:16 EDT (GPU wedge of 03:15, see LEDGER); MPS
-> answers again. The ground reader restarted from step 0 with `--keep` (renders reused) into reader/prepare-9000-r2.log and
-> reader/train.log (the wedged attempt is reader/train-attempt1-wedged-step3400.log). The 10 missing OLD captures are being
-> rerun one at a time (STREAMING flag and the two-engine cap checked before every launch). Pipeline unchanged.
+> **2026-10-29 — GROUND READER DONE.** `GATE reader-ground PASS median_px front 2.41 side 2.83 (bar <4)`. Brute-aligned `reader/reader.pt` saved (9000 steps; held-out medians front 2.41 px, side 2.83 px). Details in LEDGER "Ground reader (brute-aligned): DONE".
+> **In progress:** air reader training (project `brute-air`, worktree `/Users/midir/video2rig-brute-air`, branch `brute-air-reader`, 9000 steps, `--keep`; logs `reader/prepare-9000.log` and `reader/train.log`). Ground-clip fits (Phase 2/3) running via `tools/brute/v2r/run_clip.sh`, one clip at a time, Sonnet worker.
 
 **Machine rules (2026-10-29, after the 7-hour GPU wedge; details `tools/brute/v2r/ab_ingame.md` "GPU gates")**
 
