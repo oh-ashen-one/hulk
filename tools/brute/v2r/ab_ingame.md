@@ -81,6 +81,9 @@ Not needed for today's `emu` groups, which keep working either way.
    occlusion lift), deterministic per angle. Left-side wall view runs the camera arm along the facade (about 1 m off it): the sphere
    sweep may shorten the arm; look at the first contact sheet.
 4. **`grab` depends on the same parked car being in reach at t=1.0** (m2_grab_throw did). `check` fails on `grab_nothing`.
+   Forbid rules (`check_case`): a string in `forbid_events` forbids that event prefix at all times; `{"event": E, "before": "script_release"}`
+   forbids E only before the script's own release (first key with `"sprint": 0`, minus 0.05 s; no such key means no allowance). Wall
+   cases use it for `wall_release`, so the script's release at 7.5 s passes while an earlier one fails; `rescue` and `wall_kick` stay forbidden.
 5. **Timing differs between the builds by design**: `ActHitAt` / `ActDur` come from the clips (`Config/BruteClipTiming.json`, written
    by `measure_timing.py` only for v2r clips), so contact times, car launches and impact FX move with them; the telemetry will not
    be identical, only the event order (`pack` records that in `_director/report.json`). Press spacings were chosen to survive that

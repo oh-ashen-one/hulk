@@ -133,7 +133,7 @@ G = [
          beats=[(2.0, 'sprint into the facade'), (3.0, 'attach slam, climb (23.8 m face)'), (4.3, 'top out, catch the next face'),
                 (4.7, 'climb to the roof (73 m), top out ~7.0 s')],
          purpose='Sprint into a facade, wall attach and climb (about 3.7 s attached in total: 1.3 s on the first face, 2.4 s on the second).',
-         expect=['wall_run_start', 'wall_punch', 'wall_top_out', 'wall_catch', 'wall_punch', 'wall_top_out'], forbid=['rescue', 'wall_release', 'wall_kick'],
+         expect=['wall_run_start', 'wall_punch', 'wall_top_out', 'wall_catch', 'wall_punch', 'wall_top_out'], forbid=['rescue', dict(event='wall_release', before='script_release'), 'wall_kick'],
          travel=None, zmax=60.0,
          keys=lambda o: spin(o) + [{'t': 2.0, 'sprint': 1, 'move': mv(o, 1.0)}, {'t': 7.5, 'sprint': 0, 'move': [0, 0]}]),
 ]
@@ -407,6 +407,12 @@ def load_case(name):
     return json.load(open(os.path.join(CASES_DIR, name + '.json')))
 
 
+def script_release_time(keys):
+    """t of the first script step that sets sprint to 0 (the script's own release), or None."""
+    ts = [k['t'] for k in keys if 'sprint' in k and k['sprint'] == 0]
+    return min(ts) if ts else None
+
+
 def check_case(d, name):
     """Problems for one captured case directory (empty = pass)."""
     ab = load_case(name)['ab']
@@ -422,10 +428,24 @@ def check_case(d, name):
     toks = [t for _, t in events(log)]
     if not subseq(toks, ab['expect_events']):
         bad.append('events %s not found in order (got %s)' % (ab['expect_events'], [t for t in toks if not t.startswith(('car_bounced', 'sprint_knock', 'blast_cars'))][:24]))
+    evs = events(log)
+    t_rel = script_release_time(load_case(name)['keys'])
     for f in ab['forbid_events']:
-        hit = [t for t in toks if t.startswith(f)]
+        # a str forbids the event prefix at all times; {"event": E, "before": "script_release"} forbids E only before the script's
+        # own release (first key with "sprint": 0), with a 0.05 s tolerance; with no release step there is no allowance
+        if isinstance(f, dict):
+            if f.get('before') != 'script_release':
+                bad.append('unknown forbid rule %s' % (f,))
+                continue
+            name_f = f['event']
+            hit = [(t, k) for t, k in evs if k.startswith(name_f) and not (t_rel is not None and t >= t_rel - 0.05)]
+            label = '%s before script release at %.2f s' % (name_f, t_rel) if t_rel is not None else name_f
+        else:
+            name_f = f
+            hit = [(t, k) for t, k in evs if k.startswith(f)]
+            label = f
         if hit:
-            bad.append('forbidden event %s (%s x%d)' % (f, hit[0], len(hit)))
+            bad.append('forbidden event %s (%s x%d)' % (label, hit[0][1], len(hit)))
     st = csv_stats(os.path.join(d, name + '_brute.csv'))
     if st is None:
         bad.append('no telemetry csv')

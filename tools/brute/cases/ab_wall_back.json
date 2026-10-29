@@ -43,7 +43,10 @@
   ],
   "forbid_events": [
    "rescue",
-   "wall_release",
+   {
+    "event": "wall_release",
+    "before": "script_release"
+   },
    "wall_kick"
   ],
   "expect_travel_min_m": null,

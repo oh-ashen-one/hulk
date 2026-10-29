@@ -112,6 +112,35 @@ WH_UE_BIN="$W/ue_ticks.sh" expect "tick line in time (benign OriginX ensure igno
   "$REPO/unreal/WebHomage/Scripts/run_game.sh" "$W/rg2" -name t -quit 3 -timeout 30 -firstline 'WH_BRUTE (tick1|t=)' -firstline_s 3
 grep -q "label=run_game:t" "$W/last_launch" && ok "run_game stamped last_launch" || no "run_game stamp" "$W/last_launch"
 
+echo "== ab_ingame.py check: wall_release allowed only at/after the script's own release"
+python3 - "$REPO" "$W" <<'PYEOF' > "$W/out" 2>&1 && ok "wall_release before script release (t_rel-0.05) fails; at/after passes; rescue and wall_kick always fail" || no "wall_release before/after script release" "$W/out"
+import os, sys
+sys.path.insert(0, sys.argv[1] + '/tools/brute/v2r'); import ab_ingame as A
+W = sys.argv[2]; name = 'ab_wall_back'
+def case_dir(tag, rel_t, extra=()):
+    d = os.path.join(W, 'chk_' + tag, name); os.makedirs(d, exist_ok=True)
+    ev = ['WH_BRUTE t=3.03 wall_run_start', 'WH_BRUTE t=3.32 wall_punch L', 'WH_BRUTE t=4.33 wall_top_out', 'WH_BRUTE t=4.67 wall_catch',
+          'WH_BRUTE t=4.95 wall_punch L', 'WH_BRUTE t=7.05 wall_top_out', 'WH_BRUTE t=7.38 wall_catch']
+    if rel_t is not None: ev.append('WH_BRUTE t=%.2f wall_release pos (271.2 140.5 73.1) vel (-4.0 0.0 0.0)' % rel_t)
+    ev += list(extra) + ['WH_QUIT t=8.60']
+    open(os.path.join(d, name + '.log'), 'w').write('\n'.join(ev) + '\n')
+    open(os.path.join(d, name + '_brute.csv'), 'w').write('frame,x,y,z\n0,249,140,0\n1,271,140,73\n')
+    open(os.path.join(d, name + '.mp4'), 'w').write('x')
+    return d
+def problems(tag, rel_t, extra=()):
+    return A.check_case(case_dir(tag, rel_t, extra), name)
+rel = A.script_release_time(A.load_case(name)['keys'])
+assert rel == 7.5, rel
+assert not [p for p in problems('at', 7.50) if 'forbidden' in p], problems('at', 7.50)          # the script's own release
+assert not [p for p in problems('edge', 7.45) if 'forbidden' in p], problems('edge', 7.45)      # t_rel - 0.05 is allowed
+early = [p for p in problems('early', 7.44) if 'forbidden event wall_release' in p]               # just before it fails
+assert early and 'before script release at 7.50' in early[0], problems('early', 7.44)
+assert [p for p in problems('six', 6.00) if 'forbidden event wall_release' in p]                  # a release mid-climb fails
+assert [p for p in problems('kick', 7.50, ['WH_BRUTE t=7.20 wall_kick pos (1 1 1) vel (0 0 0)']) if 'wall_kick' in p]
+assert [p for p in problems('resc', 7.50, ['WH_BRUTE t=5.00 rescue']) if 'rescue' in p]
+print('release 7.50 ok; 7.45 ok; 7.44 fails; 6.00 fails; wall_kick and rescue fail')
+PYEOF
+
 echo; echo "gates test: $PASS passed, $FAIL failed  (work dir $W)"
 [ $FAIL = 0 ] && rm -rf "$W"
 exit $(( FAIL > 0 ))
