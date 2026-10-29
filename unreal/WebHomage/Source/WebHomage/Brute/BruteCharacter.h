@@ -157,6 +157,7 @@ private:
 
 	// ---- camera (control rotation drives yaw / pitch; own collision + speed FOV + trauma shake)
 	double CamLift = 0.0, CamAltPitch = -55.0, CamDistOverride = 0.0;
+	double CamViewYawOff = 0.0;   // script spawn.camYawOff: VIEW-only orbit (deg) for A/B captures; move, facing, aim keep CamYaw
 	double CamYaw = 0.0, CamPitch = -12.0, CamDist = 7.5, CamFov = 72.0, Trauma = 0.0, FovKick = 0.0, LookIdle = 0.0;
 	void UpdateCamera(float Dt);
 

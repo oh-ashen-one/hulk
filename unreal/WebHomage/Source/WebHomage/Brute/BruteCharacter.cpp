@@ -109,9 +109,10 @@ void ABruteCharacter::BeginPlay()
 	if (bWorldReady) { const double G = Floor(Pos, 3.0); if (G > -900.0 && G > Pos.Z - 4.0) Pos.Z = G; }
 	SetMode(EBruteMode::Ground);
 	CamYaw = FMath::RadiansToDegrees(Facing);
-	if (APlayerController* PC = Cast<APlayerController>(Controller)) PC->SetControlRotation(FRotator(CamPitch, CamYaw, 0.0));
+	if (APlayerController* PC = Cast<APlayerController>(Controller)) PC->SetControlRotation(FRotator(CamPitch, CamYaw + CamViewYawOff, 0.0));
 	UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE BeginPlay pos (%.1f %.1f %.1f) m facing %.0f deg, world boxes %d, script %d (%d keys), csv '%s'"),
 		Pos.X, Pos.Y, Pos.Z, FMath::RadiansToDegrees(Facing), World.Boxes.Num(), bScript ? 1 : 0, Script.Num(), *CsvPath);
+	if (CamViewYawOff != 0.0) UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE camYawOff %.0f (view-only camera orbit; move, facing, aim use the unrotated yaw)"), CamViewYawOff);
 }
 
 void ABruteCharacter::EndPlay(const EEndPlayReason::Type Reason)
@@ -242,6 +243,7 @@ void ABruteCharacter::LoadScript(const FString& Path)
 		(*Sp)->TryGetNumberField(TEXT("yaw"), SpawnYaw);
 		double CP; if ((*Sp)->TryGetNumberField(TEXT("camPitch"), CP)) CamPitch = CP;
 		double CD; if ((*Sp)->TryGetNumberField(TEXT("camDist"), CD)) CamDistOverride = CD;   // look-dev close-ups
+		double CO; if ((*Sp)->TryGetNumberField(TEXT("camYawOff"), CO)) CamViewYawOff = CO;   // view-only orbit (A/B angle captures)
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Keys;
 	if (Root->TryGetArrayField(TEXT("keys"), Keys))
@@ -822,7 +824,7 @@ void ABruteCharacter::UpdateCamera(float Dt)
 	if (Mode == EBruteMode::Wall) Pitch = FMath::Max(Pitch, 10.0);   // look up the facade
 	// boxed in (narrow gap / courtyard, the arm crushed to ~2 m): the view rises over him to look down instead (CamLift 0..1)
 	Pitch = FMath::Lerp(Pitch, CamAltPitch, CamLift);   // (under an awning / scaffold the better view is LOW: CamAltPitch picks)
-	const FRotator Rot(Pitch, CamYaw, 0.0);
+	const FRotator Rot(Pitch, CamYaw + CamViewYawOff, 0.0);
 	if (PC) PC->SetControlRotation(Rot);
 
 	// collision: sweep from the pivot back along the view; the arm never passes through a facade
@@ -860,7 +862,7 @@ void ABruteCharacter::UpdateCamera(float Dt)
 			// OutNz: impact normal Z of the solid that limits the arm (+1 = the floor / roof slab under him, ~0 = a wall, -1 = none / only leaves)
 			auto Room = [&](double P, double* OutNz = nullptr) {   // clear arm length at pitch P: real geometry, then tree crowns (no collision, the lens must not sit in leaves)
 				if (OutNz) *OutNz = -1.0;
-				const FVector Bk = -FRotator(P, CamYaw, 0.0).Vector(); FHitResult H2;
+				const FVector Bk = -FRotator(P, CamYaw + CamViewYawOff, 0.0).Vector(); FHitResult H2;
 				double D = CamDist;
 				if (W->SweepSingleByObjectType(H2, A, (Pivot + Bk * (CamDist + 0.4)) * 100.0, FQuat::Identity, FCollisionObjectQueryParams(ECC_WorldStatic), FCollisionShape::MakeSphere(30.f), Q))
 				{ D = H2.Distance / 100.0 - 0.3; if (OutNz) *OutNz = H2.ImpactNormal.Z; }
