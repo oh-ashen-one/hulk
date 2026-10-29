@@ -2,7 +2,10 @@
 
 Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
 
-Status 2026-10-29: authored, **nothing here has been run in the engine** (no launch, no capture, no build, no Blender). What was
+Update 2026-10-29 afternoon: the OLD set was captured (18 of 24 cases pass `check --label old`; grab and wall not yet run) and that
+run wedged the Studio (see "GPU gates" below): captures are now gated machine-wide, watched for a first frame and budgeted.
+
+Status 2026-10-29 (morning): authored, **nothing here has been run in the engine** (no launch, no capture, no build, no Blender). What was
 tested offline: the generator output, the camera trigonometry against the game's per-frame input sampling (30 and 60 fps), the
 `run` / `check` / `pack` logic against a stub capture script and against the real logs of earlier captures (m3_wallrun, v3_combat,
 m10_launcher, m4, m8). Everything that needs the real game is marked **unverified** below.
@@ -85,14 +88,37 @@ Not needed for today's `emu` groups, which keep working either way.
 6. The game layers the menace posture over Idle / Walk and the sprint lean over Run in both builds; the critic judges the result.
 7. Frame cadence: `-movie` uses a fixed 1/60 s step (the older non-movie cases used 1/30). Nothing here depends on that.
 
-## gpu_slot rules (do not bend them)
+## GPU gates, launch budget and gpu_slot rules (do not bend them)
 
+Why: on 2026-10-29 the Studio wedged for 7 hours: `run` made 15 cold `-game` editor launches back to back (about 34 GB each, 0 s gaps,
+GPU at 100 % at every launch) while Metal/torch trainers ran that the slot tool does not count; the WindowServer watchdog killed the
+session at 03:28 and the owner power-cycled at 10:16. Cold launches are allowed; unattended back-to-back launches into a busy GPU are not.
+
+- **Machine-wide gates** (`tools/gpu/gpu_gates.py`), checked by `ab_ingame.py run` before every case AND by `tools/brute/capture.sh`
+  before it asks for a slot (so a direct `capture.sh` call is gated too):
+  a. an `UnrealEditor` in ps state `E` (exiting) or `Z` -> refuse: "engine stuck exiting: machine-wide pause, notify the owner".
+  b. every GPU client is counted, not only Unreal: `UnrealEditor*`, `Godot*`, `Unity*` editors (not Unity Hub / shader compiler),
+     `*-Shipping`, `Blender` (not blender-thumbnailer), python whose command line contains `reader.train`, `video2rig` or `torch`.
+     Two or more -> refuse (ours would be the third) and print the list. A process title that is not a path counts by its first
+     word (`npm exec @coding-solo/godot-mcp` is npm, not Godot).
+  c. GPU `Device Utilization %` (`ioreg -r -d 1 -c IOAccelerator`) below 90 on three readings 5 s apart; otherwise poll every 15 s
+     for up to 10 min, then refuse.
+  d. at least 20 s since the last engine launch anywhere: `run_game.sh` stamps `~/.cache/gpu-slot/last_launch` right before it
+     starts the engine (and waits out the gap there too, inside the slot); anyone else may write the same file. Waits, never refuses.
+  e. unchanged: `~/.cache/gpu-slot/STREAMING` refuses (and stops `run` between cases); 11:00-13:00 ET refuses without `--ignore-window`.
+  `python3 tools/gpu/gpu_gates.py status` shows what the gates see; `check` exits 3 on a refusal.
+- **Frame-1 watchdog**: `capture.sh` passes `-firstline 'WH_BRUTE (tick1|t=)' -firstline_s 120` to `run_game.sh` for every Brute script
+  run. No matching line within 120 s of launch -> SIGTERM our engine, wait up to 60 s, SIGKILL only if still alive, exit 5 with
+  `NO FIRST FRAME`; never retried. The game logs `WH_BRUTE tick1 frame=<GFrameCounter> t=<world s>` on the Brute's first tick (log
+  only). The `OriginX <= OriginMax` ensure early in every log is benign and not a failure. (An old binary without the tick1 line would
+  trip the watchdog on `idle`, which has no `t=` events: rebuild first.)
+- **Launch budget** in `run`: at most 6 engine launches in any rolling hour from one run, and a 30 s cool-down after each case before
+  the next launch; every wait and every launch (`budget: launch n/6 this hour`) is printed. A full set of 24 cases therefore takes
+  about 3.3 h of wall time for about 58 min of engine time (`run --dry-run` prints the plan). Env `AB_LAUNCHES_PER_HOUR`,
+  `AB_COOLDOWN_S` exist for tests only.
 - Captures go **only** through `tools/brute/capture.sh` -> `tools/gpu/gpu_slot.sh capture` (shared capture class, `-RenderOffScreen`,
-  `t.MaxFPS` capped by `run_game.sh`). Never start `UnrealEditor` by hand, never open a window.
-- Hard global cap of **two** renderer engines (Unreal/Unity/Godot, other sessions included). `run` counts `UnrealEditor` processes
-  and refuses at two or more. One of ours at a time, strictly sequential; never run the old and new sets together.
-- **No captures while `~/.cache/gpu-slot/STREAMING` exists** (`run` refuses and also stops between cases if it appears). `run` also refuses
-  inside the owner's 11:00-13:00 ET window unless `--ignore-window` (use only if the owner says so).
+  `t.MaxFPS` capped by `run_game.sh`). Never start `UnrealEditor` by hand, never open a window. One of ours at a time, strictly
+  sequential; never run the old and new sets together.
 - The build step (`build_brute.py`) is a headless commandlet that takes a slot through the same wrapper; the editor/game of this project
   must be closed first. Content is shared: build, capture the whole set, then build the next. Never capture during a build.
 - `run` stops at the first failed case and never retries (never auto-relaunch after two crashes: after one failure read
@@ -100,14 +126,15 @@ Not needed for today's `emu` groups, which keep working either way.
   wait up to 60 s, SIGKILL only if it is still alive, and do not launch another until it is gone.
 - Disk is tight (APFS about 97 % full): one movie capture writes up to about 0.8 GB of PNG frames; `run` deletes them as soon as the mp4
   exists and refuses under 8 GB free. The mp4s are about 0.7 MB per game second.
+- Offline test of all of the above (fake ps / ioreg, stub engine, stub capture; never launches anything):
+  `tools/brute/v2r/test_ab_ingame_gates.sh`.
 
 ## GPU time
 
-`python3 tools/brute/v2r/ab_ingame.py list` prints it. 24 captures per set, 202 game seconds. Wall time per capture is modelled
-as 30 s (engine start, map load, exit) + 6.5 s per game second, a fit of the earlier 960x540 `-movie` captures (hold_s 56 s at 6 s
-of game time, 64 s at 5, 74 s at 9, 91 s at 10, 107 s at 11): about **34 min per set, 68 min for both sets**, one slot at a time.
-A third optional set (new clips with `-WHBruteNoClipTiming`, to isolate the look from the timing) adds another 34 min. The two builds
-are not included (not measured here).
+`python3 tools/brute/v2r/ab_ingame.py list` prints it. 24 captures per set, 202 game seconds. Wall time per capture is modelled as
+35 s (engine start and map load: log open to first tick in the old-set logs) + 13 s per game second at 960x540 `-movie` with `t.MaxFPS 30`
+(the 18 old-set captures of 2026-10-29 took 64-241 s, 16.5 s per game second including the start): about **58 min of engine time
+per set**, about 3.3 h wall per set with the launch budget. A third optional set (new clips with `-WHBruteNoClipTiming`) costs the same.
 
 ## Procedure
 

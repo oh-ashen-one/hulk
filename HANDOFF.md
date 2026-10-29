@@ -5,6 +5,16 @@
 > reader/train.log (the wedged attempt is reader/train-attempt1-wedged-step3400.log). The 10 missing OLD captures are being
 > rerun one at a time (STREAMING flag and the two-engine cap checked before every launch). Pipeline unchanged.
 
+**Machine rules (2026-10-29, after the 7-hour GPU wedge; details `tools/brute/v2r/ab_ingame.md` "GPU gates")**
+
+- Every engine capture goes through `tools/brute/capture.sh`, which runs the machine-wide gates first (`tools/gpu/gpu_gates.py`):
+  an `UnrealEditor` in state E/Z = machine-wide pause, notify the owner; 2+ GPU clients of any kind (engines, Blender, torch /
+  `reader.train` / video2rig python) = refuse; GPU util < 90 % on three readings 5 s apart (waits up to 10 min); 20 s since the
+  last launch anywhere (`~/.cache/gpu-slot/last_launch`). STREAMING flag and the 11-13 ET window as before.
+- Frame-1 watchdog: a Brute run with no `WH_BRUTE tick1` line within 120 s is SIGTERMed (60 s, SIGKILL last), exit 5, not retried.
+- `ab_ingame.py run` launch budget: at most 6 cold launches per rolling hour, 30 s cool-down between cases, printed as it goes.
+- Offline check of all of it: `tools/brute/v2r/test_ab_ingame_gates.sh` (never launches anything).
+
 
 **Goal:** re-animate and enhance every existing Brute clip through the video2rig route (first-frame MiniMax H3 video at 768P via fal.ai, joint reader, per-frame fit, Blender Action), as set out in the plan. [1]
 

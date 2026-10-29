@@ -14,21 +14,25 @@
 #   -window                           windowed on the secondary 1080x1920 display instead of offscreen
 #   -movie                            dump EVERY frame (-dumpmovie) with fixed 60 fps timestep
 #   -timeout 300                      hard kill after N wall seconds
+#   -firstline 'WH_BRUTE (tick1|t=)'  frame-1 watchdog (ERE on the log): no match within -firstline_s (default 120) wall seconds of
+#                                     launch -> SIGTERM, wait 60 s, SIGKILL last, exit 5 "NO FIRST FRAME" (2026-10-29 GPU wedge)
+# Every launch waits for the machine-wide 20 s launch gap and stamps ~/.cache/gpu-slot/last_launch (tools/gpu/gpu_gates.py).
 set -uo pipefail
 OUT="$1"; shift
-MAP=/Game/Maps/Foundation_Test; RES=3840x2160; SHOTS=""; PERF=""; QUIT=""; NAME=shot; EXEC=""; WINDOW=0; MOVIE=0; TIMEOUT=300; EXTRA=()
+MAP=/Game/Maps/Foundation_Test; RES=3840x2160; SHOTS=""; PERF=""; QUIT=""; NAME=shot; EXEC=""; WINDOW=0; MOVIE=0; TIMEOUT=300; FIRSTLINE=""; FIRSTLINE_S=120; EXTRA=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -map) MAP="$2"; shift 2;; -res) RES="$2"; shift 2;; -shots) SHOTS="$2"; shift 2;;
     -perf) PERF="$2"; shift 2;; -quit) QUIT="$2"; shift 2;; -name) NAME="$2"; shift 2;;
     -exec) EXEC="$2"; shift 2;; -window) WINDOW=1; shift;; -movie) MOVIE=1; shift;;
-    -timeout) TIMEOUT="$2"; shift 2;; --) shift; EXTRA=("$@"); break;;
+    -timeout) TIMEOUT="$2"; shift 2;; -firstline) FIRSTLINE="$2"; shift 2;; -firstline_s) FIRSTLINE_S="$2"; shift 2;;
+    --) shift; EXTRA=("$@"); break;;
     *) echo "unknown option $1"; exit 1;;
   esac
 done
 PROJ_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 UPROJECT="$PROJ_DIR/WebHomage.uproject"
-UE="/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor"
+UE="${WH_UE_BIN:-/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor}"   # WH_UE_BIN: test stub only
 mkdir -p "$OUT"; OUT="$(cd "$OUT" && pwd)"
 W="${RES%x*}"; H="${RES#*x}"
 ARGS=("$UPROJECT" "$MAP" -game -ResX="$W" -ResY="$H" -ForceRes -NoCrashReports -NoSound -NoVSync
@@ -55,15 +59,33 @@ else EXECS="t.MaxFPS ${WH_CAPTURE_MAXFPS:-20}"; fi
 ARGS+=(-ExecCmds="$EXECS")
 if [ "$MOVIE" = 1 ]; then rm -f "$PROJ_DIR"/Saved/Screenshots/MacEditor/MovieFrame*.png; ARGS+=(-benchmark -fps=60 -dumpmovie); fi
 ARGS+=("${EXTRA[@]+"${EXTRA[@]}"}")
-echo "run_game: out=$OUT res=$RES quit=$QUIT window=$WINDOW movie=$MOVIE"
+echo "run_game: out=$OUT res=$RES quit=$QUIT window=$WINDOW movie=$MOVIE timeout=$TIMEOUT firstline=${FIRSTLINE:-off}"
+GATES="$PROJ_DIR/../../tools/gpu/gpu_gates.py"
+if [ -f "$GATES" ]; then python3 "$GATES" gap; python3 "$GATES" stamp --label "run_game:$NAME"; fi   # machine-wide 20 s launch gap
 "$UE" "${ARGS[@]}" > "$OUT/$NAME.stdout.txt" 2>&1 &
 PID=$!
 START=$(date +%s)
+# stop OUR engine only: SIGTERM, wait up to 60 s, SIGKILL only if it is still alive (RULES.md 2026-09-29 panic)
+stop_engine() { kill -TERM $PID 2>/dev/null; for _ in $(seq 1 60); do kill -0 $PID 2>/dev/null || return 0; sleep 1; done; kill -0 $PID 2>/dev/null && kill -9 $PID; }
+NOFIRST=0; SEEN=0
 while kill -0 $PID 2>/dev/null; do
-  if [ $(( $(date +%s) - START )) -gt "$TIMEOUT" ]; then echo "timeout: stopping $PID (SIGTERM, wait 60 s, SIGKILL last; RULES.md 2026-09-29 panic)"; kill -TERM $PID; for _ in $(seq 1 60); do kill -0 $PID 2>/dev/null || break; sleep 1; done; kill -0 $PID 2>/dev/null && kill -9 $PID; break; fi
+  EL=$(( $(date +%s) - START ))
+  if [ -n "$FIRSTLINE" ] && [ "$SEEN" = 0 ]; then
+    if grep -qE "$FIRSTLINE" "$OUT/$NAME.log" 2>/dev/null; then SEEN=1; echo "run_game: first frame after ${EL} s"
+    elif [ "$EL" -gt "$FIRSTLINE_S" ]; then
+      echo "NO FIRST FRAME: no line matching '$FIRSTLINE' in $OUT/$NAME.log within ${FIRSTLINE_S} s of launch; stopping $PID (SIGTERM, wait 60 s, SIGKILL last)"
+      NOFIRST=1; stop_engine; break
+    fi
+  fi
+  if [ "$EL" -gt "$TIMEOUT" ]; then echo "timeout: stopping $PID (SIGTERM, wait 60 s, SIGKILL last; RULES.md 2026-09-29 panic)"; stop_engine; break; fi
   sleep 2
 done
 wait $PID 2>/dev/null; RC=$?
+if [ "$NOFIRST" = 1 ]; then
+  echo "NO FIRST FRAME: engine stopped (rc $RC); not retried. Read $OUT/$NAME.log (the 'OriginX <= OriginMax' ensure is benign)."
+  [ "$MOVIE" = 1 ] && rm -f "$PROJ_DIR"/Saved/Screenshots/MacEditor/MovieFrame*.png
+  exit 5
+fi
 grep -E "WH_(PERF|SHOT|QUIT)" "$OUT/$NAME.log" | sed 's/^.*LogWebHomage: Display: //'
 if [ "$MOVIE" = 1 ]; then
   # -dumpmovie writes Saved/Screenshots/MacEditor/MovieFrameNNNNN.png (one per rendered frame, game time fixed at 1/60 s)

@@ -5,7 +5,7 @@
   python3 tools/brute/v2r/ab_ingame.py list                      cases, clips covered, GPU time estimate
   python3 tools/brute/v2r/ab_ingame.py gen [--check]             (re)write tools/brute/cases/ab_<group>_<angle>.json
   python3 tools/brute/v2r/ab_ingame.py run --label old|new [--cases a,b] [--extra "-WHBruteNoClipTiming"] [--dry-run]
-  python3 tools/brute/v2r/ab_ingame.py check <set_dir>           telemetry gates for every case of one set
+  python3 tools/brute/v2r/ab_ingame.py check <set_dir> | --label old   telemetry gates for every case of one set
   python3 tools/brute/v2r/ab_ingame.py pack --old DIR --new DIR --out DIR [--seed N] [--dry-run]
 
 Read tools/brute/v2r/ab_ingame.md first. `run` calls tools/brute/capture.sh (GPU slot, capture class) one case at a time and never
@@ -23,6 +23,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -36,6 +37,12 @@ CPP = os.path.join(REPO, 'unreal', 'WebHomage', 'Source', 'WebHomage', 'Brute', 
 RES = '960x540'               # the size the earlier -movie evidence (v2_loco, v3_combat, m3_wallrun) used
 MAP = '/Game/Maps/Manhattan'  # every spawn below is a Manhattan coordinate taken from an existing case
 MIN_FREE_GB = 8.0             # one movie capture writes ~0.5-1 GB of PNG frames before they are encoded and deleted
+# launch budget (owner 2026-10-29 after the 7-hour GPU wedge: 15 cold launches back to back, 0 s gaps): one `run` makes at most
+# LAUNCHES_PER_HOUR engine launches in any rolling hour and waits COOLDOWN_S after each case before the next launch.
+LAUNCHES_PER_HOUR = int(os.environ.get('AB_LAUNCHES_PER_HOUR', '6'))
+COOLDOWN_S = float(os.environ.get('AB_COOLDOWN_S', '30'))
+sys.path.insert(0, os.path.join(REPO, 'tools', 'gpu'))
+import gpu_gates  # noqa: E402  (machine-wide gates: stuck engine, GPU clients, util, launch gap)
 
 # ---------------------------------------------------------------------------------------------------------------- CAMERA
 # Offsets are the camera's VIEW yaw relative to the character's heading, degrees clockwise seen from above (Unreal yaw: +X -> +Y).
@@ -130,8 +137,8 @@ G = [
          travel=None, zmax=60.0,
          keys=lambda o: spin(o) + [{'t': 2.0, 'sprint': 1, 'move': mv(o, 1.0)}, {'t': 7.5, 'sprint': 0, 'move': [0, 0]}]),
 ]
-SEC_PER_CASE = 30.0     # engine start + map load + shutdown (hold_s of the earlier movie captures: 56 s at 6 s of game time ... 107 s at 11 s)
-SEC_PER_GAME_S = 6.5    # wall seconds per game second at 960x540 -movie (fit of those captures)
+SEC_PER_CASE = 35.0     # engine start + map load (log open -> first tick: 35 s in the 2026-10-29 old-set captures)
+SEC_PER_GAME_S = 13.0   # wall s per game s at 960x540 -movie, t.MaxFPS 30 (the 18 old-set run.json: 64-241 s, 16.5 s per game s incl. start)
 
 
 def js(o):
@@ -212,26 +219,72 @@ def now_et():
         return datetime.datetime.now()
 
 
-def unreal_count():
-    out = subprocess.run(['ps', '-axo', 'command'], capture_output=True, text=True).stdout.splitlines()
-    return sum(1 for ln in out if ln.split() and 'UnrealEditor' in os.path.basename(ln.split()[0]))
-
-
-def preflight(a):
-    """Reasons not to launch a capture right now (empty list = go). The STREAMING flag is absolute; the 11:00-13:00 ET window can be overridden."""
+def preflight(a, wait=True):
+    """Reasons not to launch a capture right now (empty list = go). The STREAMING flag is absolute; the 11:00-13:00 ET window can be
+    overridden. Then the machine-wide gates (tools/gpu/gpu_gates.py): an UnrealEditor stuck exiting (E/Z) refuses; >= 2 GPU clients of
+    any kind (engines, Blender, torch / video2rig trainers) refuse; GPU util must be < 90 on three readings 5 s apart (polls up to
+    10 min when wait); the 20 s gap after the last launch anywhere is waited out (wait) or reported (no wait)."""
     why = []
     if os.path.exists(STREAM_FLAG):
         why.append('%s exists (owner is streaming, mode in the file): no captures' % STREAM_FLAG)
     t = now_et()
     if 11 <= t.hour < 13 and not getattr(a, 'ignore_window', False):
         why.append('now %s is inside the owner stream window 11:00-13:00 ET (override only with --ignore-window if the owner said so)' % t.strftime('%H:%M %Z'))
-    n = unreal_count()
-    if n >= 2:
-        why.append('%d UnrealEditor processes already running (global cap two; ours would be the third)' % n)
     free = shutil.disk_usage(os.path.expanduser('~')).free / 1e9
     if free < MIN_FREE_GB:
         why.append('only %.1f GB free (< %.0f GB for one movie capture)' % (free, MIN_FREE_GB))
-    return why
+    if why:
+        return why   # no point sampling the GPU for minutes when we refuse anyway
+    return gpu_gates.gates(wait=wait, log=lambda m: print(m, flush=True))
+
+
+class Budget:
+    """At most LAUNCHES_PER_HOUR launches in any rolling hour from this run, COOLDOWN_S after each case. Prints every wait."""
+    def __init__(self, per_hour=None, cooldown=None, clock=time.time, sleep=time.sleep):
+        self.per_hour = LAUNCHES_PER_HOUR if per_hour is None else per_hour
+        self.cooldown = COOLDOWN_S if cooldown is None else cooldown
+        self.clock, self.sleep = clock, sleep
+        self.launches, self.last_end = [], None
+
+    def wait_turn(self, name):
+        if self.last_end is not None:
+            rest = self.cooldown - (self.clock() - self.last_end)
+            if rest > 0:
+                print('budget: cool-down %.0f s before %s' % (rest, name), flush=True)
+                self.sleep(rest)
+        while True:
+            now = self.clock()
+            recent = [t for t in self.launches if now - t < 3600.0]
+            if len(recent) < self.per_hour:
+                break
+            rest = 3600.0 - (now - min(recent)) + 1.0
+            print('budget: %d/%d launches in the last hour, waiting %.0f s (%.1f min) before %s' % (len(recent), self.per_hour, rest, rest / 60, name), flush=True)
+            self.sleep(rest)
+
+    def launched(self, name):
+        now = self.clock()
+        self.launches.append(now)
+        n = len([t for t in self.launches if now - t < 3600.0])
+        print('budget: launch %d/%d this hour (%s, run total %d)' % (n, self.per_hour, name, len(self.launches)), flush=True)
+
+    def ended(self):
+        self.last_end = self.clock()
+
+
+def schedule(walls, per_hour=None, cooldown=None):
+    """Simulated start offsets (s) of launches with these wall times under the budget (dry-run planning)."""
+    t = [0.0]
+    b = Budget(per_hour, cooldown, clock=lambda: t[0], sleep=lambda s: t.__setitem__(0, t[0] + s))
+    import contextlib, io
+    starts = []
+    with contextlib.redirect_stdout(io.StringIO()):
+        for w in walls:
+            b.wait_turn('')
+            starts.append(t[0])
+            b.launched('')
+            t[0] += w
+            b.ended()
+    return starts, t[0]
 
 
 def select(names):
@@ -253,13 +306,16 @@ def cmd_run(a):
     patched = 'camYawOff' in open(CPP).read()
     extra = shlex.split(a.extra) if a.extra else []
     root = os.path.join(SET_ROOT, a.label)
-    why = preflight(a)
+    why = preflight(a, wait=not a.dry_run)
     if why and not a.dry_run:
         print('REFUSED:\n  ' + '\n  '.join(why))
         return 3
     if why:
         print('(dry run, these would refuse a real run)\n  ' + '\n  '.join(why))
     skipped = []
+    budget = Budget()
+    print('launch budget: at most %d launches per rolling hour, %.0f s cool-down between cases' % (budget.per_hour, budget.cooldown))
+    planned = []
     os.makedirs(root, exist_ok=True) if not a.dry_run else None
     for name, (g, an, off) in sel:
         if g['kind'] == 'patch' and not patched and not a.force_unpatched:
@@ -272,13 +328,17 @@ def cmd_run(a):
         cmd = [CAPTURE_SH, name, '-map', MAP, '-movie', '-res', RES, '-quit', str(g['quit'])] + (['--'] + extra if extra else [])
         print('RUN %s  (est %.0f s)\n    %s' % (name, est_seconds(g['quit']), ' '.join(shlex.quote(c) for c in cmd)))
         if a.dry_run:
+            planned.append(est_seconds(g['quit']))
             continue
+        budget.wait_turn(name)
         again = preflight(a)
         if again:
             print('STOP before %s:\n  %s\n  resume later with --cases (finished cases are skipped)' % (name, '\n  '.join(again)))
             return 3
         t0 = datetime.datetime.now()
+        budget.launched(name)
         rc = subprocess.run(cmd).returncode
+        budget.ended()
         src = os.path.join(CAP_ROOT, name)
         mp4 = os.path.join(src, name + '.mp4')
         if not os.path.exists(mp4):
@@ -291,6 +351,10 @@ def cmd_run(a):
         json.dump({'label': a.label, 'extra': extra, 'rc': rc, 'started': t0.isoformat(timespec='seconds'),
                    'wall_s': round((datetime.datetime.now() - t0).total_seconds(), 1)}, open(os.path.join(dst, 'run.json'), 'w'))
         print('DONE %s rc=%d -> %s' % (name, rc, dst))
+    if planned:
+        starts, end = schedule(planned)
+        print('\nplan: %d launches, est engine time %.0f min, finished after ~%.0f min with the budget (%d/h, %.0f s cool-down)'
+              % (len(planned), sum(planned) / 60, end / 60, budget.per_hour, budget.cooldown))
     if skipped:
         print('\nSKIPPED (need the camYawOff patch, not in %s): %s' % (os.path.relpath(CPP, REPO), ', '.join(skipped)))
         return 2
@@ -377,6 +441,10 @@ def check_case(d, name):
 
 
 def cmd_check(a):
+    if not a.set_dir:
+        if not a.label:
+            sys.exit('check: give <set_dir> or --label old|new')
+        a.set_dir = os.path.join(SET_ROOT, a.label)
     rc = 0
     for g, an, off in cases():
         name = case_name(g, an)
@@ -504,7 +572,8 @@ def main():
     p.add_argument('--force-unpatched', action='store_true', help='run the camYawOff cases anyway (all three angles = rear view)')
     p.set_defaults(f=cmd_run)
     p = sub.add_parser('check')
-    p.add_argument('set_dir')
+    p.add_argument('set_dir', nargs='?', default='')
+    p.add_argument('--label', default='', help='instead of set_dir: %s/<label>' % SET_ROOT)
     p.set_defaults(f=cmd_check)
     p = sub.add_parser('pack')
     p.add_argument('--old', required=True)

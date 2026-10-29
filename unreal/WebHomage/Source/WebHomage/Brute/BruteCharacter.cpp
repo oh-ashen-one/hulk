@@ -332,6 +332,8 @@ void ABruteCharacter::Tick(float Dt)
 	Animate(Dt);
 	UpdateCamera(Dt);
 
+	// frame-1 watchdog line (run_game.sh -firstline, 2026-10-29 GPU wedge): proves the game is ticking; log only, no gameplay effect
+	if (Frame == 0) UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE tick1 frame=%llu t=%.3f script %d"), (unsigned long long)GFrameCounter, GetWorld()->GetTimeSeconds(), bScript ? 1 : 0);
 	TelT += Dt; ++Frame;
 	if (!CsvPath.IsEmpty())
 	{

@@ -1,0 +1,117 @@
+#!/bin/bash
+# Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
+# Offline test of the GPU launch gates (tools/gpu/gpu_gates.py), their use in capture.sh / ab_ingame.py, the launch budget and the
+# run_game.sh frame-1 watchdog. Fake ps / ioreg via GPU_GATES_FAKE_*; a stub engine (WH_UE_BIN) and a stub capture.sh. NEVER starts an
+# engine: capture.sh is only run with CAPTURE_GATES_ONLY=1, ab_ingame.py only with a stub AB_CAPTURE_SH.
+#   tools/brute/v2r/test_ab_ingame_gates.sh        (exit 0 = all pass)
+set -u
+REPO=$(cd "$(dirname "$0")/../../.." && pwd)
+G="$REPO/tools/gpu/gpu_gates.py"
+W=$(mktemp -d "${TMPDIR:-/tmp}/abgates.XXXXXX")
+export GPU_GATES_LAST_LAUNCH="$W/last_launch" GPU_GATES_SAMPLE_S=0 GPU_GATES_POLL_S=0.2 GPU_GATES_MAX_WAIT_S=1 GPU_GATES_MIN_GAP_S=0
+PASS=0; FAIL=0
+ok() { echo "PASS  $1"; PASS=$((PASS+1)); }
+no() { echo "FAIL  $1"; FAIL=$((FAIL+1)); [ -n "${2:-}" ] && sed 's/^/      | /' "$2" | head -20; }
+expect() {  # name want_rc want_regex cmd...
+  local n="$1" rc="$2" re="$3"; shift 3
+  "$@" > "$W/out" 2>&1; local got=$?
+  if [ "$got" = "$rc" ] && grep -qE "$re" "$W/out"; then ok "$n"; else no "$n (rc $got, want $rc, /$re/)" "$W/out"; fi
+}
+ps_json() { python3 -c 'import json,sys; print(json.dumps([dict(zip(("pid","stat","comm","args"),r.split("|"))) for r in sys.argv[1:]]))' "$@" > "$W/ps.json"; }
+UE='/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor'
+export GPU_GATES_FAKE_PS="$W/ps.json" GPU_GATES_FAKE_UTIL=10
+
+echo "== a. stuck engine"
+ps_json "101|S|/sbin/launchd|launchd" "202|SE|$UE|$UE x.uproject -game"
+expect "UnrealEditor in state E refuses" 3 "engine stuck exiting: machine-wide pause, notify the owner" python3 "$G" check
+ps_json "202|Z|$UE|$UE"
+expect "UnrealEditor in state Z refuses" 3 "engine stuck exiting" python3 "$G" check
+
+echo "== b. GPU client count"
+ps_json "1|S|/Applications/Blender.app/Contents/MacOS/blender-thumbnailer|thumb" "2|S|npm exec @coding-solo/godot-mcp|npm exec @coding-solo/godot-mcp" \
+        "3|S|/usr/bin/python3|python3 -m http.server" "4|S|/Applications/Unity Hub.app/Contents/MacOS/Unity Hub|hub"
+expect "thumbnailer, godot-mcp title, plain python, Unity Hub are not clients" 0 "gpu_gates: go" python3 "$G" check
+ps_json "1|S|/Applications/Blender.app/Contents/MacOS/Blender|Blender -b x.blend" "2|S|/opt/homebrew/bin/python3.12|python -m reader.train --epochs 9"
+expect "Blender + reader.train trainer = 2 clients refuses and lists them" 3 "2 GPU clients already running.*" python3 "$G" check
+grep -q "reader.train" "$W/out" && grep -q "Blender -b" "$W/out" && ok "refusal lists both processes" || no "refusal lists both processes" "$W/out"
+ps_json "1|S|/Users/x/.venv/bin/python|python train.py --device mps  # torch" "2|R|/opt/homebrew/bin/godot|godot --path game"
+expect "torch python + Godot refuses" 3 "2 GPU clients" python3 "$G" check
+ps_json "1|S|$UE|$UE a.uproject" "2|S|/x/Game-Mac-Shipping|Game-Mac-Shipping"
+expect "UnrealEditor + *-Shipping refuses" 3 "2 GPU clients" python3 "$G" check
+ps_json "1|S|/Library/Python/bin/python3|python3 -m video2rig fit proj clip"
+expect "one client (video2rig) is allowed" 0 "1 other GPU client.*" python3 "$G" check
+
+echo "== c. GPU utilization"
+ps_json "1|S|/sbin/launchd|launchd"
+GPU_GATES_FAKE_UTIL=95 expect "util 95 on every reading refuses after the wait" 3 "GPU util 95/95/95 % not < 90" python3 "$G" check
+GPU_GATES_FAKE_UTIL=40,95,40,40,40,40 GPU_GATES_MAX_WAIT_S=5 expect "one high reading in three -> waits, then passes" 0 "waiting.*gpu_gates: util 40/40/40|util 40/40/40.*" python3 "$G" check
+grep -q "waiting" "$W/out" && ok "the wait is printed" || no "the wait is printed" "$W/out"
+GPU_GATES_FAKE_UTIL=89 expect "util 89 passes" 0 "util 89/89/89" python3 "$G" check
+GPU_GATES_SAMPLE_S=0.3 GPU_GATES_FAKE_UTIL=10 bash -c "t0=\$(python3 -c 'import time;print(time.time())'); python3 '$G' check >/dev/null; python3 -c \"import time,sys; sys.exit(0 if time.time()-\$t0 >= 0.6 else 1)\"" \
+  && ok "three readings are SAMPLE_S apart (2 gaps)" || no "three readings are SAMPLE_S apart"
+
+echo "== d. 20 s launch gap"
+python3 -c "import time; open('$W/last_launch','w').write('%.3f pid=1 label=other\n' % (time.time()-1))"
+GPU_GATES_MIN_GAP_S=3 expect "--no-wait reports a recent launch" 3 "last engine launch only 1 s ago" python3 "$G" check --no-wait
+t0=$(date +%s); GPU_GATES_MIN_GAP_S=3 python3 "$G" check > "$W/out" 2>&1; rc=$?; dt=$(( $(date +%s) - t0 ))
+[ $rc = 0 ] && [ $dt -ge 1 ] && grep -q "waiting 2 s for the 3 s gap" "$W/out" && ok "check waits out the gap (${dt} s) then goes" || no "gap wait" "$W/out"
+python3 "$G" stamp --label test && grep -q "label=test" "$W/last_launch" && ok "stamp writes epoch + label" || no "stamp"
+rm -f "$W/last_launch"
+
+echo "== capture.sh is gated too (CAPTURE_GATES_ONLY=1: never launches)"
+ps_json "202|SE|$UE|$UE"
+CAPTURE_GATES_ONLY=1 expect "capture.sh refuses on a stuck engine" 3 "REFUSED by the GPU gates" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+ps_json "1|S|/Applications/Blender.app/Contents/MacOS/Blender|Blender" "2|S|$UE|$UE"
+CAPTURE_GATES_ONLY=1 expect "capture.sh refuses at 2 clients" 3 "REFUSED by the GPU gates" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+ps_json "1|S|/sbin/launchd|launchd"
+CAPTURE_GATES_ONLY=1 expect "capture.sh clean machine: gates pass, nothing launched" 0 "gates passed \(CAPTURE_GATES_ONLY=1" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+
+echo "== ab_ingame.py run: preflight + budget (stub capture.sh)"
+cat > "$W/capstub.sh" <<'EOF'
+#!/bin/bash
+echo "STUB capture $*" >> "$AB_STUB_LOG"; mkdir -p "$AB_CAP_ROOT/$1"; echo x > "$AB_CAP_ROOT/$1/$1.mp4"; exit 0
+EOF
+chmod +x "$W/capstub.sh"
+export AB_CAPTURE_SH="$W/capstub.sh" AB_CAP_ROOT="$W/cap" AB_SET_ROOT="$W/set" AB_STREAM_FLAG="$W/STREAMING" AB_STUB_LOG="$W/stub.log"
+ps_json "202|SE|$UE|$UE"
+expect "run refuses on a stuck engine, stub never called" 3 "REFUSED:.*|engine stuck exiting" python3 "$REPO/tools/brute/v2r/ab_ingame.py" run --label new --cases idle_front --ignore-window
+[ ! -f "$W/stub.log" ] && ok "no capture call after a refusal" || no "no capture call after a refusal" "$W/stub.log"
+ps_json "1|S|/sbin/launchd|launchd"
+AB_COOLDOWN_S=2 expect "two cases: budget lines + cool-down printed" 0 "budget: cool-down 2 s before ab_idle_left" python3 "$REPO/tools/brute/v2r/ab_ingame.py" run --label new --cases idle_front,idle_left --ignore-window
+grep -q "budget: launch 2/6 this hour" "$W/out" && ok "launch count printed" || no "launch count printed" "$W/out"
+[ "$(wc -l < "$W/stub.log" | tr -d ' ')" = 2 ] && ok "stub called once per case" || no "stub called once per case" "$W/stub.log"
+python3 - "$REPO" <<'EOF' > "$W/out" 2>&1 && ok "Budget: 6/h rolling window + cool-down (fake clock)" || no "Budget fake clock" "$W/out"
+import sys; sys.path.insert(0, sys.argv[1] + '/tools/brute/v2r'); import ab_ingame as A
+t = [0.0]; b = A.Budget(6, 30, clock=lambda: t[0], sleep=lambda s: t.__setitem__(0, t[0] + s)); starts = []
+for i in range(8):
+    b.wait_turn('c%d' % i); starts.append(t[0]); b.launched('c%d' % i); t[0] += 100; b.ended()
+gaps = [starts[i+1] - starts[i] for i in range(7)]
+assert all(g >= 130 for g in gaps), gaps                       # 100 s case + 30 s cool-down
+assert starts[6] - starts[0] >= 3600, starts                   # the 7th launch waits for the first to age out of the hour
+assert all(sum(1 for s in starts if s0 <= s < s0 + 3600) <= 6 for s0 in starts), starts
+print('starts', [round(s) for s in starts])
+EOF
+
+echo "== run_game.sh frame-1 watchdog (stub engine via WH_UE_BIN)"
+cat > "$W/ue_silent.sh" <<'EOF'
+#!/bin/bash
+for a in "$@"; do case "$a" in -abslog=*) L="${a#-abslog=}";; esac; done
+echo "LogInit: loading" > "$L"; trap 'echo "LogExit: SIGTERM" >> "$L"; exit 0' TERM; while :; do sleep 0.2; done
+EOF
+cat > "$W/ue_ticks.sh" <<'EOF'
+#!/bin/bash
+for a in "$@"; do case "$a" in -abslog=*) L="${a#-abslog=}";; esac; done
+echo "LogOutputDevice: Error: Ensure condition failed: OriginX <= OriginMax" > "$L"; sleep 1
+echo "LogWebHomage: Display: WH_BRUTE tick1 frame=1 t=0.017 script 1" >> "$L"; sleep 4; echo "WH_QUIT t=4.00" >> "$L"; exit 0
+EOF
+chmod +x "$W/ue_silent.sh" "$W/ue_ticks.sh"
+WH_UE_BIN="$W/ue_silent.sh" expect "no tick line -> NO FIRST FRAME, SIGTERM, exit 5" 5 "NO FIRST FRAME: engine stopped" \
+  "$REPO/unreal/WebHomage/Scripts/run_game.sh" "$W/rg1" -name t -quit 3 -timeout 30 -firstline 'WH_BRUTE (tick1|t=)' -firstline_s 3
+grep -q "LogExit: SIGTERM" "$W/rg1/t.log" && ok "the stub got SIGTERM (not SIGKILL)" || no "SIGTERM first" "$W/rg1/t.log"
+WH_UE_BIN="$W/ue_ticks.sh" expect "tick line in time (benign OriginX ensure ignored) -> normal exit" 0 "first frame after" \
+  "$REPO/unreal/WebHomage/Scripts/run_game.sh" "$W/rg2" -name t -quit 3 -timeout 30 -firstline 'WH_BRUTE (tick1|t=)' -firstline_s 3
+grep -q "label=run_game:t" "$W/last_launch" && ok "run_game stamped last_launch" || no "run_game stamp" "$W/last_launch"
+
+echo; echo "gates test: $PASS passed, $FAIL failed  (work dir $W)"
+[ $FAIL = 0 ] && rm -rf "$W"
+exit $(( FAIL > 0 ))
