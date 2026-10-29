@@ -28,7 +28,10 @@
 #         contact (slap arm lowering, smash fists held in the street, uppercut held overhead), not a settle event: the
 #         measured settle times (striking hand under 10 % of peak) are reported in 'measured' for reference.
 #   rate  today's, unless the clip's length differs from today's clip by more than 20 %: then rate, lead and recovery are all
-#         scaled by new/old length, so the hit lands at the same game-time and the act lasts as long as today.
+#         scaled by new/old length, so the hit lands at the same game-time and the act lasts as long as today. 2026-10-29: when
+#         the scaled lead does not fit before the contact (from would go below 0) the rate is solved so (Hit - From) / Rate still
+#         equals today's contact time (before, the clamp made the press connect up to 37 % sooner); a length-scaled Throw uses
+#         the general lead rule (its old 'starts at 0' made the v2r Throw connect 0.6 s later).
 #   Grab  hit = to = arms fully overhead (both hands above the head by 85 % of the clip's maximum); from = to - today's span.
 #   Carry from = Grab's overhead time, to = the last frame (the settled overhead hold the game freezes on; rate 0).
 #   Jump  JChargeLo = the hips' highest point before the crouch; JChargeHi = deepest crouch (hips over the lowest foot) before
@@ -37,7 +40,10 @@
 #   Wall  WAttachImpact = first frame both fists are within 8 cm of their highest point above the head (analyze_clips.py);
 #         AttachStart = impact - 0.5 s (analyze_clips 'reach'); WClimbImpact2 = the next fist-height peak after the first
 #         impact (the second fist going in); WClimbLo / WClimbHi = those two impacts with today's offsets (0.55 = 0.70 - 0.15,
-#         1.85 = 1.50 + 0.35).
+#         1.85 = 1.50 + 0.35). 2026-10-29: each wall clip also writes its own times (WAttachImpact2 / WAttachEnd on WallAttach,
+#         WClimbImpact1 on WallClimb): the game used WClimbHi as the attach clip's end and both impacts on both timelines, correct
+#         only while WallClimb reused the WallAttach file. A WallClimb shorter than half of today's 5 s clip is a single climb
+#         cycle (the video2rig loop): WClimbLo/Hi = the whole clip, WClimbImpact1/2 = the left / right hand's height peak.
 #   Land  LandStart = first frame the lowest foot is back on the floor (within 3 cm of its settled height).
 #   StopLunge  LungeStart = coil start (the hips' last high point before the final descent) - 0.567 s: the offset is calibrated
 #         on brute_v5 (coil 1.567 s, today's start 1.0 s) because no event marks today's mid-stride start; flagged 'cal'.
@@ -60,7 +66,8 @@ TODAY_ACT = {   # key: (clip, From, To, Rate, Hit)
     'Grab': ('Lift', 0.60, 2.40, 2.0, 2.40), 'Carry': ('Lift', 2.40, 2.95, 0.0, 0.0),
     'Throw': ('Throw', 0.00, 1.46, 1.25, 0.45)}
 TODAY_SEG = {'JChargeLo': 0.17, 'JChargeHi': 2.45, 'JLaunch': 2.55, 'JApex': 3.17, 'AttachStart': 0.2, 'WAttachImpact': 0.7,
-             'WClimbImpact2': 1.5, 'WClimbLo': 0.55, 'WClimbHi': 1.85, 'LandStart': 0.35, 'LungeStart': 1.0}
+             'WClimbImpact2': 1.5, 'WClimbLo': 0.55, 'WClimbHi': 1.85, 'LandStart': 0.35, 'LungeStart': 1.0,
+             'WAttachImpact2': 1.5, 'WAttachEnd': 1.85, 'WClimbImpact1': 0.7}
 TODAY_LEN = {'PunchL': 1.533, 'PunchR': 1.533, 'Slap': 2.467, 'Clap': 1.567, 'Smash': 2.967, 'Lift': 3.0, 'Throw': 1.467,
              'Uppercut': 2.467, 'Jump': 5.0, 'WallAttach': 5.0, 'WallClimb': 5.0, 'Land': 2.967, 'StopLunge': 2.833}
 TODAY_HIT = {'PunchL': 1.0, 'PunchR': 1.0, 'Slap': 0.9, 'Clap': 0.7, 'Smash': 1.17, 'Uppercut': 0.6, 'Throw': 0.45, 'Land': 0.5}
@@ -73,7 +80,8 @@ ACTS = {'PunchR': ('PunchR', 'peak', 'Right'), 'PunchL': ('PunchL', 'peak', 'Lef
         'Throw': ('Throw', 'peak', None)}
 SEG_CLIP = {'JChargeLo': 'Jump', 'JChargeHi': 'Jump', 'JLaunch': 'Jump', 'JApex': 'Jump', 'AttachStart': 'WallAttach',
             'WAttachImpact': 'WallAttach', 'WClimbImpact2': 'WallClimb', 'WClimbLo': 'WallClimb', 'WClimbHi': 'WallClimb',
-            'LandStart': 'Land', 'LungeStart': 'StopLunge'}
+            'LandStart': 'Land', 'LungeStart': 'StopLunge',
+            'WAttachImpact2': 'WallAttach', 'WAttachEnd': 'WallAttach', 'WClimbImpact1': 'WallClimb'}
 
 
 # ================================================================================================ sampling (Blender only)
@@ -205,14 +213,21 @@ def measure(tel):
         h, p, s, vmax = strike(c, det, hand)
         k = scale_for(clip, c)
         hit = c.t(h)
-        frm = 0.0 if key == 'Throw' else max(0.0, hit - (H0 - F0) * k)
-        to = hit + (T0 - H0) * k
-        ft, st, bout = follow_and_bout(c, p, s, vmax)
+        rate = R0 * k
+        # Throw starts at 0 only on the old take (it begins on the carry pose it is cross-faded from); a length-scaled clip (the
+        # video2rig Throw starts in the stance and holds overhead first) takes the general lead rule
+        frm = 0.0 if key == 'Throw' and k == 1.0 else max(0.0, hit - (H0 - F0) * k)
         why = []
+        if hit - (H0 - F0) * k < 0.0 and not (key == 'Throw' and k == 1.0) and hit > 0.0:
+            # the scaled lead does not fit before the contact: keep the contact's game-time ((Hit - From) / Rate = today's) by solving
+            # the rate instead of letting the press connect sooner; the recovery span follows the same rate
+            rate = hit / ((H0 - F0) / R0); why.append('lead clamped: rate solved for today\'s contact time')
+        to = hit + (T0 - H0) / R0 * rate
+        ft, st, bout = follow_and_bout(c, p, s, vmax)
         if bout is not None and to > c.t(bout): to = c.t(bout); why.append('next bout %.3f' % c.t(bout))
         if to > c.dur: to = c.dur; why.append('clip end')
         if to < c.t(ft): to = min(c.dur, c.t(ft)); why.append('follow-through %.3f' % c.t(ft))
-        acts[key] = {'clip': clip, 'from': round(frm, 3), 'to': round(to, 3), 'rate': round(R0 * k, 3), 'hit': round(hit, 3)}
+        acts[key] = {'clip': clip, 'from': round(frm, 3), 'to': round(to, 3), 'rate': round(rate, 3), 'hit': round(hit, 3)}
         meas[clip].update(hit=hit, hit_hand=s, hit_by=det, follow_end=c.t(ft), settle10=c.t(st) if st is not None else None,
                           next_bout=c.t(bout) if bout is not None else None, len_scale=round(k, 3))
         flags[key] = ', '.join(why)
@@ -221,7 +236,8 @@ def measure(tel):
     if c and 'overhead' in meas['Lift']:
         k = scale_for('Lift', c); oh = meas['Lift']['overhead']
         _, F0, T0, R0, _ = TODAY_ACT['Grab']
-        acts['Grab'] = {'clip': 'Lift', 'from': round(max(0.0, oh - (T0 - F0) * k), 3), 'to': oh, 'rate': round(R0 * k, 3), 'hit': oh}
+        g_rate = R0 * k if oh - (T0 - F0) * k >= 0.0 else oh / ((T0 - F0) / R0)   # clamped lead: solve the rate (contact game-time kept)
+        acts['Grab'] = {'clip': 'Lift', 'from': round(max(0.0, oh - (T0 - F0) * k), 3), 'to': oh, 'rate': round(g_rate, 3), 'hit': oh}
         acts['Carry'] = {'clip': 'Lift', 'from': oh, 'to': round(c.t(c.n - 2), 3), 'rate': 0.0}
         flags['Grab'] = flags['Carry'] = ''
 
@@ -249,8 +265,21 @@ def measure(tel):
         while j + 1 < hi2 and hh[j + 1] <= hh[j]: j += 1      # down from the first impact
         i2 = argmax(hh, j, hi2)
         meas[wn].update(impact=c.t(imp), impact2=c.t(i2))
-        if wn == 'WallAttach': segs.update(WAttachImpact=c.t(imp), AttachStart=round(max(0.0, c.t(imp) - 0.5), 4))
-        else: segs.update(WClimbImpact2=c.t(i2), WClimbLo=round(max(0.0, c.t(imp) - CLIMB_LO_OFF), 4),
+        # each clip writes its own fist-in times and segment end (they were one clip until the keep-the-best mix; C++ keeps
+        # WAttachImpact2 / WAttachEnd / WClimbImpact1 at today's shared values when absent)
+        if wn == 'WallAttach': segs.update(WAttachImpact=c.t(imp), AttachStart=round(max(0.0, c.t(imp) - 0.5), 4),
+                                           WAttachImpact2=c.t(i2), WAttachEnd=round(min(c.dur, c.t(i2) + CLIMB_HI_OFF), 4))
+        elif c.dur < 0.5 * TODAY_LEN['WallClimb']:
+            # a single hand-over-hand climb CYCLE (video2rig WallClimb, a refined loop of ~1.2 s), not the 5 s two-fist slam: the
+            # game loops the whole cycle and each fist goes in when it arrives at its height peak (first frame within 2 cm of that hand's max after its low point, cyclic;
+            # WImpacts K=0 -> left hand, K=1 -> right hand, as WallPunchFx(K % 2) / BHand[0] = LeftHand)
+            pk = {}
+            for hb in ('LeftHand', 'RightHand'):
+                hz = [c.z(i, hb) - c.z(i, 'Head') for i in range(c.n - 1)]; m = max(hz); lo = hz.index(min(hz))   # last = first frame
+                pk[hb] = next(k % (c.n - 1) for k in range(lo, lo + c.n - 1) if hz[k % (c.n - 1)] > m - 0.02)   # arrival after its low
+            meas[wn].update(mode='cycle', impact_left=c.t(pk['LeftHand']), impact_right=c.t(pk['RightHand']))
+            segs.update(WClimbImpact1=c.t(pk['LeftHand']), WClimbImpact2=c.t(pk['RightHand']), WClimbLo=0.0, WClimbHi=round(c.dur, 4))
+        else: segs.update(WClimbImpact1=c.t(imp), WClimbImpact2=c.t(i2), WClimbLo=round(max(0.0, c.t(imp) - CLIMB_LO_OFF), 4),
                           WClimbHi=round(min(c.dur, c.t(i2) + CLIMB_HI_OFF), 4))
     c = clips.get('Land')
     if c:

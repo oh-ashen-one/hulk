@@ -1339,7 +1339,8 @@ bool ABruteCharacter::BuildClipRig()
 		UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %d / %d corrective morphs (mesh has %d)"), Found, 2 * NCorr, M->GetMorphTargets().Num());
 	}
 	LoadClipTiming(Names);
-	WImpacts = { WAttachImpact, WClimbImpact2 };
+	WImpacts = { WClimbImpact1, WClimbImpact2 };
+	WAttachImpacts = { WAttachImpact, WAttachImpact2 };
 	bClipRig = true;
 	Play(CIdle, 0.05, Clips[CIdle]->GetPlayLength(), true, 1.f, 0.f, TEXT("idle"));
 	UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: v2 clip body (%d bones, %d clips, forward yaw %.0f deg, height %.0f cm x %.2f, foot z %.1f)"),
@@ -1386,7 +1387,8 @@ void ABruteCharacter::LoadClipTiming(const TCHAR* const* ClipNames)
 		const FSeg Fs[] = { { TEXT("JChargeLo"), &JChargeLo, nullptr }, { TEXT("JChargeHi"), &JChargeHi, nullptr }, { TEXT("JLaunch"), &JLaunch, nullptr },
 			{ TEXT("JApex"), &JApex, nullptr }, { TEXT("AttachStart"), nullptr, &AttachStart }, { TEXT("WAttachImpact"), &WAttachImpact, nullptr },
 			{ TEXT("WClimbImpact2"), &WClimbImpact2, nullptr }, { TEXT("WClimbLo"), &WClimbLo, nullptr }, { TEXT("WClimbHi"), &WClimbHi, nullptr },
-			{ TEXT("LandStart"), nullptr, &LandStart }, { TEXT("LungeStart"), nullptr, &LungeStart } };
+			{ TEXT("LandStart"), nullptr, &LandStart }, { TEXT("LungeStart"), nullptr, &LungeStart },
+			{ TEXT("WAttachImpact2"), &WAttachImpact2, nullptr }, { TEXT("WAttachEnd"), &WAttachEnd, nullptr }, { TEXT("WClimbImpact1"), &WClimbImpact1, nullptr } };
 		for (const auto& KV : (*SO)->Values)
 		{
 			const FString Key(KV.Key);
@@ -1437,8 +1439,8 @@ void ABruteCharacter::AnimateClips(float Dt)
 	}
 	else if (Mode == EBruteMode::Wall)
 	{	// slam into the facade fists first, then every climb step is the same slam again, one fist after the other
-		if (PrevAnimMode != EBruteMode::Wall) Play(CWallAttach, 0.0, WClimbHi, false, 1.7f, 0.08f, TEXT("attach"), AttachStart);
-		else if (Cur.Tag == TEXT("attach") && Cur.T >= WClimbHi - 0.02) Play(CWallClimb, WClimbLo, WClimbHi, true, 1.6f, 0.12f, TEXT("climb"));
+		if (PrevAnimMode != EBruteMode::Wall) Play(CWallAttach, 0.0, WAttachEnd, false, 1.7f, 0.08f, TEXT("attach"), AttachStart);
+		else if (Cur.Tag == TEXT("attach") && Cur.T >= WAttachEnd - 0.02) Play(CWallClimb, WClimbLo, WClimbHi, true, 1.6f, 0.12f, TEXT("climb"));
 		if (Cur.Tag == TEXT("climb")) Cur.Rate = Vel.Z > 1.0 ? FMath::Clamp(1.6f * float(Vel.Z) / WallClimbSpeed, 1.2f, 2.2f) : 0.f;   // latched + idle: hang on the fists
 	}
 	else if (Mode == EBruteMode::Air)
@@ -1480,12 +1482,15 @@ void ABruteCharacter::AnimateClips(float Dt)
 
 	// fists hitting the wall (attach + every climb loop): a crater where each fist lands
 	if ((Cur.Tag == TEXT("attach") || Cur.Tag == TEXT("climb")) && Cur.Tag == PrevTag)
-		for (int32 K = 0; K < WImpacts.Num(); ++K)
+	{
+		const TArray<float>& Imp = Cur.Tag == TEXT("attach") ? WAttachImpacts : WImpacts;   // each clip's own fist-in times
+		for (int32 K = 0; K < Imp.Num(); ++K)
 		{
-			const double Ti = WImpacts[K];
+			const double Ti = Imp[K];
 			const bool bHit = Cur.T >= PrevT ? (PrevT < Ti && Ti <= Cur.T) : (Ti > PrevT || Ti <= Cur.T);
 			if (bHit) { WallPunchFx(K % 2); if (K == 0 && Cur.Tag == TEXT("attach")) WallPunchFx(1); }   // the attach slam drives both fists in
 		}
+	}
 
 	// ---- sample + crossfade
 	SampleClip(Cur, PoseA);

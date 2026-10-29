@@ -1,0 +1,400 @@
+{
+ "note": "Brute clip timing measured from the clips by tools/brute/v2r/measure_timing.py; read by ABruteCharacter (LoadClipTiming). Absent keys keep the C++ constants. Times in clip seconds.",
+ "source": "/Users/midir/hulk-scratch/brute_v2r_candidate/out/telemetry.json",
+ "date": "2026-10-29",
+ "clips": [
+  "Clap",
+  "Fall",
+  "Idle",
+  "Land",
+  "Lift",
+  "PunchL",
+  "PunchR",
+  "Run",
+  "Slap",
+  "Throw",
+  "Uppercut",
+  "Walk",
+  "WallClimb"
+ ],
+ "acts": {
+  "PunchR": {
+   "clip": "PunchR",
+   "from": 0.0,
+   "to": 2.648,
+   "rate": 4.461,
+   "hit": 1.533
+  },
+  "PunchL": {
+   "clip": "PunchL",
+   "from": 0.0,
+   "to": 2.361,
+   "rate": 3.976,
+   "hit": 1.367
+  },
+  "Slap": {
+   "clip": "Slap",
+   "from": 0.926,
+   "to": 3.233,
+   "rate": 3.101,
+   "hit": 2.167
+  },
+  "Clap": {
+   "clip": "Clap",
+   "from": 0.0,
+   "to": 2.267,
+   "rate": 2.455,
+   "hit": 1.133
+  },
+  "Uppercut": {
+   "clip": "Uppercut",
+   "from": 0.609,
+   "to": 1.733,
+   "rate": 2.875,
+   "hit": 1.533
+  },
+  "Throw": {
+   "clip": "Throw",
+   "from": 2.579,
+   "to": 5.067,
+   "rate": 4.317,
+   "hit": 4.133
+  },
+  "Grab": {
+   "clip": "Lift",
+   "from": 0.0,
+   "to": 3.2667,
+   "rate": 3.63,
+   "hit": 3.2667
+  },
+  "Carry": {
+   "clip": "Lift",
+   "from": 3.2667,
+   "to": 6.2,
+   "rate": 0.0
+  }
+ },
+ "segments": {
+  "WClimbImpact1": 0.6,
+  "WClimbImpact2": 1.1,
+  "WClimbLo": 0.0,
+  "WClimbHi": 1.2333,
+  "LandStart": 0.0
+ },
+ "hit_table": {
+  "PunchL": 1.3667,
+  "PunchR": 1.5333,
+  "Slap": 2.1667,
+  "Clap": 1.1333,
+  "Uppercut": 1.5333,
+  "Throw": 4.1333,
+  "Land": 1.2667
+ },
+ "measured": {
+  "Clap": {
+   "dur": 4.6667,
+   "peak_Left": [
+    0.8667,
+    6.32
+   ],
+   "peak_Right": [
+    0.8667,
+    6.03
+   ],
+   "hips_low": 1.1333,
+   "feet_off": null,
+   "feet_on": null,
+   "hit": 1.1333,
+   "hit_hand": "Left",
+   "hit_by": "gap",
+   "follow_end": 1.1,
+   "settle10": 1.1333,
+   "next_bout": null,
+   "len_scale": 2.978
+  },
+  "Fall": {
+   "dur": 4.6667,
+   "peak_Left": [
+    0.4667,
+    0.39
+   ],
+   "peak_Right": [
+    2.8667,
+    0.54
+   ],
+   "hips_low": 0.5667,
+   "feet_off": 0.4,
+   "feet_on": 2.0
+  },
+  "Idle": {
+   "dur": 6.2,
+   "peak_Left": [
+    0.7,
+    0.3
+   ],
+   "peak_Right": [
+    0.4,
+    0.4
+   ],
+   "hips_low": 0.5667,
+   "feet_off": null,
+   "feet_on": null
+  },
+  "Jump": {
+   "dur": 5.0,
+   "peak_Left": [
+    2.6,
+    12.64
+   ],
+   "peak_Right": [
+    2.6,
+    12.41
+   ],
+   "hips_low": 2.5,
+   "overhead": 2.7333,
+   "feet_off": 0.1,
+   "feet_on": null,
+   "launch_fastest": 2.6333
+  },
+  "Land": {
+   "dur": 5.1,
+   "peak_Left": [
+    1.0667,
+    8.32
+   ],
+   "peak_Right": [
+    1.0667,
+    7.46
+   ],
+   "hips_low": 2.3333,
+   "feet_off": 0.7,
+   "feet_on": 1.1,
+   "hit": 1.2667,
+   "hit_by": "ground",
+   "feet_land": 0.0
+  },
+  "Lift": {
+   "dur": 6.2333,
+   "peak_Left": [
+    3.0333,
+    4.44
+   ],
+   "peak_Right": [
+    5.2,
+    4.6
+   ],
+   "hips_low": 1.4667,
+   "overhead": 3.2667,
+   "feet_off": null,
+   "feet_on": null
+  },
+  "PunchL": {
+   "dur": 5.0667,
+   "peak_Left": [
+    1.3667,
+    12.96
+   ],
+   "peak_Right": [
+    1.3667,
+    6.85
+   ],
+   "hips_low": 1.5,
+   "feet_off": 1.1333,
+   "feet_on": 1.2667,
+   "hit": 1.3667,
+   "hit_hand": "Left",
+   "hit_by": "peak",
+   "follow_end": 1.5333,
+   "settle10": 1.5667,
+   "next_bout": null,
+   "len_scale": 3.305
+  },
+  "PunchR": {
+   "dur": 5.0667,
+   "peak_Left": [
+    1.5333,
+    6.2
+   ],
+   "peak_Right": [
+    1.5333,
+    11.04
+   ],
+   "hips_low": 1.1333,
+   "feet_off": 1.0667,
+   "feet_on": 1.2,
+   "hit": 1.5333,
+   "hit_hand": "Right",
+   "hit_by": "peak",
+   "follow_end": 1.7667,
+   "settle10": 1.8,
+   "next_bout": null,
+   "len_scale": 3.305
+  },
+  "Run": {
+   "dur": 3.7,
+   "peak_Left": [
+    0.7333,
+    10.26
+   ],
+   "peak_Right": [
+    2.5667,
+    11.0
+   ],
+   "hips_low": 3.5333,
+   "feet_off": 0.0667,
+   "feet_on": 0.3
+  },
+  "Slap": {
+   "dur": 5.1,
+   "peak_Left": [
+    2.1667,
+    3.94
+   ],
+   "peak_Right": [
+    2.2667,
+    1.65
+   ],
+   "hips_low": 3.6667,
+   "feet_off": null,
+   "feet_on": null,
+   "hit": 2.1667,
+   "hit_hand": "Left",
+   "hit_by": "peak",
+   "follow_end": 3.0,
+   "settle10": 3.1333,
+   "next_bout": 3.2333,
+   "len_scale": 2.067
+  },
+  "Smash": {
+   "dur": 2.9667,
+   "peak_Left": [
+    1.1,
+    36.51
+   ],
+   "peak_Right": [
+    1.1,
+    36.5
+   ],
+   "hips_low": 1.1333,
+   "overhead": 1.0,
+   "feet_off": null,
+   "feet_on": null,
+   "hit": 1.1667,
+   "hit_hand": "Left",
+   "hit_by": "ground",
+   "follow_end": 1.2,
+   "settle10": 1.2,
+   "next_bout": null,
+   "len_scale": 1.0
+  },
+  "StopLunge": {
+   "dur": 2.8333,
+   "peak_Left": [
+    0.2333,
+    8.09
+   ],
+   "peak_Right": [
+    0.9667,
+    7.72
+   ],
+   "hips_low": 2.7333,
+   "feet_off": 0.3333,
+   "feet_on": null,
+   "coil": 1.5667
+  },
+  "Throw": {
+   "dur": 5.0667,
+   "peak_Left": [
+    4.1333,
+    16.95
+   ],
+   "peak_Right": [
+    4.1333,
+    17.19
+   ],
+   "hips_low": 2.6667,
+   "overhead": 0.7667,
+   "feet_off": 1.7667,
+   "feet_on": 2.2667,
+   "hit": 4.1333,
+   "hit_hand": "Right",
+   "hit_by": "peak",
+   "follow_end": 4.2,
+   "settle10": 4.3,
+   "next_bout": null,
+   "len_scale": 3.454
+  },
+  "Uppercut": {
+   "dur": 5.0667,
+   "peak_Left": [
+    1.7,
+    5.11
+   ],
+   "peak_Right": [
+    1.5333,
+    9.94
+   ],
+   "hips_low": 1.8333,
+   "feet_off": 4.5667,
+   "feet_on": null,
+   "hit": 1.5333,
+   "hit_hand": "Right",
+   "hit_by": "peak",
+   "follow_end": 1.7333,
+   "settle10": 1.8,
+   "next_bout": 1.7333,
+   "len_scale": 2.054
+  },
+  "Walk": {
+   "dur": 3.1,
+   "peak_Left": [
+    2.5,
+    3.45
+   ],
+   "peak_Right": [
+    1.6667,
+    3.34
+   ],
+   "hips_low": 1.3667,
+   "feet_off": 0.2,
+   "feet_on": 0.6
+  },
+  "WallAttach": {
+   "dur": 5.0,
+   "peak_Left": [
+    0.5667,
+    6.83
+   ],
+   "peak_Right": [
+    0.5,
+    7.04
+   ],
+   "hips_low": 4.6,
+   "overhead": 0.7,
+   "feet_off": 0.2667,
+   "feet_on": null,
+   "impact": 0.7,
+   "impact2": 1.4667
+  },
+  "WallClimb": {
+   "dur": 1.2333,
+   "peak_Left": [
+    0.4667,
+    4.49
+   ],
+   "peak_Right": [
+    1.0,
+    3.95
+   ],
+   "hips_low": 0.9667,
+   "overhead": 1.0,
+   "feet_off": 0.3667,
+   "feet_on": null,
+   "impact": 1.0,
+   "impact2": 1.2333,
+   "mode": "cycle",
+   "impact_left": 0.6,
+   "impact_right": 1.1
+  }
+ }
+}

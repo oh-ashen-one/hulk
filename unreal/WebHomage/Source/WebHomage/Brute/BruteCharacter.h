@@ -219,7 +219,12 @@ private:
 	float JChargeLo = 0.17f, JChargeHi = 2.45f, JLaunch = 2.55f, JApex = 3.17f, JFallHi = 3.6f, LandFrom = 1.6f, WAttachImpact = 0.7f, WClimbLo = 0.55f, WClimbHi = 1.85f;
 	// segment starts AnimateClips used as literals (same values, same types); Config/BruteClipTiming.json 'segments' may override all of these
 	double AttachStart = 0.2, LandStart = 0.35, LungeStart = 1.0; float WClimbImpact2 = 1.5f;
-	TArray<float> WImpacts;   // fist-in times inside the climb segment (a wall crater at each)
+	// 2026-10-29: WallAttach and WallClimb were ONE clip (WallClimb reused the attach slam), so the attach segment's end and both fists'
+	// impact times were shared between them. A keep-the-best mix (video2rig WallClimb, old WallAttach) needs each clip's own times:
+	// the attach timeline uses WAttachImpact / WAttachImpact2 / WAttachEnd, the climb loop WClimbImpact1 / WClimbImpact2 / WClimbLo-Hi.
+	// Defaults = today's shared values, so behaviour is unchanged unless Config/BruteClipTiming.json sets them per clip.
+	float WAttachImpact2 = 1.5f, WAttachEnd = 1.85f, WClimbImpact1 = 0.7f;
+	TArray<float> WImpacts, WAttachImpacts;   // fist-in times inside the climb / attach segment (a wall crater at each)
 	bool bWasCharging = false, bChargeCracked = false;
 	EBruteMode PrevAnimMode = EBruteMode::Ground;
 	bool BuildClipRig();

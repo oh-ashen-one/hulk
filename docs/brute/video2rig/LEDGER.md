@@ -199,3 +199,50 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
 - **Gate**: `GATE reader-air PASS median_px front 2.85 side 3.30 (bar <4)`.
 - **Next**: Fall (airborne loop) fitted through `tools/brute/v2r/run_clip.sh Local/video2rig/brute-air fall_v1 Fall --loop --fork-dir /Users/midir/video2rig-brute-air`; the fork worktree carries the lock_feet floor fix (head f8ba690).
 
+
+### Phase 5 candidate set (2026-10-29, Opus 5.5 high)
+
+- **Motion dir** `~/hulk-scratch/brute_v2r_candidate/motion/` = symlinks to the 16 old files the shipped game was built from
+  (`~/hulk-scratch/brute_v2/motion/*.glb`, brute_v5 of 2026-10-18 19:03, rigged `~/hulk-scratch/brute_corr/brute_rigged_corr.glb`)
+  + the 13 v2r GLBs. `export_clip.py --self-test`: `EXPORT_SELFTEST PASS`, v2r wins for all 17 when both exist.
+- **Assemble** `~/hulk-scratch/brute_v2r_candidate/out/` (brute.glb, brute_anim.fbx, clips.json, clips_meta.json): 17 clips, src v2r
+  for Idle Walk Run WallClimb PunchL PunchR Slap Clap Lift Throw Uppercut Fall Land, old for StopLunge Jump WallAttach Smash.
+  First pass cut the v2r PunchL/PunchR to 0-46 and Lift to 19-109 (the old-take TRIM table; PunchR's contact is frame 46.2):
+  fixed in assemble_motion.py (TRIM skipped for v2r sources), reassembled. Shipped brute_v5 untouched.
+- **Timing** (`measure_timing.py`, telemetry `out/telemetry.json`): `Config/BruteClipTiming.json` written for the v2r clips only.
+  Rule fixes first (they changed gameplay otherwise): the scaled lead clamped at 0 made punches / Clap / Grab connect 15-37 %
+  sooner, so the rate is now solved for today's contact game-time; a length-scaled Throw no longer starts at 0 (it connected at
+  0.96 s instead of 0.36 s); a WallClimb shorter than 2.5 s is one climb cycle (loop the whole clip, each fist at its own arrival)
+  instead of 0.85-1.23 s of it. Contact game-time (Hit-From)/Rate equals today's for every act. Deltas vs today:
+
+| act / seg | today From / To / Rate / Hit | candidate From / To / Rate / Hit | contact s today -> new | act s today -> new | note |
+| --- | --- | --- | --- | --- | --- |
+| PunchR | 0.45 / 1.40 / 1.6 / 1.00 | 0.000 / 2.648 / 4.461 / 1.533 | 0.344 -> 0.344 | 0.594 -> 0.594 | rate solved (lead clamped) |
+| PunchL | 0.45 / 1.40 / 1.6 / 1.00 | 0.000 / 2.361 / 3.976 / 1.367 | 0.344 -> 0.344 | 0.594 -> 0.594 | rate solved |
+| Slap | 0.30 / 1.70 / 1.5 / 0.90 | 0.926 / 3.233 / 3.101 / 2.167 | 0.400 -> 0.400 | 0.933 -> 0.744 | To cut by next bout 3.233 |
+| Clap | 0.10 / 1.30 / 1.3 / 0.70 | 0.000 / 2.267 / 2.455 / 1.133 | 0.462 -> 0.462 | 0.923 -> 0.923 | rate solved |
+| Uppercut | 0.15 / 1.40 / 1.4 / 0.60 | 0.609 / 1.733 / 2.875 / 1.533 | 0.321 -> 0.321 | 0.893 -> 0.391 | To cut by next bout 1.733 |
+| Grab | 0.60 / 2.40 / 2.0 / 2.40 | 0.000 / 3.267 / 3.630 / 3.267 | 0.900 -> 0.900 | 0.900 -> 0.900 | rate solved |
+| Carry | 2.40 / 2.95 / 0 | 3.267 / 6.200 / 0 | - | - | frozen at From (overhead) |
+| Throw | 0.00 / 1.46 / 1.25 / 0.45 | 2.579 / 5.067 / 4.317 / 4.133 | 0.360 -> 0.360 | 1.168 -> 0.576 | To = clip end |
+| Smash | 0.40 / 2.00 / 1.4 / 1.17 | not written (old clip) | | | |
+| WClimbLo / WClimbHi | 0.55 / 1.85 | 0.000 / 1.233 | | | whole climb cycle |
+| WClimbImpact1 / 2 | 0.70 / 1.50 | 0.600 (L) / 1.100 (R) | | | |
+| LandStart | 0.35 | 0.000 | | | v2r Land starts with the feet on the floor |
+| attach: WAttachImpact / WAttachImpact2 / WAttachEnd / AttachStart | 0.70 / 1.50 / 1.85 / 0.20 | not written (old WallAttach keeps them) | | | |
+
+  `--check-today 0.15` on the candidate: CHECK FAILED, worst 3.68 s before / large after the fixes (expected: 3-5 s clips). On the old
+  brute_v5 (`--all`): CHECK OK, worst 0.100 s, unchanged. Playback rates 2.5-4.5x on the combat clips: the v2r takes have 1-4 s
+  wind-ups where the old ones had 0.3-0.6 s; the critic should judge whether that reads as sped up.
+- **C++** `BruteCharacter`: LoadClipTiming covered every act field and every segment key, and absent keys keep the constants. One real
+  gap: WallAttach and WallClimb were one file, so the attach segment ended on WClimbHi and both timelines used both impacts. With
+  a v2r WallClimb + old WallAttach the climb clip's times would have driven the old attach. New members WAttachImpact2 / WAttachEnd /
+  WClimbImpact1 (defaults = today's shared values 1.5 / 1.85 / 0.7) and per-timeline impact lists; JSON keys accepted. Editor
+  rebuilt headless (`build_editor.sh`: `OK: UnrealEditor.modules -> libUnrealEditor-WebHomage.dylib`).
+- **analyze_clips** (`out/../BruteAnim_candidate.json`, not copied into Config): body forward from the new Idle is 10.7 deg off the
+  old one (0.220,-0.976 vs 0.035,-0.999); the game measures BodyYaw from Idle's feet at t=0.5 and applies it to every clip,
+  old ones included. Stance hips 1.75 m vs 1.81 m. Jump/WallAttach markers unchanged (old clips).
+- **Corrective morphs** (`mesh_corrective_verify.py --norender`, every 2nd frame, `BRUTE_ANIM_GLB` = candidate; per-frame means,
+  old -> new): Throw creases 25 -> 162, folded tris 281 -> 581, stretch>2 713 -> 1108 (worst; new overhead hold + arch); Clap creases
+  28 -> 38, max stretch 12.7 -> 25.3; Run creases 30 -> 39; Uppercut 29 -> 37 creases but folds 206 -> 92. Better: PunchL/R, Slap,
+  Lift, Land, Walk, Fall (folds -60 to -91 %). Logs `~/hulk-scratch/brute_v2r_candidate/corr/{old,new}.log`.
