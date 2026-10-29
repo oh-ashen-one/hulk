@@ -1,14 +1,9 @@
 ## video2rig animation upgrade — in progress (Claude Fable 5.1 overnight run, 2026-10-29)
 
-> **2026-10-29 04:30 EDT — PAUSED: Studio GPU wedged machine-wide.** Every Metal/MPS trainer (this reader at step 3400/9000,
-> two Markhor readers) is blocked in `MTLCommandBuffer waitUntilCompleted`; a fresh 512x512 MPS matmul hangs; ioreg shows
-> Device/Renderer/Tiler 100 %, recoveryCount 0; WindowServer + loginwindow restarted 03:28:37 (desktop session died).
-> Timeline: trainers stalled ~03:15-03:17 (a second engine, singapore source-world-r3, launched 03:14 beside this task's
-> capture engine and three MPS trainers); this task's ab_combat_tq engine hung at frame 0 at 03:23 and is still stuck
-> exiting (PID 68330, state ?E, unkillable). Nothing was restarted. Per the machine rule (dead desktop = pause, push WIP,
-> notify owner) the owner was pinged; a watch probes MPS every 5 min and the task resumes on its own when the GPU answers.
-> If a reboot happens: relaunch the reader with the same command (train.log keeps the step count; it restarts from step 0
-> unless prepare resumes — check `reader/` first), then rerun the 10 missing OLD captures (see LEDGER).
+> **2026-10-29 10:40 EDT — RESUMED after reboot.** The Studio rebooted at 10:16 EDT (GPU wedge of 03:15, see LEDGER); MPS
+> answers again. The ground reader restarted from step 0 with `--keep` (renders reused) into reader/prepare-9000-r2.log and
+> reader/train.log (the wedged attempt is reader/train-attempt1-wedged-step3400.log). The 10 missing OLD captures are being
+> rerun one at a time (STREAMING flag and the two-engine cap checked before every launch). Pipeline unchanged.
 
 
 **Goal:** re-animate and enhance every existing Brute clip through the video2rig route (first-frame MiniMax H3 video at 768P via fal.ai, joint reader, per-frame fit, Blender Action), as set out in the plan. [1]

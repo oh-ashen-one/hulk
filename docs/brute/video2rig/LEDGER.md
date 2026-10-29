@@ -103,7 +103,11 @@ Checked by Haiku 5.5 (high) with the commands shown. No spend, no renderer launc
 - Captures: ~/hulk-scratch/ab-ingame/old/<case>/ (104 MB). Contact sheets angles_idle.png, angles_combat.png: three angles
   differ, camYawOff active. Caveat for the critic: combat_front has him partly cut off at the bottom edge by a car and the
   low camera; HUD help text and the damage counter are burned into every capture (same for old and new, so blind-fair).
-- Remaining 10 cases rerun once PID 68330 is gone; a second combat_tq hang = that case is dropped from both sets.
+- 03:15-03:17 the whole GPU wedged (three MPS readers blocked in waitUntilCompleted, a fresh MPS matmul hung, ioreg 100 %
+  util / recoveryCount 0, WindowServer + loginwindow reset 03:28:37). Last launches before it: this task's capture engine +
+  a second engine (singapore source-world-r3, 03:14) + three MPS trainers. Owner pinged; Studio rebooted 10:16 EDT.
+- Ground reader lost its run (no checkpoints before the end): relaunched 10:37 with --keep, 9000 steps from 0.
+- Remaining 10 OLD cases rerun after the reboot; a second combat_tq hang = that case is dropped from both sets.
 
 ### Timing data to re-measure (before values, 2026-10-29)
 
