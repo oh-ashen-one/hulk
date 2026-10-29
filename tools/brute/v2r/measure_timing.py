@@ -27,11 +27,12 @@
 #         never before the follow-through ends (striking hand under 25 % of its peak). Today's To is a chosen hold after
 #         contact (slap arm lowering, smash fists held in the street, uppercut held overhead), not a settle event: the
 #         measured settle times (striking hand under 10 % of peak) are reported in 'measured' for reference.
-#   rate  today's, unless the clip's length differs from today's clip by more than 20 %: then rate, lead and recovery are all
-#         scaled by new/old length, so the hit lands at the same game-time and the act lasts as long as today. 2026-10-29: when
-#         the scaled lead does not fit before the contact (from would go below 0) the rate is solved so (Hit - From) / Rate still
-#         equals today's contact time (before, the clamp made the press connect up to 37 % sooner); a length-scaled Throw uses
-#         the general lead rule (its old 'starts at 0' made the v2r Throw connect 0.6 s later).
+#   rate  today's, unless the clip's length differs from today's clip by more than 20 % (a video2rig take): then today's GAME-TIME
+#         windows are kept exactly and only the playback rate changes (director rule 2026-10-29, game_window()): Rate =
+#         min(today's x length ratio, 1.6), lowered until From = Hit - lead_game x Rate >= 0 and To = Hit + recovery_game x Rate
+#         <= the clip end, never below 1.0 (then clamped and flagged). lead_game / recovery_game = today's (Hit-From)/Rate and
+#         (To-Hit)/Rate. No bout / follow-through clamp on those (annotated only). Throw too (its old take started at 0 on the
+#         carry pose; the v2r take starts in the stance). `--selftest-rule` checks the rule on synthetic numbers.
 #   Grab  hit = to = arms fully overhead (both hands above the head by 85 % of the clip's maximum); from = to - today's span.
 #   Carry from = Grab's overhead time, to = the last frame (the settled overhead hold the game freezes on; rate 0).
 #   Jump  JChargeLo = the hips' highest point before the crouch; JChargeHi = deepest crouch (hips over the lowest foot) before
@@ -189,6 +190,24 @@ def scale_for(clip, c):
     return r if abs(r - 1.0) > 0.20 else 1.0
 
 
+RATE_CAP, RATE_FLOOR = 1.6, 1.0   # the author's own rates are 1.25-1.6; a 5 s take at 4x gave a 50 m/s fist
+
+
+def game_window(hit, dur, F0, T0, R0, H0, k):
+    """2026-10-29 (director): a length-scaled clip keeps today's GAME-TIME windows exactly; only the playback rate changes.
+    lead_game = (Hit - From) / Rate and recovery_game = (To - Hit) / Rate of today's constants; Rate = min(today's x k, 1.6), lowered
+    until From >= 0 and To <= the clip end (never below 1.0; then the window is clamped and flagged). Returns (from, to, rate, note)."""
+    lead, rec = (H0 - F0) / R0, (T0 - H0) / R0          # today's game-time windows (s)
+    rate, note = min(R0 * k, RATE_CAP), []
+    fit = min(hit / lead if lead > 0 else 1e9, (dur - hit) / rec if rec > 0 else 1e9)
+    if fit < rate:
+        rate = fit; note.append('rate lowered to fit the clip')
+    if rate < RATE_FLOOR:
+        rate = RATE_FLOOR; note.append('rate floor 1.0: window clamped to the clip (game-time NOT kept)')
+    frm, to = max(0.0, hit - lead * rate), min(dur, hit + rec * rate)
+    return frm, to, rate, ', '.join(note)
+
+
 def measure(tel):
     clips = {n: Clip(n, d) for n, d in tel.items()}
     acts, segs, meas, flags = {}, {}, {}, {}
@@ -213,20 +232,21 @@ def measure(tel):
         h, p, s, vmax = strike(c, det, hand)
         k = scale_for(clip, c)
         hit = c.t(h)
-        rate = R0 * k
-        # Throw starts at 0 only on the old take (it begins on the carry pose it is cross-faded from); a length-scaled clip (the
-        # video2rig Throw starts in the stance and holds overhead first) takes the general lead rule
-        frm = 0.0 if key == 'Throw' and k == 1.0 else max(0.0, hit - (H0 - F0) * k)
-        why = []
-        if hit - (H0 - F0) * k < 0.0 and not (key == 'Throw' and k == 1.0) and hit > 0.0:
-            # the scaled lead does not fit before the contact: keep the contact's game-time ((Hit - From) / Rate = today's) by solving
-            # the rate instead of letting the press connect sooner; the recovery span follows the same rate
-            rate = hit / ((H0 - F0) / R0); why.append('lead clamped: rate solved for today\'s contact time')
-        to = hit + (T0 - H0) / R0 * rate
         ft, st, bout = follow_and_bout(c, p, s, vmax)
-        if bout is not None and to > c.t(bout): to = c.t(bout); why.append('next bout %.3f' % c.t(bout))
-        if to > c.dur: to = c.dur; why.append('clip end')
-        if to < c.t(ft): to = min(c.dur, c.t(ft)); why.append('follow-through %.3f' % c.t(ft))
+        why = []
+        if k != 1.0:
+            # length-scaled (video2rig) clip: today's game-time windows, rate capped at 1.6 (game_window); the measured bout /
+            # follow-through only annotate
+            frm, to, rate, nt = game_window(hit, c.dur, F0, T0, R0, H0, k)
+            if nt: why.append(nt)
+            if bout is not None and c.t(bout) < to: why.append('note: next bout %.3f inside the window' % c.t(bout))
+        else:
+            rate = R0
+            frm = 0.0 if key == 'Throw' else max(0.0, hit - (H0 - F0))   # Throw: the old take starts on the carry pose
+            to = hit + (T0 - H0)
+            if bout is not None and to > c.t(bout): to = c.t(bout); why.append('next bout %.3f' % c.t(bout))
+            if to > c.dur: to = c.dur; why.append('clip end')
+            if to < c.t(ft): to = min(c.dur, c.t(ft)); why.append('follow-through %.3f' % c.t(ft))
         acts[key] = {'clip': clip, 'from': round(frm, 3), 'to': round(to, 3), 'rate': round(rate, 3), 'hit': round(hit, 3)}
         meas[clip].update(hit=hit, hit_hand=s, hit_by=det, follow_end=c.t(ft), settle10=c.t(st) if st is not None else None,
                           next_bout=c.t(bout) if bout is not None else None, len_scale=round(k, 3))
@@ -236,10 +256,13 @@ def measure(tel):
     if c and 'overhead' in meas['Lift']:
         k = scale_for('Lift', c); oh = meas['Lift']['overhead']
         _, F0, T0, R0, _ = TODAY_ACT['Grab']
-        g_rate = R0 * k if oh - (T0 - F0) * k >= 0.0 else oh / ((T0 - F0) / R0)   # clamped lead: solve the rate (contact game-time kept)
-        acts['Grab'] = {'clip': 'Lift', 'from': round(max(0.0, oh - (T0 - F0) * k), 3), 'to': oh, 'rate': round(g_rate, 3), 'hit': oh}
+        if k != 1.0:   # Grab: hit = to = overhead; the game-time lift span (To - From) / Rate is today's, rate capped (game_window)
+            g_from, _, g_rate, nt = game_window(oh, c.dur, F0, T0, R0, T0, k)
+        else:
+            g_from, g_rate, nt = max(0.0, oh - (T0 - F0)), R0, ''
+        acts['Grab'] = {'clip': 'Lift', 'from': round(g_from, 3), 'to': oh, 'rate': round(g_rate, 3), 'hit': oh}
         acts['Carry'] = {'clip': 'Lift', 'from': oh, 'to': round(c.t(c.n - 2), 3), 'rate': 0.0}
-        flags['Grab'] = flags['Carry'] = ''
+        flags['Grab'] = nt; flags['Carry'] = ''
 
     c = clips.get('Jump')
     if c:
@@ -337,7 +360,42 @@ def compare(acts, segs, flags, tol):
         rows.append((key, 'seg', old, segs[key], d, note))
         print('%-10s %-5s %7.3f %7.3f %+7.3f  %s' % (key, 'seg', old, segs[key], d, note))
     print('worst |diff| %.3f s (tolerance %.3f)' % (worst, tol))
+    print('\ngame-time windows (s): From->Hit and Hit->To at the act\'s rate, today vs measured')
+    print('%-9s %7s %7s %7s   %7s %7s %7s   %6s' % ('act', 'lead0', 'lead', 'diff', 'rec0', 'rec', 'diff', 'rate'))
+    gworst = 0.0
+    for key in TODAY_ACT:
+        if key not in acts or key == 'Carry': continue
+        _, F0, T0, R0, H0 = TODAY_ACT[key]
+        a = acts[key]; H0g = T0 if key == 'Grab' else H0
+        l0, r0 = (H0g - F0) / R0, (T0 - H0g) / R0
+        l1, r1 = (a['hit'] - a['from']) / a['rate'], (a['to'] - a['hit']) / a['rate']
+        gworst = max(gworst, abs(l1 - l0), abs(r1 - r0))
+        print('%-9s %7.3f %7.3f %+7.3f   %7.3f %7.3f %+7.3f   %6.3f' % (key, l0, l1, l1 - l0, r0, r1, r1 - r0, a['rate']))
+    print('worst game-time |diff| %.3f s' % gworst)
     return worst, rows
+
+
+def selftest_rule():
+    """game_window on synthetic numbers (no Blender, no telemetry): game-time windows kept, rate in [1.0, 1.6]."""
+    ok = True
+    def chk(name, got, cond):
+        nonlocal ok
+        ok &= bool(cond); print('RULE %-44s %s %s' % (name, ['%.4f' % x if isinstance(x, float) else x for x in got], 'ok' if cond else 'FAIL'))
+    F0, T0, R0, H0 = 0.45, 1.40, 1.6, 1.0                        # PunchR today: lead 0.34375 s, recovery 0.25 s game-time
+    lead, rec = (H0 - F0) / R0, (T0 - H0) / R0
+    f, t, r, n = game_window(1.533, 5.067, F0, T0, R0, H0, 5.067 / 1.533)                    # long take: cap 1.6
+    chk('PunchR 5 s take -> rate 1.6, windows kept', (f, t, r), abs(r - 1.6) < 1e-9 and abs((1.533 - f) / r - lead) < 1e-9 and abs((t - 1.533) / r - rec) < 1e-9)
+    f, t, r, n = game_window(1.533, 1.80, F0, T0, R0, H0, 1.80 / 1.533 + 0.3)                # recovery hits the clip end: rate lowered
+    chk('short tail -> rate lowered to fit, To = clip end', (f, t, r), abs(r - (1.80 - 1.533) / rec) < 1e-9 and abs(t - 1.80) < 1e-9 and r < 1.6 and abs((1.533 - f) / r - lead) < 1e-9)
+    f, t, r, n = game_window(1.533, 1.60, F0, T0, R0, H0, 2.0)                               # would need < 1.0: floor, flagged
+    chk('tail too short -> floor 1.0, clamped + flagged', (f, t, r, n), r == 1.0 and t == 1.60 and 'NOT kept' in n)
+    f, t, r, n = game_window(0.20, 5.0, F0, T0, R0, H0, 3.0)                                 # contact very early: lead decides
+    chk('early contact (needs rate 0.58) -> floor 1.0, flagged', (f, t, r, n), r == 1.0 and f == 0.0 and 'NOT kept' in n)
+    f, t, r, n = game_window(0.50, 5.0, F0, T0, R0, H0, 3.0)                                 # lead limits: rate = hit / lead
+    chk('lead limits -> rate 1.4545, From = 0, windows kept', (f, t, r), abs(r - 0.50 / lead) < 1e-9 and abs(f) < 1e-9 and abs((t - 0.50) / r - rec) < 1e-9)
+    f, t, r, n = game_window(4.133, 5.067, 0.0, 1.46, 1.25, 0.45, 5.067 / 1.467)             # v2r Throw: recovery limits it
+    chk('Throw v2r -> rate 1.155, windows kept', (f, t, r), abs((4.133 - f) / r - 0.36) < 1e-9 and abs((t - 4.133) / r - 0.808) < 1e-9 and r <= 1.6)
+    print('RULE SELFTEST', 'PASS' if ok else 'FAIL'); sys.exit(0 if ok else 3)
 
 
 def main():
@@ -348,6 +406,8 @@ def main():
         if a in ('--out', '--meta', '--clips', '--dump', '--telemetry', '--check-today'): args[a[2:].replace('-', '_')] = argv[i + 1]; i += 2
         elif a == '--all': args['all'] = True; i += 1
         else: pos.append(a); i += 1
+    if '--selftest-rule' in argv:
+        selftest_rule(); return
     if 'telemetry' in args:
         tel = json.load(open(args['telemetry'])); src = args['telemetry']
     else:

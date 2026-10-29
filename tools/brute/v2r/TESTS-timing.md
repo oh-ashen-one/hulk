@@ -75,6 +75,24 @@ These clips were resampled from the v5 telemetry to test the rule. They are not 
 | PunchR | x1.5 (> 20 %) | 2.401 | 0.608 / 1.433 / 2.033 | 0.3436 (0.3438) | 0.5935 (0.5937) |
 | Smash | x1.1 (< 20 %) | 1.4 (kept) | 0.530 / 1.300 / 2.130 | 0.5500 (0.5500) | 1.1429 (1.1429) |
 
+## Rate rule for length-scaled clips (2026-10-29, director rule; supersedes the x-length rate above for video2rig takes)
+
+Scaling the rate by whole-clip length played the 5 s video2rig takes at 2.5-5.3x (a 50 m/s fist). Now a clip more than 20 %
+longer or shorter than today's keeps today's GAME-TIME windows and changes only the playback rate (`game_window()`):
+Rate = min(today's x length ratio, 1.6), lowered until From = Hit - lead_game x Rate >= 0 and To = Hit + recovery_game x Rate
+<= the clip end, never below 1.0 (then clamped and flagged). Clips within 20 % keep today's rule unchanged.
+
+```
+python3 tools/brute/v2r/measure_timing.py --selftest-rule          # no Blender: RULE SELFTEST PASS (6 cases)
+```
+Cases: 5 s PunchR take -> 1.6 with both windows kept; recovery hitting the clip end -> rate lowered to fit; tail too short
+(needs < 1.0) -> floor 1.0, flagged `game-time NOT kept`; very early contact -> floor + flag; lead-limited -> rate = hit /
+lead_game, From = 0; v2r Throw numbers -> 1.155.
+
+Candidate set (`~/hulk-scratch/brute_v2r_candidate/out`, `--check-today 0.15` prints the game-time table): every From->Hit and
+Hit->To game-time delta 0.000 (Throw recovery +0.001, rounding). Rates: PunchR, PunchL, Slap, Clap, Uppercut, Grab 1.6, Throw 1.155
+(recovery limited by the clip end). Old brute_v5 (`--all`): CHECK OK, worst 0.100 s, unchanged.
+
 ## Selection
 
 - Default with `clips_meta.json` beside the glb: only clips whose `src` contains `v2r` are written. On v5 there are
