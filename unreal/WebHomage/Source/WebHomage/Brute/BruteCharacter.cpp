@@ -1334,12 +1334,68 @@ bool ABruteCharacter::BuildClipRig()
 				if ((Corr[Sd][K] = M->FindMorphTarget(FName(FString::Printf(TEXT("CorrArm%s_%s"), KN[K], Sd == 0 ? TEXT("L") : TEXT("R")))))) ++Found;
 		UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %d / %d corrective morphs (mesh has %d)"), Found, 2 * NCorr, M->GetMorphTargets().Num());
 	}
-	WImpacts = { WAttachImpact, 1.5f };
+	LoadClipTiming(Names);
+	WImpacts = { WAttachImpact, WClimbImpact2 };
 	bClipRig = true;
 	Play(CIdle, 0.05, Clips[CIdle]->GetPlayLength(), true, 1.f, 0.f, TEXT("idle"));
 	UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: v2 clip body (%d bones, %d clips, forward yaw %.0f deg, height %.0f cm x %.2f, foot z %.1f)"),
 		NB, Clips.Num(), FMath::RadiansToDegrees(Yaw), Hgt, Sc, RefFootZ);
 	return true;
+}
+
+void ABruteCharacter::LoadClipTiming(const TCHAR* const* ClipNames)
+{
+	// Optional clip timing measured from the clips themselves (tools/brute/v2r/measure_timing.py -> Config/BruteClipTiming.json,
+	// beside BruteRig.json): 'acts' {key: {clip, from, to, rate, hit}} and 'segments' {member name: seconds}. No file, or a missing /
+	// negative key, keeps the constants in ActClip / the header, so the shipped behaviour only changes once the file exists.
+	// -WHBruteNoClipTiming ignores the file (A/B against the constants).
+	ActTiming.Reset();
+	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteNoClipTiming"))) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE clip timing: off (-WHBruteNoClipTiming)")); return; }
+	const FString Path = FPaths::ProjectConfigDir() / TEXT("BruteClipTiming.json");
+	FString Txt; TSharedPtr<FJsonObject> Root;
+	if (!FFileHelper::LoadFileToString(Txt, *Path)) return;
+	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Txt), Root) || !Root.IsValid()) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE clip timing: parse error in %s (constants kept)"), *Path); return; }
+	static const TCHAR* ActKeys[] = { TEXT("Punch"), TEXT("PunchL"), TEXT("PunchR"), TEXT("Slap"), TEXT("Clap"), TEXT("Smash"), TEXT("Uppercut"), TEXT("Grab"), TEXT("Carry"), TEXT("Throw") };
+	TArray<FString> Acts, Segs, Bad;
+	const TSharedPtr<FJsonObject>* AO;
+	if (Root->TryGetObjectField(TEXT("acts"), AO))
+		for (const auto& KV : (*AO)->Values)
+		{
+			const FString Key(KV.Key);   // UE 5.8 JSON keys are TSharedString
+			if (!KV.Value.IsValid() || KV.Value->Type != EJson::Object) { Bad.Add(Key); continue; }
+			bool bKnown = false; for (const TCHAR* K : ActKeys) bKnown |= Key == K;
+			if (!bKnown) { Bad.Add(Key); continue; }
+			const TSharedPtr<FJsonObject> O = KV.Value->AsObject();
+			FActTiming T; double V = 0.0; FString Cn;
+			if (O->TryGetStringField(TEXT("clip"), Cn)) { for (int32 I = 0; I < CNum; ++I) if (Cn == ClipNames[I]) T.Clip = I; if (T.Clip < 0) Bad.Add(Key + TEXT(".clip")); }
+			if (O->TryGetNumberField(TEXT("from"), V)) T.From = float(V);
+			if (O->TryGetNumberField(TEXT("to"), V)) T.To = float(V);
+			if (O->TryGetNumberField(TEXT("rate"), V)) T.Rate = float(V);
+			if (O->TryGetNumberField(TEXT("hit"), V)) T.Hit = float(V);
+			ActTiming.Add(FName(*Key), T);
+			Acts.Add(FString::Printf(TEXT("%s(%.2f-%.2f x%.2f hit %.2f)"), *Key, T.From, T.To, T.Rate, T.Hit));
+		}
+	const TSharedPtr<FJsonObject>* SO;
+	if (Root->TryGetObjectField(TEXT("segments"), SO))
+	{
+		struct FSeg { const TCHAR* K; float* P; double* D; };
+		const FSeg Fs[] = { { TEXT("JChargeLo"), &JChargeLo, nullptr }, { TEXT("JChargeHi"), &JChargeHi, nullptr }, { TEXT("JLaunch"), &JLaunch, nullptr },
+			{ TEXT("JApex"), &JApex, nullptr }, { TEXT("AttachStart"), nullptr, &AttachStart }, { TEXT("WAttachImpact"), &WAttachImpact, nullptr },
+			{ TEXT("WClimbImpact2"), &WClimbImpact2, nullptr }, { TEXT("WClimbLo"), &WClimbLo, nullptr }, { TEXT("WClimbHi"), &WClimbHi, nullptr },
+			{ TEXT("LandStart"), nullptr, &LandStart }, { TEXT("LungeStart"), nullptr, &LungeStart } };
+		for (const auto& KV : (*SO)->Values)
+		{
+			const FString Key(KV.Key);
+			const FSeg* F = nullptr; for (const FSeg& X : Fs) if (Key == X.K) F = &X;
+			double V = -1.0;
+			if (!F || !KV.Value.IsValid() || !KV.Value->TryGetNumber(V)) { Bad.Add(Key); continue; }
+			if (V < 0.0) continue;
+			if (F->P) *F->P = float(V); else *F->D = V;
+			Segs.Add(FString::Printf(TEXT("%s=%.3f"), F->K, V));
+		}
+	}
+	UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE clip timing: %s overrides acts [%s] segments [%s]%s%s"), *Path, *FString::Join(Acts, TEXT(" ")), *FString::Join(Segs, TEXT(" ")),
+		Bad.Num() ? TEXT(" ignored: ") : TEXT(""), *FString::Join(Bad, TEXT(" ")));
 }
 
 void ABruteCharacter::Play(int32 Clip, double Lo, double Hi, bool bLoop, float Rate, float FadeS, FName Tag, double Start)
@@ -1377,7 +1433,7 @@ void ABruteCharacter::AnimateClips(float Dt)
 	}
 	else if (Mode == EBruteMode::Wall)
 	{	// slam into the facade fists first, then every climb step is the same slam again, one fist after the other
-		if (PrevAnimMode != EBruteMode::Wall) Play(CWallAttach, 0.0, WClimbHi, false, 1.7f, 0.08f, TEXT("attach"), 0.2);
+		if (PrevAnimMode != EBruteMode::Wall) Play(CWallAttach, 0.0, WClimbHi, false, 1.7f, 0.08f, TEXT("attach"), AttachStart);
 		else if (Cur.Tag == TEXT("attach") && Cur.T >= WClimbHi - 0.02) Play(CWallClimb, WClimbLo, WClimbHi, true, 1.6f, 0.12f, TEXT("climb"));
 		if (Cur.Tag == TEXT("climb")) Cur.Rate = Vel.Z > 1.0 ? FMath::Clamp(1.6f * float(Vel.Z) / WallClimbSpeed, 1.2f, 2.2f) : 0.f;   // latched + idle: hang on the fists
 	}
@@ -1389,13 +1445,13 @@ void ABruteCharacter::AnimateClips(float Dt)
 	}
 	else if ((Mode == EBruteMode::Land && LandHard > 0.5f) || (Cur.Tag == TEXT("land") && Cur.T < Cur.Hi - 0.05 && Hs < 3.0 && !bCharging))
 	{	// hard landing: superhero landing (fist planted), then he rises -- unless he moves off first
-		Play(CLand, 0.35, Len(CLand), false, 1.5f, 0.06f, TEXT("land"));
+		Play(CLand, LandStart, Len(CLand), false, 1.5f, 0.06f, TEXT("land"));
 	}
 	else if (bCharging)
 	{
 		if (!bWasCharging)
 		{	// out of a run: plant and coil (stop-lunge); from a stand: the jump clip's charge crouch, scrubbed by the charge
-			if (Hs > RunSpeed) Play(CStopLunge, 1.0, Len(CStopLunge), false, 2.0f, 0.1f, TEXT("lunge"));
+			if (Hs > RunSpeed) Play(CStopLunge, LungeStart, Len(CStopLunge), false, 2.0f, 0.1f, TEXT("lunge"));
 			else Play(CJump, JChargeLo, JChargeHi, false, 0.f, 0.12f, TEXT("charge"));
 		}
 		if (Cur.Tag == TEXT("charge")) Cur.T = FMath::Lerp((double)JChargeLo, (double)JChargeHi, (double)Smooth01(GetCharge01()));
@@ -1620,19 +1676,34 @@ bool ABruteCharacter::TryLatch(const FBruteInput& I)
 
 ABruteCharacter::FActClip ABruteCharacter::ActClip(EBruteAct A) const
 {
-	// From / To / Rate tuned so the heavy generated swings still read fast in play; Hit = the clip's contact time (clips.json)
-	FActClip C;
+	// From / To / Rate tuned so the heavy generated swings still read fast in play; Hit = the clip's contact time (clips.json).
+	// Config/BruteClipTiming.json (measured from the clips by tools/brute/v2r/measure_timing.py) overrides any of them per act.
+	FActClip C; const TCHAR* Key = nullptr;
 	switch (A)
 	{
-	case EBruteAct::Punch: C.Clip = (Combo % 2 == 0) ? CPunchR : CPunchL; C.From = 0.45f; C.To = 1.40f; C.Rate = 1.6f; C.Hit = 1.0f; break;
-	case EBruteAct::Slap: C.Clip = CSlap; C.From = 0.30f; C.To = 1.70f; C.Rate = 1.5f; C.Hit = 0.90f; break;
-	case EBruteAct::Clap: C.Clip = CClap; C.From = 0.10f; C.To = 1.30f; C.Rate = 1.3f; C.Hit = 0.70f; break;
-	case EBruteAct::Smash: C.Clip = CSmash; C.From = 0.40f; C.To = 2.00f; C.Rate = 1.4f; C.Hit = 1.17f; break;
-	case EBruteAct::Uppercut: C.Clip = CUppercut; C.From = 0.15f; C.To = 1.40f; C.Rate = 1.4f; C.Hit = 0.60f; break;
-	case EBruteAct::Grab: C.Clip = CLift; C.From = 0.60f; C.To = 2.40f; C.Rate = 2.0f; C.Hit = 2.40f; break;
-	case EBruteAct::Carry: C.Clip = CLift; C.From = 2.40f; C.To = 2.95f; C.Rate = 0.f; break;
-	case EBruteAct::Throw: C.Clip = CThrow; C.From = 0.00f; C.To = 1.46f; C.Rate = 1.25f; C.Hit = 0.45f; break;   // incl. the heavy recovery
+	case EBruteAct::Punch: C.Clip = (Combo % 2 == 0) ? CPunchR : CPunchL; C.From = 0.45f; C.To = 1.40f; C.Rate = 1.6f; C.Hit = 1.0f; Key = TEXT("Punch"); break;
+	case EBruteAct::Slap: C.Clip = CSlap; C.From = 0.30f; C.To = 1.70f; C.Rate = 1.5f; C.Hit = 0.90f; Key = TEXT("Slap"); break;
+	case EBruteAct::Clap: C.Clip = CClap; C.From = 0.10f; C.To = 1.30f; C.Rate = 1.3f; C.Hit = 0.70f; Key = TEXT("Clap"); break;
+	case EBruteAct::Smash: C.Clip = CSmash; C.From = 0.40f; C.To = 2.00f; C.Rate = 1.4f; C.Hit = 1.17f; Key = TEXT("Smash"); break;
+	case EBruteAct::Uppercut: C.Clip = CUppercut; C.From = 0.15f; C.To = 1.40f; C.Rate = 1.4f; C.Hit = 0.60f; Key = TEXT("Uppercut"); break;
+	case EBruteAct::Grab: C.Clip = CLift; C.From = 0.60f; C.To = 2.40f; C.Rate = 2.0f; C.Hit = 2.40f; Key = TEXT("Grab"); break;
+	case EBruteAct::Carry: C.Clip = CLift; C.From = 2.40f; C.To = 2.95f; C.Rate = 0.f; Key = TEXT("Carry"); break;
+	case EBruteAct::Throw: C.Clip = CThrow; C.From = 0.00f; C.To = 1.46f; C.Rate = 1.25f; C.Hit = 0.45f; Key = TEXT("Throw"); break;   // incl. the heavy recovery
 	default: break;
+	}
+	if (Key && ActTiming.Num())
+	{
+		auto Apply = [&C, A](const FActTiming* O)
+		{
+			if (!O) return;
+			if (O->Clip >= 0 && A != EBruteAct::Punch) C.Clip = O->Clip;   // the punch fist stays the combo's
+			if (O->From >= 0.f) C.From = O->From;
+			if (O->To >= 0.f) C.To = O->To;
+			if (O->Rate >= 0.f) C.Rate = O->Rate;
+			if (O->Hit >= 0.f) C.Hit = O->Hit;
+		};
+		Apply(ActTiming.Find(FName(Key)));
+		if (A == EBruteAct::Punch) Apply(ActTiming.Find(C.Clip == CPunchL ? FName(TEXT("PunchL")) : FName(TEXT("PunchR"))));   // per-fist clip timing
 	}
 	if (C.Clip >= 0 && Clips.IsValidIndex(C.Clip) && Clips[C.Clip]) C.To = FMath::Min(C.To, Clips[C.Clip]->GetPlayLength());
 	return C;

@@ -193,6 +193,10 @@ private:
 	/** combat clip segment per act: clip, start / end (s), play rate; the act's hit + duration follow from the clip's contact time */
 	struct FActClip { int32 Clip = -1; float From = 0.f, To = 0.f, Rate = 1.f, Hit = 0.f; };
 	FActClip ActClip(EBruteAct A) const;
+	/** per-act override from Config/BruteClipTiming.json (tools/brute/v2r/measure_timing.py); a negative field = not overridden */
+	struct FActTiming { int32 Clip = -1; float From = -1.f, To = -1.f, Rate = -1.f, Hit = -1.f; };
+	TMap<FName, FActTiming> ActTiming;   // keys: Punch PunchL PunchR Slap Clap Smash Uppercut Grab Carry Throw
+	void LoadClipTiming(const TCHAR* const* ClipNames);
 	int32 ActSerial = 0;
 	struct FClipPlay { int32 Clip = -1; double T = 0.0, Lo = 0.0, Hi = 0.0; float Rate = 1.f; bool bLoop = true, bHold = false; FName Tag; };
 	UPROPERTY(Transient) TArray<TObjectPtr<class UAnimSequence>> Clips;
@@ -212,6 +216,8 @@ private:
 	int32 BHips = 0, BSpine = 0, BArm[2] = { 0, 0 }, BFore[2] = { 0, 0 }, BHand[2] = { 0, 0 }, BFoot[4] = { 0, 0, 0, 0 };
 	// markers (s) measured by tools/brute/analyze_clips.py; defaults are the 2026-10-15 measurements
 	float JChargeLo = 0.17f, JChargeHi = 2.45f, JLaunch = 2.55f, JApex = 3.17f, JFallHi = 3.6f, LandFrom = 1.6f, WAttachImpact = 0.7f, WClimbLo = 0.55f, WClimbHi = 1.85f;
+	// segment starts AnimateClips used as literals (same values, same types); Config/BruteClipTiming.json 'segments' may override all of these
+	double AttachStart = 0.2, LandStart = 0.35, LungeStart = 1.0; float WClimbImpact2 = 1.5f;
 	TArray<float> WImpacts;   // fist-in times inside the climb segment (a wall crater at each)
 	bool bWasCharging = false, bChargeCracked = false;
 	EBruteMode PrevAnimMode = EBruteMode::Ground;
