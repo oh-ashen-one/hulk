@@ -226,7 +226,17 @@ def preflight(a, wait=True):
     10 min when wait); the 20 s gap after the last launch anywhere is waited out (wait) or reported (no wait)."""
     why = []
     if os.path.exists(STREAM_FLAG):
-        why.append('%s exists (owner is streaming, mode in the file): no captures' % STREAM_FLAG)
+        mode = ''
+        try:
+            mode = json.load(open(STREAM_FLAG)).get('mode', '')
+        except Exception:  # noqa: BLE001
+            mode = '?'
+        # mode "window" = the scheduled 11-13 ET throttle (captures already run frame-capped); mode "manual" = the owner is live.
+        # --ignore-window only covers the scheduled window and only when the owner said so this session; the flag is never touched.
+        if mode == 'window' and getattr(a, 'ignore_window', False):
+            print('note: %s is mode=window and the owner said no stream today (--ignore-window): capturing frame-capped' % STREAM_FLAG)
+        else:
+            why.append('%s exists (mode=%s; owner is streaming unless mode=window and the owner said otherwise, then --ignore-window): no captures' % (STREAM_FLAG, mode or '?'))
     t = now_et()
     if 11 <= t.hour < 13 and not getattr(a, 'ignore_window', False):
         why.append('now %s is inside the owner stream window 11:00-13:00 ET (override only with --ignore-window if the owner said so)' % t.strftime('%H:%M %Z'))
