@@ -77,6 +77,11 @@ def exe_name(comm):
     return os.path.basename(comm.rstrip('/')) if comm.startswith('/') else (comm.split() or [''])[0]
 
 
+WINE_SERVICES = ('wineserver', 'services.exe', 'explorer.exe', 'winedevice', 'plugplay', 'rpcss', 'svchost', 'conhost', 'steam',
+                 'steamwebhelper', 'crossover', 'winemenubuilder', 'start.exe', 'tabtip', 'rundll32', 'launcher', 'epicgames',
+                 'rockstar', 'socialclub', 'gameoverlay', 'cmd.exe', 'wine64-preloader', 'wine-preloader')
+
+
 def client_kind(p):
     """Why this process counts as a GPU client, or None."""
     b = exe_name(p['comm']).lower()
@@ -92,6 +97,10 @@ def client_kind(p):
         return 'blender'
     if b.startswith('python') and any(w in p.get('args', '') for w in TRAIN_WORDS):
         return 'python-gpu'
+    # the owner's Windows games run through CrossOver/Wine (Bully, GTA V ...): a game .exe is a heavy renderer and is NEVER ours
+    # to touch; launchers and wine services do not count
+    if b.endswith('.exe') and not any(w in b for w in WINE_SERVICES):
+        return 'owner-game'
     return None
 
 
