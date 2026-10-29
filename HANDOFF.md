@@ -1,3 +1,94 @@
+## video2rig animation upgrade — in progress (Claude Fable 5.1 overnight run, 2026-10-29)
+
+**Goal:** re-animate and enhance every existing Brute clip through the video2rig route (first-frame MiniMax H3 video at 768P via fal.ai, joint reader, per-frame fit, Blender Action), as set out in the plan. [1]
+
+- Plan `docs/brute/video2rig/PLAN.md` · ledger `docs/brute/video2rig/LEDGER.md` · gates `docs/brute/video2rig/GATES-phase0-1.md` · prompts `docs/brute/video2rig/prompts/` (one `.txt` per clip plus `INDEX.md`). [2]
+
+**Branch and state**
+
+- Branch `chinese-animation-upgrades`, HEAD `2a53715` (`tools/brute/v2r/run_clip.sh: per-clip pipeline ...`). [3]
+- Remote: `## chinese-animation-upgrades...origin/chinese-animation-upgrades` with no ahead/behind marker, so it matches the remote-tracking ref as last fetched. No fetch was run for this entry. [4]
+- Uncommitted: 24 untracked `tools/brute/cases/ab_*.json` (the A/B cases) and untracked `tools/brute/v2r/ab_ingame.py`. Nothing else is modified. [5]
+- Commits since `8be8157` (Handoff: camera/music fix built), 14 total, newest first: [6]
+  - `2a53715` run_clip.sh per-clip pipeline (size gate, check, run, review, import, refine, export, sheet) with tests
+  - `b716689` Fall clip from the air start picture; all 17 clips generated, 6.96 USD total
+  - `57c411c` Phase 3 generation batch (13 ground + 2 wall clips, 20 takes, 6.18 USD)
+  - `e34846e` GATES-phase0-1 (tool gates, rig/start facts, reader timings, pilot billing, air project)
+  - `a295dca` blind A/B harness (3 fixed cameras, seeded labels, KEY hidden from the critic)
+  - `a76c1cb` Brute optional `Config/BruteClipTiming.json` overrides; `measure_timing.py` proposes them
+  - `c518614` Fall prompt rewritten for the air start picture
+  - `ba6abde` v2r_rig, export_clip (EXPORT_GATE), refine_brute (REFINE_GATE), offline round-trip tests
+  - `3c15fe8` fal MiniMax H3 generator (queue API, resume, balance/price) and silhouette size gate
+  - `a8aa8e5` prompts for all 17 Brute clips + INDEX
+  - `5c894a2` ledger clip rows, spend table, Phase 0 gate lines
+  - `5a415aa` Plan: spend rule (fal balance first, then Higgsfield; no per-clip stop)
+  - `61db2e6` Plan: fal H3 endpoint verified, Higgsfield fallback
+  - `7220c6b` Brute video2rig + MiniMax (fal) animation upgrade: plan only
+
+**Projects** (`/Users/midir/hulk/Local/video2rig/`, all gitignored) [7]
+
+- `brute-aligned`: ground project. `align.py`, `clips/`, `creature.json`, `model.blend`, `reader/`, `rig/`, `start/`, `work/`, `limbs.txt`, `twins.txt`, `export_rig.log`. Reader training in progress; no `reader.pt` yet.
+- `brute-air`: airborne project. `build_info.json`, `clips/`, `creature.json`, `model.blend`, `reader/`, `rig/`, `scripts/`, `start/`, `work/`, `REPORT-air.md`, `limbs.txt`, `twins.txt`, `start_render.log`, `export_rig.log`. Poses and renders done (`reader/poses.npz`, `reader/renders/`); no `reader.pt` yet.
+- `brute`: original, superseded. `REPORT-phase0.md`, `hinges.txt`, `model.blend1`, `creature.json`, `rig/`, `scripts/`, `start/`.
+- `motion-v2r`: does not exist yet. It is the export target; `run_clip.sh` defaults `--motion-dir` to it. [8]
+- `work-tools`: scratch (`assemble_motion_dir`, `assemble_out`, `fake_fit`, `logs/`, `motion_*`, `proj_size`, `proj_size_air`, `proj_test`, `sheet/`, `stubfork/`, `synthetic_fit_idle.npz`).
+- `ab`: contains `test-idle` only.
+
+**Clips generated** [9]
+
+- `brute-aligned/clips/` (21 mp4, bytes): clap_v1 829187; idle_v1 977897; jump_v1 910088; jump_v2 747310; land_v1 992474; lift_v1 981409; punchl_v1 792863; punchr_v1 894412; punchr_v2 822585; run_v1 1643157; slap_v1 842289; smash_v1 794209; stoplunge_v1 853226; stoplunge_v2 965959; throw_v1 971707; uppercut_v1 874522; walk_v1 1266005; wallattach_v1 964393; wallattach_v2 879433; wallclimb_v1 1073050; wallclimb_v2 1105175.
+- `brute-air/clips/` (1 mp4): fall_v1 802085.
+- Per-clip verdicts (check, size gate, A/B) are in the LEDGER.md Clip ledger table. Not retyped here. The ledger records two failed takes for StopLunge and Jump, each with the old clip kept.
+- Gap: the LEDGER row for Idle v1 is all dashes, although `idle_v1.mp4` exists and the Spend table lists an Idle pilot at 0.48 USD.
+
+**Reader state** [10]
+
+- `brute-aligned` training: PID `94848` (`reader.train ... --minutes 8.0 --steps 9000 --out reader/reader.pt`), parent PID `91354` (`reader.prepare ... --steps 9000 --blender ...`). Last line of `reader/train.log` at check time (02:39): `[4832.6s] step 2200 loss 5.5183 (2.185 s per step, 24% of the time)`. Target is 9000 steps.
+- `reader/prepare-9000.log` is only 62 bytes (`VISIBLE 3000 poses in 27.0 s`); the live progress is in `reader/train.log`.
+- Other sessions' reader processes, not ours, do not touch: PIDs `27311`/`27313` (mayor_mine, under `~/Markhor-Meadow-M3-2026-10-10`) and PIDs `77726`/`77731` (mayor_chop, same root). All four list cwd `~/video2rig`.
+- `brute-air`: no reader yet. Its `reader/` holds `poses.npz`, `visible.npz`, `renders/`, `prepare-skiptrain.log`, `prepare-skiptrain-air.log`. Worktree `/Users/midir/video2rig-brute-air` exists at `1c720d4` (`reader.poses: opt-in air config ...`).
+
+**Next steps (from the director's brief, in order)**
+
+1. Ground clips, one at a time: `tools/brute/v2r/run_clip.sh /Users/midir/hulk/Local/video2rig/brute-aligned <clipname> <Clip> --loop` or `--return-to-stance`. Loops: idle_v1 Idle, walk_v1 Walk, run_v1 Run, wallclimb_v2 WallClimb. Return-to-stance: all others.
+2. Fall: `fall_v1 Fall --loop --fork-dir /Users/midir/video2rig-brute-air`, once the air reader exists.
+3. Assemble (`tools/brute/assemble_motion.py`) into the motion-v2r files, then `python3 unreal/WebHomage/Scripts/build_brute.py` (headless commandlet through gpu_slot; imports brute_anim.fbx), capture cases `tools/brute/cases/ab_*.json`, blind A/B by an Opus critic, timing JSON via `tools/brute/v2r/measure_timing.py`, then the HANDOFF gate lines (none written yet).
+
+**Gaps to resolve before step 1**
+
+- `run_clip.sh` line 17 lists loop modes as "Idle Walk Run Fall". WallClimb is not in that list, but `docs/brute/video2rig/prompts/INDEX.md:20` marks WallClimb as a loop "yes (segment)". Resolve before running `wallclimb_v2` with `--loop`.
+- Brute content import = `unreal/WebHomage/Scripts/build_brute.py` (the Unreal import; `tools/ue_char/brute/build_brute.sh` is an older wrapper). [11]
+
+**Rules in force**
+
+- One paid clip at a time. Never fit a clip that fails the check. Two failures keep the old clip. Never commit to `main`.
+- fal key at `~/.config/fal/secrets.env`, read in-process, never printed. Its presence was confirmed with `test -f` only.
+- Blender headless only. Cap of 2 renderers when Unreal is involved, otherwise 4 Blender processes.
+- No captures while `~/.cache/gpu-slot/STREAMING` exists. At check time it was absent.
+- Never touch other sessions' reader trainings (PIDs listed above).
+
+**Spend** [12]
+
+- fal (from the LEDGER Spend table): 6.96 USD total (Idle 0.48 + batch 6.48). Balance before 23.65 USD; after about 16.69 USD (derived, per the table).
+- Higgsfield: unknown (`?` in the table).
+- Per-clip prices in the ledger: 0.30 USD for a 5 s take, 0.36 USD for a 6 s take.
+
+**Footnotes: commands used to verify this entry**
+
+1. `sed -n 1,12p ~/hulk/docs/brute/video2rig/PLAN.md` (goal quoted from the owner instruction paragraph)
+2. `ls -la ~/hulk/docs/brute/video2rig/ ~/hulk/docs/brute/video2rig/prompts/`
+3. `git -C ~/hulk log -1 --oneline`
+4. `git -C ~/hulk status -sb | head -1`
+5. `git -C ~/hulk status --short`
+6. `git -C ~/hulk log --oneline 8be8157..HEAD`
+7. `ls /Users/midir/hulk/Local/video2rig/{brute-aligned,brute-air,brute,motion-v2r,work-tools,ab}`
+8. `ls /Users/midir/hulk/Local/video2rig/motion-v2r` (no such directory)
+9. `ls -la /Users/midir/hulk/Local/video2rig/brute-aligned/clips/*.mp4 /Users/midir/hulk/Local/video2rig/brute-air/clips/*.mp4`
+10. `tail -n 1 /Users/midir/hulk/Local/video2rig/brute-aligned/reader/train.log`; `ps -axo pid,etime,command | grep "reader.train /Users/midir/hulk" | grep -v grep | cut -c1-100`; `ps -o pid,ppid,etime,command -p 91354,94848`; `ps -o args= -p <pid>` for PIDs 27311, 27313, 77726, 77731; `lsof -a -p <pid> -d cwd -Fn`; `ls .../reader/reader.pt` (no such file, both projects)
+11. `find ~/hulk/tools ~/hulk/Local/video2rig -name 'build_brute*'`
+12. `grep -n -A 25 -i spend ~/hulk/docs/brute/video2rig/LEDGER.md`
+- Also: `git -C /Users/midir/video2rig-brute-air log -1 --oneline`; `cat ~/.cache/gpu-slot/STREAMING` (No such file); `ls ~/hulk/tools/brute/cases/ab_*.json | wc -l` (24); `grep -c '| fal |' ~/hulk/docs/brute/video2rig/LEDGER.md` (22); `sed -n 9,30p ~/hulk/tools/brute/v2r/run_clip.sh`; `grep -n -i wallclimb ~/hulk/docs/brute/video2rig/prompts/INDEX.md`
+
 ## Owner play session 2026-10-24 (live)
 
 - Owner played live via `Play-Brute.command`; requested: remove the background music, fix the rooftop camera lock.
