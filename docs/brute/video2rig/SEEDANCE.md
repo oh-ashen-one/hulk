@@ -66,3 +66,14 @@ only if credits remain (WallAttach/WallClimb need a wall in the picture; see `pr
 | run_sd_v1 (fal, 6 s) | 01a18e18 | 0 (refused after 559 s: copyright) | not generated; retry once as run_sd_v2 | | | | no |
 | run_sd_v2 (fal, same prompt) | 01a18e20 | 0 (refused after 479 s: copyright) | not generated; Run keeps the old clip | | | | no |
 | **fal lane closed: 8 of 8 refused** | | 0 USD spent (balance 15.43 USD before and after; refusals are not charged) | Every fal Seedance 2.0 submission on this figure was refused by the partner copyright check (uppercut v3, grey jump v3, punchl v1/v2, throw v1/v2, run v1/v2), vs ~35 % pass on Higgsfield. Coordinator rule: batch stopped; jump v4, slap v3, stoplunge v3, land v3, uppercut v4, walk v1, idle v1 and fall v1 (brute-air, prompt saved in prompts/seedance/fall_sd_v1.txt and brute-air/clips/) were NOT submitted. | | | | |
+
+## Clips with no Seedance take (why), so that all 17 have a row
+
+| clip | status today | why no Seedance take |
+| --- | --- | --- |
+| Idle, Walk, Run | MiniMax v2r clips from 2026-10-29 (Run v2) | prompts written (idle/walk/run_sd_v1); fal lane refused 8/8 (Run twice); Higgsfield pool at the Hulk cap |
+| Jump, Uppercut, Slap, StopLunge, Land | old / hold-compressed v1 | two strikes each on Higgsfield (copyright refusals; StopLunge one check FAIL + one refusal) |
+| PunchL, Throw | old | two fal refusals each |
+| Fall | MiniMax v2r refit | prompt written (fall_sd_v1, air project); not submitted after the fal lane closed |
+| WallAttach, WallClimb | old | need a wall in the start picture; the reader was trained on the plain studio and both MiniMax attempts failed the check; left out of this round |
+| Smash, PunchR, Clap, Lift | Seedance candidates in motion-sd/ | await the in-game close-up blind A/B (GPU) |
