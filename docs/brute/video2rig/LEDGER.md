@@ -270,3 +270,13 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
   24/24 ok. `pack` exit 0 -> `~/hulk-scratch/ab-ingame/blind` (critic gets ONLY `blind/critic`, 24 pairs + brief.md; the A/B key is
   in `pack.log` / `_director`, not for the critic). Pack note: event sequence differs old vs new on wall_back, wall_left,
   wall_backleft (old 18 events, new 16; `_director/report.json`), likely a hit that missed a car during the new wall runs.
+
+### Phase 5 round 3 (2026-10-29 22:05, after the in-game verdicts)
+
+- Set `~/hulk-scratch/brute_v2r_r3/` (motion/ + out/): v2r Idle, Walk, Run, Slap, Fall (motion-v2r); hold-compressed Land, Clap,
+  StopLunge copied from `Local/video2rig/motion-v2r-hc/` (export JSONs kept beside motion/); old PunchL, PunchR, Uppercut, Lift,
+  Throw, WallClimb, Jump, Smash, WallAttach (durations equal brute_v5). clips_meta: 8 v2r/hc, 9 old. hc lengths: StopLunge 2.23 s
+  (coil cut frame 65; r2 3.23), Clap 2.50 s (r2 4.67), Land 3.00 s (r2 5.10).
+- Timing (`timing-r3.log`, rate rule): JSON now carries only the v2r clips (old clips keep the C++ constants): Slap 1.527 / 3.020 /
+  1.6 / hit 2.167 (unchanged from r2), Clap 0.195 / 1.672 / 1.6 / hit 0.933 (r2 0.395 / 1.872), LungeStart 0.533 (coil 1.100;
+  r2 0.566), LandStart 0.000 (as r2). Game-time deltas Slap / Clap 0.000. Land's measured HIT 1.033 (not a JSON key).
