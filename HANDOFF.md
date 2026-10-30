@@ -335,3 +335,7 @@ scratch `before-after/` dir, server `python3 -m http.server 8777`).
   with the exact build + capture commands; add Lift once exported). Harness: `ab_ingame.py --cam-dist 4.0 --hide-help` (new; the old baseline must
   be recaptured at the same settings; pack refuses mixed settings). GPU order: Markhor readers -> Dragon reader -> Hulk captures / Invincible reader.
 - New tools: refine_brute.py `--lock-yaw`; generate_fal.py `--provider seedance2` (+ selftest_fal.py); ab_ingame.py `--cam-dist`, `--hide-help`.
+- fal lane closed (14:55): bytedance/seedance-2.0 refused 8 of 8 outputs on this figure (copyright), 0 USD charged, fal balance still 15.43.
+  Remaining moves without a Seedance take (PunchL, Throw, Run, Walk, Idle, Fall, Jump, Uppercut, Slap, StopLunge, Land, WallAttach, WallClimb)
+  keep today's clips unless the owner adds Higgsfield credits (the ~35 % pass lane) or changes the figure's silhouette (hair/shorts), which is a
+  model change and the owner's call. Prompts for all of them are written under docs/brute/video2rig/prompts/seedance/.
