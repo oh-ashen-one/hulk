@@ -74,4 +74,25 @@ ok = len(la) == 1 and abs(la[0]['net_deg'] - 120) < 6 and la[0]['peak_step_after
 pk, pk0 = r['final']['peak_hand']['Left']['sample'], base['final']['peak_hand']['Left']['sample']
 print('BURST_TEST bones %s LeftArm %s peakhand_L %d (same fit, --no-burst: %d) %s' % (sorted(b), la, pk, pk0, 'PASS' if ok and pk == pk0 else 'FAIL'))
 PY
+echo "== 8. hold compression: the PunchL fit with a 1 s still tail kept (--trim 0), --compress-holds --stance-snap 6: the tail hold is re-timed to 6 samples, the hit stays put, the end equals frame 0"
+blender testfit_hold $V/make_test_fit.py -- $W/model_aligned_copy.blend $SHIPPED PunchL $W/fake_fit/PunchLHold_fit.blend --hold 1.0
+blender refine_hold $V/refine_brute.py -- $W/fake_fit/PunchLHold_fit.blend --return-to-stance --clip PunchLHold --floor=-0.435 --trim 0 --compress-holds --stance-snap 6
+blender refine_hold_off $V/refine_brute.py -- $W/fake_fit/PunchLHold_fit.blend --return-to-stance --clip PunchLHold --floor=-0.435 --trim 0 --out $W/fake_fit/PunchLHold_fit_off.blend
+python3 - "$W/fake_fit/PunchLHold_fit_refined.json" "$W/fake_fit/PunchLHold_fit_off.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1])); base = json.load(open(sys.argv[2]))
+rt = r['retime']; f = r['final']; fb = base['final']
+tail = [c for c in rt['compressed'] if c['samples'][1] == rt['samples_before'] - 1]
+cut = rt['samples_before'] - rt['samples_after']
+hit = all(f['peak_hand'][s]['sample'] == fb['peak_hand'][s]['sample'] for s in ('Left', 'Right'))
+end, end0 = r['last_frame_vs_frame0']['mesh_mm_max'], base['last_frame_vs_frame0']['mesh_mm_max']
+# end gap: never worse than without the flags (this synthetic fit's left foot sits in a plant blend at frame 0 but swings at the end,
+# which no lift match can fix; real fits start and end on both feet), toes not under the floor, drift not worse
+ok = (len(tail) == 1 and tail[0]['keep'] == 6 and cut >= 20 and hit and end <= end0 + 0.5 and f['toe_min_mm'] >= -0.5
+      and f['foot_drift_mm'] <= fb['foot_drift_mm'] + 1.0 and 'retime' not in base)
+print('HOLD_TEST spans %s compressed %s samples %d -> %d hit L/R %d/%d (no flag: %d/%d) end_vs_frame0_mm %.3f (no flag: %.3f) toe %.1f drift %.1f (no flag: toe %.1f drift %.1f) %s' % (
+    [s['samples'] for s in rt['spans']], [c['samples'] for c in rt['compressed']], rt['samples_before'], rt['samples_after'],
+    f['peak_hand']['Left']['sample'], f['peak_hand']['Right']['sample'], fb['peak_hand']['Left']['sample'], fb['peak_hand']['Right']['sample'],
+    end, end0, f['toe_min_mm'], f['foot_drift_mm'], fb['toe_min_mm'], fb['foot_drift_mm'], 'PASS' if ok else 'FAIL'))
+PY
 echo "== done"

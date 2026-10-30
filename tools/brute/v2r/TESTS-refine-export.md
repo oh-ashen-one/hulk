@@ -178,3 +178,17 @@ Blender ... refine_brute.py -- (same) --no-burst --out work-tools/fake_fit/Punch
 - Tried and reverted: dropping plant edge samples the IK cannot reach (Throw left foot 52-56). The raw foot is still 0.9 m
   back at sample 53, so the trimmed foot skated 0.9 m along the floor in 4 samples; the pinned version (36 mm toe settle
   while the heel lands, leg at full reach) is better and stays.
+
+## 8. Hold compression + stance snap (2026-10-29)
+
+```
+Blender ... make_test_fit.py -- ... PunchL work-tools/fake_fit/PunchLHold_fit.blend --hold 1.0
+Blender ... refine_brute.py -- work-tools/fake_fit/PunchLHold_fit.blend --return-to-stance --clip PunchLHold --floor=-0.435 --trim 0 --compress-holds --stance-snap 6
+Blender ... refine_brute.py -- (same, without the two flags) --out work-tools/fake_fit/PunchLHold_fit_off.blend
+```
+- `REFINE_HOLDS PunchLHold spans 1 compressed 1 speedup 1.00 seconds 2.533 -> 1.800 hitL 0.967 -> 0.967 s hitR 1.000 -> 1.000 s`
+- `HOLD_TEST spans [[48, 76]] compressed [[48, 76]] samples 77 -> 55 hit L/R 29/30 (no flag: 29/30) end_vs_frame0_mm 35.000 (no flag: 37.843) toe 0.0 drift 2.2 (no flag: toe -0.0 drift 4.4) PASS`
+- The kept 1 s still tail is found as one hold and re-timed to 6 samples. The hit samples are unchanged, and the toes and drift are no worse.
+- The 35 mm end gap is a property of this synthetic fit. Its left foot is inside a plant blend at frame 0 (the plant starts at sample 2) but swings at the end. The lift match cannot change that, and the run without the flags is 37.8 mm.
+- On the real fits, the last frame equals frame 0 to 0.0 mm; see `docs/brute/video2rig/HOLD-COMPRESSION.md`.
+- Step 5 was re-run after the change. Its numbers are identical.

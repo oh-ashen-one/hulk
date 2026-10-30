@@ -35,6 +35,21 @@
 #                            across the burst (Throw frame 27: ~20 deg; Throw's hurl at frames 98-101 moves the arms ~95 deg, real
 #                            motion, reported in bursts.skipped_as_swing and left alone).
 #                            --no-burst turns it off. Arms count these frames like spike frames in the untouched-arms proof.
+#     --compress-holds       (2026-10-29, after the Blender blind A/B: one-shots read as dead pauses) with --return-to-stance only:
+#                            find near-static spans (smoothed mean bone angular speed < clamp(--hold-frac (0.3) x the clip's p95 speed,
+#                            --hold-min-dps, --hold-max-dps) for >= --hold-min-s) outside the contact windows (each hand's raw peak
+#                            +- --contact-s), and re-time each one to at most --hold-keep samples (default 6) with a cosine-eased rate
+#                            (the playback rate is unchanged at the hold's edges, fastest mid-hold). Holds with both hands above the
+#                            Head keep --hold-keep-up samples instead (default = --hold-keep; Lift's overhead hold). If the clip is still
+#                            longer than --max-seconds, all non-hold time is sped up uniformly (at most --max-speedup x). Hit times move
+#                            and are re-measured (retime.hit in the JSON). Runs after spikes/bursts, before the return blend.
+#                            The contact spans themselves play at real speed (eased into over 3 samples), so a strike keeps its own
+#                            timing and weight while the wind-up/recovery speed up.
+#     --stance-snap N        with --return-to-stance: the return blend already makes the last pose equal frame 0 before the plant;
+#                            the toe clamp's smoothed lift could still differ at the two ends (Land: 16 mm end gap). This blends the
+#                            lift of the last N samples onto frame 0's lift (never below what the toes need), so the last frame equals
+#                            frame 0 and the toes stay above the floor (end-minus-start lift before/after in feet.stance_snap).
+#                            Tried first and dropped: blending the leg rotations after the clamp (PunchL: drift 1 -> 8 mm, toe -1.3 mm).
 #     --action NAME --clip NAME --out PATH.blend   (defaults: active action; clip = action name; <fit>_refined.blend beside input)
 #     --stance-rig rig.json  the aligned rig.json whose start_pose is the start-picture stance (overlap check)
 # Writes <out>.blend and <out>.json; prints
@@ -95,6 +110,17 @@ def parse():
     ap.add_argument('--burst-ease-deg', type=float, default=12.0)
     ap.add_argument('--burst-max-swing-deg', type=float, default=45.0)
     ap.add_argument('--no-burst', action='store_true')
+    ap.add_argument('--compress-holds', action='store_true')
+    ap.add_argument('--hold-frac', type=float, default=0.3)
+    ap.add_argument('--hold-min-dps', type=float, default=4.0)
+    ap.add_argument('--hold-max-dps', type=float, default=8.0)
+    ap.add_argument('--hold-min-s', type=float, default=0.25)
+    ap.add_argument('--hold-keep', type=int, default=6)
+    ap.add_argument('--hold-keep-up', type=int, default=0)
+    ap.add_argument('--contact-s', type=float, default=0.1)
+    ap.add_argument('--max-seconds', type=float, default=0.0)
+    ap.add_argument('--max-speedup', type=float, default=1.6)
+    ap.add_argument('--stance-snap', type=int, default=0)
     ap.add_argument('--action', default='')
     ap.add_argument('--clip', default='')
     ap.add_argument('--out', default='')
@@ -102,6 +128,8 @@ def parse():
     a = ap.parse_args(argv)
     if a.loop and a.return_to_stance:
         ap.error('--loop and --return-to-stance exclude each other')
+    if (a.compress_holds or a.stance_snap) and not a.return_to_stance:
+        ap.error('--compress-holds / --stance-snap need --return-to-stance')
     return a
 
 
@@ -194,6 +222,64 @@ def steps(ch, n, bones):
 
 def pose_dist(ch, i, j, bones):
     return float(sum(qang(ch[b]['q'][i], ch[b]['q'][j]) for b in bones))
+
+
+def resample(ch, t):
+    """channels at fractional source sample times t (quaternions nlerp, locations linear)"""
+    t = np.asarray(t, dtype=np.float64)
+    out = {}
+    for b, d in ch.items():
+        n = len(next(iter(d.values())))
+        i0 = np.clip(np.floor(t).astype(int), 0, n - 1); i1 = np.minimum(i0 + 1, n - 1); w = t - i0
+        o = {}
+        for k, v in d.items():
+            if k == 'q':
+                o[k] = fix_hemi(np.array([nlerp(v[i0[j]], v[i1[j]], w[j]) for j in range(len(t))]))
+            else:
+                o[k] = v[i0] * (1 - w)[:, None] + v[i1] * w[:, None]
+        out[b] = o
+    return out
+
+
+def hold_warp(n, holds, f, contact=(), ramp=3.0, sub=16):
+    """source time t (fractional samples) for each output sample. n: source samples. holds: list of (a, b, K) source sample spans
+    re-timed to K output steps. Elsewhere the rate (output steps per source step) is 1/f, except inside the contact spans
+    (list of (c0, c1)), which play at rate 1 (real speed), eased into over `ramp` samples on either side. Inside a hold the rate is
+    base / (1 + A (1 - cos 2 pi u) / 2), u in 0..1 across it, A solved so the hold takes K output steps (rate continuous at the
+    edges). Returns t_k (the last output sample lands exactly on the last source sample) and the solved A per hold."""
+    ts = np.linspace(0.0, n - 1, (n - 1) * sub + 1)
+    w = np.zeros(len(ts))
+    for c0, c1 in contact:
+        d = np.maximum(0.0, np.maximum(c0 - ts, ts - c1)) / ramp
+        x = np.clip(1 - d, 0, 1)
+        w = np.maximum(w, x * x * (3 - 2 * x))
+    r = 1.0 / f + (1 - 1.0 / f) * w
+    amps = []
+    for a_, b_, K in holds:
+        m = (ts >= a_) & (ts <= b_)
+        u = (ts[m] - a_) / max(1e-9, (b_ - a_))
+        base = r[m].copy()
+
+        def tot(A):
+            rr = base / (1 + A * (1 - np.cos(2 * np.pi * u)) / 2)
+            return float(np.sum(0.5 * (rr[1:] + rr[:-1])) / sub), rr
+        lo, hi = 0.0, 1.0
+        while tot(hi)[0] > K and hi < 1e6:
+            hi *= 2
+        for _ in range(60):
+            mid = 0.5 * (lo + hi)
+            if tot(mid)[0] > K:
+                lo = mid
+            else:
+                hi = mid
+        r[m] = tot(hi)[1]
+        amps.append(hi)
+    tau = np.concatenate([[0.0], np.cumsum(0.5 * (r[1:] + r[:-1]) / sub)])
+    nout = int(round(tau[-1]))
+    tau *= nout / tau[-1]
+    tk = np.interp(np.arange(nout + 1), tau, ts)
+    tk[-1] = n - 1
+    return tk, amps
 
 
 def apply_plant(frames, tg, frot):
@@ -455,6 +541,75 @@ def main():
     print('REFINE bursts', json.dumps({b: [(f_['keys'], f_['net_deg'], f_['path_deg'], f_['window'], f_['peak_step_after_deg']) for f_ in v]
                                        for b, v in bursts.items()}), 'skipped (real swing)', json.dumps([(x['bone'], x['keys'], x['swing_deg']) for x in skipped]))
 
+    # ---------- 2c. hold compression (one-shots): re-time near-static spans to <= --hold-keep samples, cap the length
+    tmap = None   # output sample -> fractional source sample, when re-timed
+    if a.compress_holds:
+        stp_ = steps(ch, N, rotb) / len(rotb) * sr                      # mean rad/s per bone, per step
+        vs = np.zeros(N); vs[1:] += stp_; vs[:-1] += stp_; vs[1:-1] *= 0.5
+        vs = np.degrees(np.convolve(np.pad(vs, 2, mode='edge'), np.ones(5) / 5, mode='valid'))
+        thr = float(min(a.hold_max_dps, max(a.hold_min_dps, a.hold_frac * np.percentile(vs, 95))))
+        cw = int(round(a.contact_s * sr))
+        contact, cspans = set(), []
+        for s_ in SIDES:
+            pk = peaks_raw[s_]['sample']
+            if pk < N:
+                contact.update(range(max(0, pk - cw), min(N, pk + cw + 1)))
+                cspans.append((max(0, pk - cw), min(N - 1, pk + cw)))
+        static = [(vs[i] < thr and i not in contact) for i in range(N)]
+        minlen = int(math.ceil(a.hold_min_s * sr))
+        keep_up = a.hold_keep_up or a.hold_keep
+        hz = {s_: np.array([L.fk(w, rh)[s_ + 'Hand'].z for w, rh in fr_raw[:N]]) for s_ in SIDES}
+        head_z = np.array([L.fk(w, rh)['Head'].z for w, rh in fr_raw[:N]])
+        spans, i = [], 0
+        while i < N:
+            if not static[i]:
+                i += 1
+                continue
+            j = i
+            while j + 1 < N and static[j + 1]:
+                j += 1
+            if j - i + 1 >= minlen:
+                up = bool(np.all(hz['Left'][i:j + 1] > head_z[i:j + 1]) and np.all(hz['Right'][i:j + 1] > head_z[i:j + 1]))
+                spans.append(dict(samples=[i, j], seconds=[r3(i / sr), r3(j / sr)], length_s=r3((j - i) / sr), hands_up=up,
+                                  keep=keep_up if up else a.hold_keep))
+            i = j + 1
+        holds = [(sp['samples'][0], sp['samples'][1], sp['keep']) for sp in spans if sp['samples'][1] - sp['samples'][0] > sp['keep']]
+        # speed-up of the non-hold, non-contact time: the smallest f in 1..--max-speedup that meets --max-seconds (contact spans stay
+        # at real speed); a hold already shorter than K at that rate is left alone
+        def warp(f_):
+            hs = [(a_, b_, K) for a_, b_, K in holds if K < (b_ - a_) / f_]
+            return hold_warp(N, hs, f_, cspans) + (hs,)
+        f = 1.0
+        tmap, amps, hs = warp(f)
+        if a.max_seconds > 0 and (len(tmap) - 1) / sr > a.max_seconds:
+            lo_, hi_ = 1.0, a.max_speedup
+            if (len(warp(hi_)[0]) - 1) / sr > a.max_seconds:
+                f = hi_
+            else:
+                for _ in range(30):
+                    mid = 0.5 * (lo_ + hi_)
+                    if (len(warp(mid)[0]) - 1) / sr > a.max_seconds:
+                        lo_ = mid
+                    else:
+                        hi_ = mid
+                f = hi_
+            tmap, amps, hs = warp(f)
+        holds = hs
+        N_before = N
+        ch = resample(ch, tmap)
+        N = len(tmap)
+        inv = lambda t: float(np.interp(t, tmap, np.arange(N)))   # noqa: E731  source sample -> output sample
+        for b in spike_frames_arm:
+            spike_frames_arm[b] = {k for k in range(N) if any(abs(tmap[k] - s) <= 1.0 for s in spike_frames_arm[b])}
+        REP['retime'] = dict(threshold_dps=r3(thr), p95_dps=r3(np.percentile(vs, 95)), contact_samples=sorted(contact), contact_spans=cspans,
+                             contact_note='contact spans play at real speed (rate 1), eased over 3 samples', spans=spans,
+                             compressed=[dict(samples=[a_, b_], keep=K, ease_amp=r3(A)) for (a_, b_, K), A in zip(holds, amps)],
+                             speedup=r3(f), samples_before=N_before, samples_after=N, seconds_before=r3((N_before - 1) / sr),
+                             seconds_after=r3((N - 1) / sr),
+                             hit_raw={s_: dict(sample=peaks_raw[s_]['sample'], seconds=peaks_raw[s_]['seconds']) for s_ in SIDES},
+                             hit_mapped={s_: dict(sample=r3(inv(peaks_raw[s_]['sample'])), seconds=r3(inv(peaks_raw[s_]['sample']) / sr)) for s_ in SIDES})
+        print('REFINE retime', json.dumps({k: v for k, v in REP['retime'].items() if k != 'contact_samples'}))
+
     # ---------- 3a. loop: best end frame + offset blend
     blend_win = set()
     if a.loop:
@@ -508,7 +663,10 @@ def main():
     if a.return_to_stance:
         Wn = max(2, min(a.return_frames, N // 2))
         # combat timing: the blend never starts before the later hand-speed peak + 0.2 s (contact and follow-through survive)
-        hp = max(peaks_raw[s_]['sample'] for s_ in SIDES if peaks_raw[s_]['sample'] < N)
+        if tmap is not None:
+            hp = int(round(max(np.interp(peaks_raw[s_]['sample'], tmap, np.arange(N)) for s_ in SIDES if peaks_raw[s_]['sample'] <= tmap[-1])))
+        else:
+            hp = max(peaks_raw[s_]['sample'] for s_ in SIDES if peaks_raw[s_]['sample'] < N)
         start_min = hp + int(round(0.2 * sr))
         limited = N - Wn < start_min
         if limited:
@@ -678,6 +836,14 @@ def main():
                 print('REFINE WARNING %s foot %.0f mm under the floor (> --max-lift %.0f mm): lift capped' % (s, need.max() * 1000, a.max_lift * 1000))
                 need = np.minimum(need, a.max_lift)
             lifts[s] = smooth_lift(need, a.loop)
+            if a.stance_snap:   # the return blend made the last pose equal frame 0 before the clamp; give it frame 0's lift too
+                nS = max(2, min(a.stance_snap, N - 1))
+                l_ = lifts[s]; before_ = float(l_[N - 1] - l_[0])
+                for j in range(N - nS, N):
+                    sw = sstep((j - (N - nS) + 1) / nS)
+                    l_[j] = max(need[j], (1 - sw) * l_[j] + sw * l_[0])
+                feet_rep.setdefault('stance_snap', {})[s] = dict(samples=nS, end_minus_start_lift_mm_before=r3(before_ * 1000),
+                                                                 after=r3((l_[N - 1] - l_[0]) * 1000))
         if any(l_.max() > 1e-6 for l_ in lifts.values()):
             frames = eval_frames(grid)
             tg = {}
@@ -717,7 +883,8 @@ def main():
     # untouched arms: every arm-bone rotation equals the pre-plant channels (plant touches legs only); and the pre-plant channels equal
     # the raw fit outside spike frames and the loop/return blend window
     arm_vs_pre = max((math.degrees(qang(chf[b]['q'][i], ch_pre[b]['q'][i])) for b in armb for i in range(N)), default=0.0)
-    arm_vs_raw = max((math.degrees(qang(ch_pre[b]['q'][i], ch0[b]['q'][i])) for b in armb for i in range(N)
+    ch0p = resample(ch0, tmap) if tmap is not None else ch0     # re-timed clips: compare with the raw fit on the same time map
+    arm_vs_raw = max((math.degrees(qang(ch_pre[b]['q'][i], ch0p[b]['q'][i])) for b in armb for i in range(N)
                       if i not in blend_win and i not in spike_frames_arm[b]), default=0.0)
     head_dev = {b: r3(max(math.degrees(qang(chf[b]['q'][i], chf[b]['q'][0])) for i in range(N))) for b in ('Neck', 'Head') if b in chf}
     if not a.no_plant:
@@ -727,6 +894,10 @@ def main():
         R.set_frame(grid[0]); V0f = R.mesh_world(mesh)
         dvf = np.linalg.norm(V0f - Vs, axis=1) * 1000
         REP['frame0_vs_start_stance_after'] = dict(mesh_mm_mean=r3(dvf.mean()), mesh_mm_p95=r3(np.percentile(dvf, 95)), mesh_mm_max=r3(dvf.max()))
+        R.set_frame(grid[-1]); VLf = R.mesh_world(mesh)
+        dvl = np.linalg.norm(VLf - Vs, axis=1) * 1000; dv0l = np.linalg.norm(VLf - V0f, axis=1) * 1000
+        REP['last_frame_vs_start_stance'] = dict(mesh_mm_mean=r3(dvl.mean()), mesh_mm_max=r3(dvl.max()))
+        REP['last_frame_vs_frame0'] = dict(mesh_mm_mean=r3(dv0l.mean()), mesh_mm_max=r3(dv0l.max()))
         print('REFINE refined frame 0 vs start-picture stance', json.dumps(REP['frame0_vs_start_stance_after']))
     REP['final'] = dict(samples=N, seconds=r3((N - 1) / sr), key_first=grid[0], key_last=grid[-1], seam_ratio=r3(seam), seam_definition=seam_def,
                         median_step_rad=r3(medf), foot_drift_mm=r3(drift_after), toe_min_mm=r3((toe_min - a.floor) * 1000),
@@ -741,6 +912,12 @@ def main():
     bpy.ops.wm.save_as_mainfile(filepath=out_blend)
     print('REFINE final', json.dumps({k: v for k, v in REP['final'].items() if k not in ('peak_hand_raw',)}))
     print('REFINE saved', out_blend, out_json)
+    if 'retime' in REP:
+        rt = REP['retime']
+        print('REFINE_HOLDS %s spans %d compressed %d speedup %.2f seconds %.3f -> %.3f hitL %.3f -> %.3f s hitR %.3f -> %.3f s end_vs_frame0_mm %s' % (
+            clip, len(rt['spans']), len(rt['compressed']), rt['speedup'], rt['seconds_before'], rt['seconds_after'],
+            peaks_raw['Left']['seconds'], peaks['Left']['seconds'], peaks_raw['Right']['seconds'], peaks['Right']['seconds'],
+            REP.get('last_frame_vs_frame0', {}).get('mesh_mm_max')), flush=True)
     print('REFINE_GATE %s seam %.2f foot_drift_mm %s toe_min_mm %.1f peakhand_L %d peakhand_R %d' % (
         clip, seam, ('%.1f' % drift_after) if drift_after == drift_after else 'n/a', (toe_min - a.floor) * 1000,
         peaks['Left']['sample'], peaks['Right']['sample']), flush=True)
