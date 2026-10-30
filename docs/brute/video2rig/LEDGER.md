@@ -265,3 +265,8 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
   and Hit->To game-time deltas 0.000 (Throw +0.001 rounding). Carry 3.267-6.367. Segments: LungeStart 0.566 (coil 1.133 - 0.567 cal;
   the lunge plays at the game's fixed rate 2.0 to the clip end: 1.33 s game-time vs today's 0.92 s), WClimb 0-1.233 with fists
   0.60 / 1.10, LandStart 0.00.
+- **r2 captures done (2026-10-29):** `ab_ingame.py run --label new --ignore-window --redo` 24/24 DONE rc=0 (incl. a fresh
+  ab_idle_front; log `~/hulk-scratch/ab-ingame/new-r2.log`). `check --label new`: 24/24 ok (`check-new.log`); `check --label old`:
+  24/24 ok. `pack` exit 0 -> `~/hulk-scratch/ab-ingame/blind` (critic gets ONLY `blind/critic`, 24 pairs + brief.md; the A/B key is
+  in `pack.log` / `_director`, not for the critic). Pack note: event sequence differs old vs new on wall_back, wall_left,
+  wall_backleft (old 18 events, new 16; `_director/report.json`), likely a hit that missed a car during the new wall runs.
