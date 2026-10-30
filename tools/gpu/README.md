@@ -83,6 +83,12 @@ Environment: `GPU_GATES_MAX_CLIENTS` (default 3) still overrides the cap, but a 
   - a demotion while three run;
   - a trip, which exits 75 without running the command.
 
-## Not covered by this branch
+## The machine-wide wrapper
 
-The machine-wide copy that other sessions call, `~/.cache/gpu-slot/bin/gpu_slot.py`, is a different and newer tool. It still defaults to `GPU_SLOT_CAPTURE_SLOTS=2`, and it uses that number as its own foreign-client cap. This branch does not change it. Raising it to 3 with the same tripwire is a separate change to shared infrastructure.
+Other sessions call `~/.cache/gpu-slot/bin/gpu_slot.py`. It is a different, newer tool, deployed by `tools/gpu/install.sh` from `oh-ashen-one/claude-code-game-builder`. Commit `a017f67` on branch `opus/gpu-cap3-tripwire` gives it the same semantics, and that commit was deployed on 2026-10-29 at 23:49 ET. The details:
+
+- 3 slots by default, also used as the foreign-client cap.
+- `watchdog_cap()` re-reads the watchdog JSON at every acquire and every gate poll.
+- A new `gpu_slot.sh cap` subcommand.
+
+The previous file is kept as `~/.cache/gpu-slot/bin/gpu_slot.py.bak-20261029-cap2`. The rule text is also in `~/.cache/gpu-slot/RULES-2026-10-29.md`.
