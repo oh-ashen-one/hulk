@@ -283,3 +283,9 @@ Also used: line 666 (`ActHitAt` and `ActDur` derive from `C.Hit`, `C.From`, `C.T
 - r3 build: `build_brute.py --fbx ~/hulk-scratch/brute_v2r_r3/out/brute_anim.fbx` exit 0, 17 A_Brute_* (StopLunge 2.23 s, Clap 2.50,
   Land 3.00; old clips at their brute_v5 lengths); log `~/hulk-scratch/brute_v2r_r3/build_brute-r3.log`. **/Game/Brute/Body = r3.**
   `ab_ingame.py run --label` now takes any [a-z0-9_-] label (r3 -> `~/hulk-scratch/ab-ingame/r3`).
+- r3 captures: `ab_ingame.py run --label r3 --ignore-window --cases jump_*,combat_*,lunge_*` 9/9 DONE rc=0 (`~/hulk-scratch/ab-ingame/
+  r3-run.log`); `check --label r3`: the 9 cases ok (the 15 cases not captured in r3 print MISSING; `check-r3.log`).
+- r3 blind pack `~/hulk-scratch/ab-ingame/blind-r3` (critic gets ONLY `blind-r3/critic`, 9 pairs + brief.md): jump_* and lunge_* =
+  r3 vs r2 "new" (hc Land / hc StopLunge vs r2 v2r), combat_* = r3 vs "old" (hc Clap vs old Clap; PunchL/R, Smash identical old in
+  both; Slap is the r2-winning v2r in r3 vs old in "old", so combat also differs in Slap). Key + per-pair labels in `_director/KEY.json`;
+  event sequences identical in all 9 pairs. Made with the new `pack --a r3 --b new|old --cases ...` (second call extends the pack).
