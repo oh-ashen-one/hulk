@@ -137,6 +137,28 @@ Fall has planting off (airborne); WallClimb's toe 445 mm is the hang (feet off t
 **Next (owner)**: feel playtest of the final set; merge decision for this branch and the fork branches; optional re-film with the HUD
 hidden. Disk is at 100 % (13 GB free): scratch sets `~/hulk-scratch/ab-ingame` (~0.6 GB), `brute_v2r_candidate` can go after merge.
 
+**Round 4 (queued behind Dragon-boss and Markhor on the GPU)** (written 2026-10-29 23:00 EDT, Opus 5.5 high)
+
+Rule: **nothing launches (no `video2rig check`, fit, reader training, Blender batch, build or capture) until Markhor reports done**;
+the GPU belongs to the Dragon-boss and Markhor sessions until then, and every launch still goes through the GPU gates above.
+
+- Goals: fit median < 4 px and no fit warnings on Run, StopLunge, Land and Fall.
+- Done already (GPU-free): two new takes, size gate + contact sheet only (LEDGER rows `run_v2`, `land_v2`; spend +0.66 USD, fal
+  balance 15.73): `Local/video2rig/brute-aligned/clips/run_v2.mp4` (size PASS 1.26, sharp full-speed run in place, wide arms,
+  snaps to stance only in the last 2 frames, so cut a treadmill window as for v1) and `land_v2.mp4` (size PASS 1.09, two-foot
+  fist+palm contact, no hop, no raised arm, but impact at ~0.67 s and a ~1.3 s still crouch: needs `--compress-holds`).
+- Steps:
+  1. `check` + fit `run_v2` and `land_v2` with the lockfix fork: `run_clip.sh <P> run_v2 Run --loop --fork-dir ~/video2rig-lockfix
+     --run-args "--set steps=false" --refine-args "--treadmill --window <a> <b> --loop-win 0.5 --trim 0"` (as Run v1) and
+     `run_clip.sh <P> land_v2 Land --return-to-stance --fork-dir ~/video2rig-lockfix --refine-args "--max-lift 0.06
+     --compress-holds"`. A take that does not beat v1's fit (Run 4.65, Land 5.52 px) is not used.
+  2. Joints tuning (`creature.json clips.<clip>.joints`, as Lift/Uppercut exp B): Fall's LeftFoot; Land/Run range warnings
+     (Land v1: RightFoot, RightShoulder, Spine1, Head). StopLunge v2 stays unadopted unless a new take rises (it never does).
+  3. If still > 4 px: train the dense reader warm-started, `python -m video2rig.reader.prepare brute-aligned --init
+     brute-aligned/reader/reader.pt` (MPS, hours; counts as a GPU client), then refit.
+  4. In-game blind A/B round 4 (`ab_ingame.py run/check/pack`) for every clip that changed; a clip ships only if it wins or ties.
+  5. Final build (`assemble_motion.py` -> `measure_timing.py` -> `build_brute.py`), HANDOFF + LEDGER gate lines.
+
 
 ## Owner play session 2026-10-24 (live)
 
