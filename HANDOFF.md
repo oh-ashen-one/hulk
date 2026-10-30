@@ -339,3 +339,4 @@ scratch `before-after/` dir, server `python3 -m http.server 8777`).
   Remaining moves without a Seedance take (PunchL, Throw, Run, Walk, Idle, Fall, Jump, Uppercut, Slap, StopLunge, Land, WallAttach, WallClimb)
   keep today's clips unless the owner adds Higgsfield credits (the ~35 % pass lane) or changes the figure's silhouette (hair/shorts), which is a
   model change and the owner's call. Prompts for all of them are written under docs/brute/video2rig/prompts/seedance/.
+- 16:39: OLD baseline recaptured at the close-up settings (`cuold`: combat + grab, 3 angles, `--cam-dist 4.0 --hide-help`, 6 gated launches, check 6/6 ok, `~/hulk-scratch/ab-ingame/cuold/`). Remaining GPU steps (timing swap -> `build_brute.py --fbx brute_sd/brute_anim.fbx` -> `cusd` captures -> pack -> Opus blind critique -> restore/ship) run after Dragon's reader (~20:00) and Invincible's training; exact commands in `~/hulk-scratch/brute_sd/README.md`.
