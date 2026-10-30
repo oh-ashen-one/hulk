@@ -147,17 +147,82 @@ the GPU belongs to the Dragon-boss and Markhor sessions until then, and every la
   balance 15.73): `Local/video2rig/brute-aligned/clips/run_v2.mp4` (size PASS 1.26, sharp full-speed run in place, wide arms,
   snaps to stance only in the last 2 frames, so cut a treadmill window as for v1) and `land_v2.mp4` (size PASS 1.09, two-foot
   fist+palm contact, no hop, no raised arm, but impact at ~0.67 s and a ~1.3 s still crouch: needs `--compress-holds`).
+- Done since (GPU-free): land_v2 failed `check` (1.96 %), so one more Land take, `land_v3.mp4` (LEDGER row `Land v3 (round 4)`,
+  +0.30 USD, live fal balance 15.73 -> 15.43): prompt fix for panel agreement (slow legible crouch, exact same timing in both panels);
+  size PASS 1.04, panels crouch and rise on the same frames, no hop/raised arm/twist, ends exactly on the stance; only the left fist
+  reaches the floor, ~1.3 s still crouch (`--compress-holds`), stance ~4.3 s. **check/fit pending GPU.** Land's second regeneration
+  after a failure: if v3 fails check, keep the hold-compressed v1; no fourth take.
 - Steps:
   1. `check` + fit `run_v2` and `land_v2` with the lockfix fork: `run_clip.sh <P> run_v2 Run --loop --fork-dir ~/video2rig-lockfix
      --run-args "--set steps=false" --refine-args "--treadmill --window <a> <b> --loop-win 0.5 --trim 0"` (as Run v1) and
      `run_clip.sh <P> land_v2 Land --return-to-stance --fork-dir ~/video2rig-lockfix --refine-args "--max-lift 0.06
-     --compress-holds"`. A take that does not beat v1's fit (Run 4.65, Land 5.52 px) is not used.
+     --compress-holds"`. land_v2 failed check; same for land_v3: `run_clip.sh <P> land_v3 Land --return-to-stance --fork-dir
+     ~/video2rig-lockfix --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.06"`. A take that does not beat v1's fit (Run 4.65, Land 5.52 px) is not used.
   2. Joints tuning (`creature.json clips.<clip>.joints`, as Lift/Uppercut exp B): Fall's LeftFoot; Land/Run range warnings
      (Land v1: RightFoot, RightShoulder, Spine1, Head). StopLunge v2 stays unadopted unless a new take rises (it never does).
-  3. If still > 4 px: train the dense reader warm-started, `python -m video2rig.reader.prepare brute-aligned --init
-     brute-aligned/reader/reader.pt` (MPS, hours; counts as a GPU client), then refit.
+  3. If still > 4 px: train the dense reader warm-started from reader.pt and refit run_v2, land_v3 (after check), stoplunge_v2 and
+     land_v1 with it: see the **Round 4 dense reader** block below (also in `docs/brute/video2rig/ROUND4.md`).
   4. In-game blind A/B round 4 (`ab_ingame.py run/check/pack`) for every clip that changed; a clip ships only if it wins or ties.
   5. Final build (`assemble_motion.py` -> `measure_timing.py` -> `build_brute.py`), HANDOFF + LEDGER gate lines.
+
+**Round 4 dense reader** (plan only, nothing run; written 2026-10-29 by Opus 5.5 high; every flag dry-parsed with each module's own
+argparse on the exact argv, `render_poses.py` parsed with bpy stubbed; check: `tools/brute/v2r/dryparse_dense.py`, 17/17 parse, CPU only, writes nothing)
+
+- What it is: `python -m video2rig.reader.dense` (TUTORIAL.md "Advanced: the dense reader"). It reads a square window round the body
+  (~1.8x larger in its input than a whole panel) and adds per-pixel bone labels + depth; the author measured ~1.5x more exact joints,
+  "experimental, used on one creature". It is NOT `reader.prepare --init` (that retrains the standard whole-panel reader); `prepare`
+  stays unused here.
+- Warm start from the standard reader WORKS: `dense train --init reader/reader.pt` loads 262 of 298 tensors (backbone + keypoint heads;
+  reader.pt has the same 41 keypoints; only the depth and dense heads start fresh). Checked on the CPU, nothing trained.
+- Nothing overwrites `reader/reader.pt`: renders, poses and labels go to `reader/renders-dense/`, the weights to `reader/reader-dense.pt`
+  (`--out`, default is that same file), readings to `work/<clip>/dense/`, fits to `work/<clip>/fit-dense.npz` + `out/<clip>-dense.npz`.
+  No copy/swap of `reader/` is needed. The standard `reader/renders/` is not touched either (the dense set is its own folder).
+- GPU: the Blender render, `dense train` and every `dense read` are GPU clients. Each waits for `python3 tools/gpu/gpu_gates.py check`
+  (clients under the cap, util < 90 %, 20 s since the last launch, no STREAMING) and runs headless under `taskpolicy -b`. Only after the
+  Dragon-boss / Markhor GPU work reports done. Disk: 14 GB free now; the dense set is ~0.5-1 GB.
+
+Train (cwd `/Users/midir/video2rig-lockfix`, `PY=/Users/midir/video2rig/.venv/bin/python`, `P=/Users/midir/hulk/Local/video2rig/brute-aligned`,
+`R=$P/reader/renders-dense`, `B=/Applications/Blender.app/Contents/MacOS/Blender`):
+
+```
+$PY -m video2rig.reader.poses $P --n 6000 --seed 1 --out $R/poses.npz                                 # CPU, ~6 min
+$B $P/model.blend --background --factory-startup --python /Users/midir/video2rig-lockfix/blender/render_poses.py -- \
+   --poses $R/poses.npz --cameras $P/start/cameras.json --out $R --copies 12 --samples 8 --fit 896 --height 720 --project $P
+                                                                                                       # Blender (GPU), ~20-35 min
+$PY -m video2rig.reader.visible $P --poses $R/poses.npz --out $R/visible.npz                          # CPU, ~5-15 min
+$PY -m video2rig.reader.dense labels $P --renders reader/renders-dense                                 # CPU, ~10-30 min; check dense_labels_check.jpg
+$PY -m video2rig.reader.dense train $P --renders reader/renders-dense --init $P/reader/reader.pt \
+   --steps 8000 --out reader/reader-dense.pt                                                           # MPS, the long part
+```
+
+Expected: 8000 steps (author default, batch 24). The standard reader ran 0.89 s/step alone and 2.03 s/step beside two other trainers
+(9000 steps = 5.1 h); the dense net is the same 448 px ViT plus two heads, so about 1.0-1.2 s/step alone = **2.2-2.7 h**, up to ~5 h
+if another trainer shares the GPU. With poses, render, visible and labels: **~3-3.5 h wall alone, ~6 h contended.** RAM ~8 GB for the
+12000 windows. Never judge it before the last step (the dragon read 13 px at 300 steps, 4 px at 9000).
+
+Refit (per clip; joints and other `clips.<clip>` settings in creature.json still apply through `clip_cfg`):
+
+```
+$PY -m video2rig.reader.dense read $P <clip> --reader $P/reader/reader-dense.pt --locator masks        # GPU, ~1-3 min -> work/<clip>/dense/reading.npz
+$PY -m video2rig.reader.fit $P <clip> --reading $P/work/<clip>/dense/reading.npz --tag=-dense [--set steps=false]
+                                                                                                       # CPU ~2-3 min -> out/<clip>-dense.npz, work/<clip>/fit-dense.npz,
+                                                                                                       #   fit-dense-report.json; "median keypoint miss" in its output
+$PY -m video2rig review $P <clip> --tag=-dense                                                        # work/<clip>/review-dense.mp4
+```
+
+| clip | fit extras | install + refine (after the dense fit beats the standard one) |
+| --- | --- | --- |
+| run_v2 | `--set steps=false` | `run_clip.sh $P run_v2 Run --loop --refine-args "--treadmill --window 33 124 --loop-win 0.7 --trim 0"` (bar: 4.35 px) |
+| land_v3 | none; only once `check` has passed (else skip it) | `run_clip.sh $P land_v3 Land --return-to-stance --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.06"` |
+| stoplunge_v2 | none | `run_clip.sh $P stoplunge_v2 StopLunge --return-to-stance --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.07"` (bar 4.58 px; still not adoptable unless the take rises, which the fit cannot add) |
+| land_v1 | none | `run_clip.sh $P land_v1 Land --return-to-stance --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.06"` (bar 5.52 px; the shipped hold-compressed Land) |
+
+Every `run_clip.sh` line also takes `--fork-dir /Users/midir/video2rig-lockfix --motion-dir /Users/midir/hulk/Local/video2rig/motion-v2r-dense
+--from import` (a separate GLB folder: motion-v2r and motion-v2r-r4 stay untouched). Install step before it, as for Lift's `-jt` fit:
+`mkdir -p $P/work/<clip>/attempt-pre-dense && cp $P/out/<clip>.npz $P/work/<clip>/{fit.npz,report.json} $P/work/<clip>/attempt-pre-dense/ (the files that exist)
+&& cp $P/out/<clip>-dense.npz $P/out/<clip>.npz` (restore = copy back). run_clip's CLIP line then still prints the standard fit px from
+pipeline.state: record the dense px from the `reader.fit` output instead. The dense miss is measured against the dense reading itself,
+so judge by the review film and the in-game A/B, not by px alone.
 
 
 ## Owner play session 2026-10-24 (live)
