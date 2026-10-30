@@ -33,6 +33,16 @@ Price and balance (read-only platform API, same key): GET https://api.fal.ai/v1/
 Spend guard: the estimate (unit_price x seconds) is refused over $V2R_FAL_MAX_USD (default 2.00 per clip), and when the
 account balance is known and below the estimate. One clip per run, never fanned out.
 
+--provider seedance2 (2026-10-30): ByteDance Seedance 2.0 image-to-video on the same queue protocol,
+  endpoint bytedance/seedance-2.0/image-to-video (fal OpenAPI 2026-10-30: required prompt, image_url; duration string
+  'auto'|'4'..'15'; resolution 480p|720p|1080p|4k; aspect_ratio; generate_audio; codec auto|H264|H265; bitrate_mode
+  standard|high; end_image_url; no seed input, the seed used comes back in the result). Body sent: prompt, image_url,
+  duration "<n>", resolution (default 720p), aspect_ratio (default 16:9), generate_audio true (Higgsfield refused 4 of
+  5 audio-off takes of this model), codec H264, bitrate_mode standard [, end_image_url with --end]. Fallback price
+  0.1547 USD/s at 720p (2026-10-30). After download, a clip that is not 1280x720 H.264 at a constant 24 fps is kept as
+  clips/<clip>.orig.mp4 and re-encoded with ffmpeg to clips/<clip>.mp4 (1280x720, H.264, CFR 24, audio AAC); the
+  .json records both probes. The default provider stays minimax, unchanged.
+
 Exit codes: 0 done (or dry run) | 2 other failure | 3 balance exhausted (switch provider) | 4 auth failure (401/403)
 | 5 refused by the per-clip USD cap | 6 stopped while waiting: the paid request goes on at fal, run --resume.
 """
@@ -59,6 +69,12 @@ SECRETS = Path.home() / '.config' / 'fal' / 'secrets.env'
 RESOLUTIONS = ('480P', '768P', '2K', '4K')
 FALLBACK_USD_PER_S = 0.05            # GET /v1/models/pricing for minimax/h3/image-to-video, 2026-10-29
 DEFAULT_CAP_USD = 2.00
+
+SD2_ENDPOINT = 'bytedance/seedance-2.0/image-to-video'
+SD2_RESOLUTIONS = ('480p', '720p', '1080p', '4k')
+SD2_FALLBACK_USD_PER_S = 0.1547      # 720p, owner brief 2026-10-30 (a real run reads GET /v1/models/pricing live)
+SD2_ASPECTS = ('auto', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16')
+TARGET_W, TARGET_H, TARGET_FPS = 1280, 720, 24   # what video2rig reads; seedance2 clips are normalised to this
 
 POLL_S = 10
 BACKOFF_S, BACKOFF_MAX_S = 15, 300
@@ -279,12 +295,99 @@ def data_uri(path):
 
 
 def build_body(a, prompt, start, seed):
+    if getattr(a, 'provider', 'minimax') == 'seedance2':
+        return build_body_sd2(a, prompt, start)
     img = a.image_url if a.image_url else data_uri(start)
     body = {'prompt': prompt, 'image_url': img, 'resolution': a.resolution, 'duration': a.duration,
             'prompt_expansion_mode': a.expansion, 'seed': seed, 'sync_mode': False}
     if a.end:
         body['end_image_url'] = img
     return body
+
+
+def build_body_sd2(a, prompt, start):
+    """Seedance 2.0 i2v body (fal schema): no seed and no prompt expansion inputs exist for this model."""
+    img = a.image_url if a.image_url else data_uri(start)
+    body = {'prompt': prompt, 'image_url': img, 'duration': str(a.duration), 'resolution': a.resolution,
+            'aspect_ratio': a.aspect_ratio, 'generate_audio': not a.no_audio, 'codec': 'H264',
+            'bitrate_mode': 'standard'}
+    if a.end:
+        body['end_image_url'] = img
+    return body
+
+
+def _ffbin(name):
+    import shutil
+    return shutil.which(name) or f'/opt/homebrew/bin/{name}'
+
+
+def probe(mp4):
+    """ffprobe of the first video stream: {codec, width, height, r_frame_rate, avg_frame_rate, nb_frames, duration}."""
+    import subprocess
+    out = subprocess.run([_ffbin('ffprobe'), '-v', 'error', '-select_streams', 'v:0', '-show_entries',
+                          'stream=codec_name,width,height,r_frame_rate,avg_frame_rate,nb_frames:format=duration',
+                          '-of', 'json', str(mp4)], capture_output=True, text=True, timeout=120)
+    if out.returncode != 0:
+        raise RuntimeError(f'ffprobe {mp4.name}: {out.stderr.strip()[:300]}')
+    d = json.loads(out.stdout)
+    st = (d.get('streams') or [{}])[0]
+    return {'codec': st.get('codec_name'), 'width': st.get('width'), 'height': st.get('height'),
+            'r_frame_rate': st.get('r_frame_rate'), 'avg_frame_rate': st.get('avg_frame_rate'),
+            'nb_frames': int(st['nb_frames']) if str(st.get('nb_frames', '')).isdigit() else None,
+            'duration': float((d.get('format') or {}).get('duration') or 0) or None}
+
+
+def conforms(pr):
+    from fractions import Fraction
+
+    def fr(x):
+        try:
+            return Fraction(x)
+        except (TypeError, ValueError, ZeroDivisionError):
+            return None
+    return (pr.get('codec') == 'h264' and pr.get('width') == TARGET_W and pr.get('height') == TARGET_H
+            and fr(pr.get('r_frame_rate')) == TARGET_FPS and fr(pr.get('avg_frame_rate')) == TARGET_FPS)
+
+
+def normalise(clips, clip, mp4):
+    """seedance2 only: a clip that is not 1280x720 H.264 CFR 24 becomes <clip>.orig.mp4 and an ffmpeg re-encode takes
+    its place as <clip>.mp4. Never fatal (the clip is paid for): a failure leaves the download as <clip>.mp4."""
+    import subprocess
+    rec = {'target': f'{TARGET_W}x{TARGET_H} h264 cfr {TARGET_FPS}', 'reencoded': False}
+    try:
+        rec['downloaded'] = probe(mp4)
+    except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as e:
+        rec['error'] = scrub(e)
+        print(f'{clip}: probe failed ({e}); clip left as downloaded', flush=True)
+        return rec
+    if conforms(rec['downloaded']):
+        rec['final'] = rec['downloaded']
+        return rec
+    orig = clips / f'{clip}.orig.mp4'
+    tmp = clips / f'{clip}.norm.tmp.mp4'
+    cmd = [_ffbin('ffmpeg'), '-v', 'error', '-y', '-i', str(mp4), '-map', '0:v:0', '-map', '0:a?',
+           '-vf', f'scale={TARGET_W}:{TARGET_H}:flags=lanczos,fps={TARGET_FPS},format=yuv420p',
+           '-c:v', 'libx264', '-preset', 'slow', '-crf', '14', '-r', str(TARGET_FPS), '-fps_mode', 'cfr',
+           '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', str(tmp)]
+    rec['ffmpeg'] = ' '.join(['ffmpeg'] + cmd[1:]).replace(str(clips) + '/', '')
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        if r.returncode != 0:
+            raise RuntimeError(r.stderr.strip()[:400])
+        fin = probe(tmp)
+        if not conforms(fin):
+            raise RuntimeError(f're-encode does not conform: {fin}')
+    except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as e:
+        tmp.unlink(missing_ok=True)
+        rec['error'] = scrub(e)
+        print(f'{clip}: re-encode failed ({e}); clip left as downloaded', flush=True)
+        return rec
+    mp4.replace(orig)
+    tmp.replace(mp4)
+    rec.update(reencoded=True, original=orig.name, final=fin)
+    print(f'{clip}: re-encoded to {TARGET_W}x{TARGET_H} H.264 CFR {TARGET_FPS} (original kept as {orig.name})',
+          flush=True)
+    return rec
 
 
 def redacted(body, start):
@@ -399,6 +502,8 @@ def finish(clips, clip, path, job, st, response_url, resume_hint):
         with_retries(lambda: download(video['url'], mp4), f'{clip} download')
     except (Transient, ApiError) as e:
         raise Fail(f'{clip}: download failed: {e}\n{resume_hint}', EXIT_STOPPED)
+    sd2 = job.get('provider') == 'seedance2'
+    norm = normalise(clips, clip, mp4) if sd2 else None
     done_s = time.time()
     bal_after = balance()
     ev = billing_event(job['request_id'], job.get('submitted_day') or job['submitted'][:10] + 'T00:00:00Z')
@@ -407,10 +512,10 @@ def finish(clips, clip, path, job, st, response_url, resume_hint):
         'provider': 'fal', 'model': job['endpoint'], 'endpoint': job['endpoint'], 'task': job['request_id'],
         'request_id': job['request_id'], 'start': job['start'], 'start_sha256': job.get('start_sha256'),
         'image_source': job.get('image_source'), 'end_frame': job.get('end_frame', False),
-        'prompt': job['prompt'], 'prompt_expansion_mode': job['body']['prompt_expansion_mode'],
+        'prompt': job['prompt'], 'prompt_expansion_mode': job['body'].get('prompt_expansion_mode'),
         'expanded_prompt': result.get('expanded_prompt'),
         'resolution': job['body']['resolution'], 'duration': job['body']['duration'], 'duration_s': job['body']['duration'],
-        'seed': job['body']['seed'], 'seed_source': job.get('seed_source'),
+        'seed': job['body'].get('seed'), 'seed_source': job.get('seed_source'),
         'enable_safety_checker': 'fal default (not sent)', 'sync_mode': False,
         'submitted': job['submitted'], 'completed': now_iso(), 'seconds_to_ready': round(done_s - job['submitted_s']),
         'metrics': st.get('metrics'), 'video': {k: video.get(k) for k in ('url', 'content_type', 'file_name', 'file_size')},
@@ -426,6 +531,20 @@ def finish(clips, clip, path, job, st, response_url, resume_hint):
                                     f'{PLATFORM}/models/billing-events?request_id={job["request_id"]}',
         },
     }
+    if sd2:
+        b = job['body']
+        meta['provider_option'] = 'seedance2'
+        meta['params'] = {k: b.get(k) for k in ('duration', 'resolution', 'aspect_ratio', 'generate_audio', 'codec',
+                                                 'bitrate_mode') if k in b}
+        meta['params']['end_image_url'] = 'start picture' if 'end_image_url' in b else None
+        meta['duration_s'] = int(b['duration']) if str(b.get('duration', '')).isdigit() else b.get('duration')
+        meta['seed'] = result.get('seed')
+        meta['seed_source'] = 'returned by fal (seedance2 has no seed input)'
+        meta['enable_safety_checker'] = 'not an input of this endpoint'
+        meta['normalised'] = norm
+        meta['bytes_on_disk'] = mp4.stat().st_size
+        orig = clips / f'{clip}.orig.mp4'
+        meta['bytes_on_disk_orig'] = orig.stat().st_size if (norm or {}).get('reencoded') else None
     (clips / f'{clip}.json').write_bytes(json.dumps(meta, indent=1).encode('utf-8'))
     path.unlink(missing_ok=True)
     c = meta['cost']
@@ -441,18 +560,32 @@ def main():
     ap.add_argument('clip')
     ap.add_argument('--prompt', help='a text file with the prompt (required unless --resume)')
     ap.add_argument('--duration', type=int, default=5, help='seconds, 5..15 (fal schema), default 5')
-    ap.add_argument('--resolution', default='768P', choices=RESOLUTIONS)
+    ap.add_argument('--provider', default='minimax', choices=('minimax', 'seedance2'),
+                    help=f'minimax (default: {ENDPOINT}) | seedance2 ({SD2_ENDPOINT})')
+    ap.add_argument('--resolution', default=None, help=f'minimax: {"|".join(RESOLUTIONS)} (default 768P); '
+                    f'seedance2: {"|".join(SD2_RESOLUTIONS)} (default 720p)')
+    ap.add_argument('--aspect-ratio', default='16:9', choices=SD2_ASPECTS, help='seedance2 only (default 16:9)')
+    ap.add_argument('--no-audio', action='store_true', help='seedance2 only: generate_audio false (default true)')
     ap.add_argument('--seed', type=int, default=None, help='default: a random seed chosen here and recorded')
     ap.add_argument('--end', action='store_true', help='loops: also send the start picture as end_image_url')
     ap.add_argument('--start', help='first frame (default <project>/start/start.png)')
     ap.add_argument('--image-url', help='send this URL as image_url instead of the start picture as a data URI')
     ap.add_argument('--expansion', default='disabled', help="prompt_expansion_mode: disabled (default, literal "
                     "prompt) | fast | balanced | quality")
-    ap.add_argument('--endpoint', default=ENDPOINT)
+    ap.add_argument('--endpoint', default=None, help='default: the provider\'s endpoint')
     ap.add_argument('--timeout-min', type=float, default=60.0, help='stop waiting after this (resume later)')
     ap.add_argument('--dry-run', action='store_true', help='print the request (no image bytes, no key) and exit')
     ap.add_argument('--resume', action='store_true', help='no new request: bring home the one in clips/<clip>.task.json')
     a = ap.parse_args()
+    sd2 = a.provider == 'seedance2'
+    res_ok = SD2_RESOLUTIONS if sd2 else RESOLUTIONS
+    if a.resolution is None:
+        a.resolution = '720p' if sd2 else '768P'
+    elif a.resolution not in res_ok:
+        ap.error(f"argument --resolution: invalid choice: '{a.resolution}' (choose from "
+                 f"{', '.join(repr(r) for r in res_ok)})")
+    if a.endpoint is None:
+        a.endpoint = SD2_ENDPOINT if sd2 else ENDPOINT
 
     project = Path(a.project).expanduser().resolve()
     if not project.is_dir():
@@ -481,7 +614,10 @@ def main():
     else:
         if not a.prompt:
             ap.error('--prompt is required (unless --resume)')
-        if not 5 <= a.duration <= 15:
+        if sd2:
+            if not 4 <= a.duration <= 15:
+                ap.error(f'--duration must be 4..15 s (fal schema for {SD2_ENDPOINT})')
+        elif not 5 <= a.duration <= 15:
             ap.error('--duration must be 5..15 s (fal schema for minimax/h3/image-to-video)')
         if path.exists():
             raise Fail(f'{path} holds a paid request that is not home yet: add --resume (never paid twice)')
@@ -492,16 +628,25 @@ def main():
             raise Fail(f'start picture not found: {start}')
         prompt = with_no_effects(Path(a.prompt).read_text(encoding='utf-8').strip())
         seed, seed_source = (a.seed, 'given') if a.seed is not None else (random.randrange(1, 2 ** 31 - 1), 'random, chosen here')
+        if sd2:
+            if a.seed is not None:
+                print('note: seedance2 has no seed input; --seed is ignored (fal returns the seed it used)', flush=True)
+            seed, seed_source = None, 'not sent (seedance2 has no seed input)'
+        elif a.aspect_ratio != '16:9' or a.no_audio:
+            ap.error('--aspect-ratio / --no-audio apply to --provider seedance2 only')
         body = build_body(a, prompt, start, seed)
-        unit = FALLBACK_USD_PER_S
+        unit = SD2_FALLBACK_USD_PER_S if sd2 else FALLBACK_USD_PER_S
+        price_day = '2026-10-30' if sd2 else '2026-10-29'
         if a.dry_run:
             print(f'POST {QUEUE}/{a.endpoint}   (Authorization: Key <FAL_KEY from the environment or {SECRETS}, '
                   f'not shown>)')
             print(json.dumps(redacted(body, start), indent=1))
-            if seed_source != 'given':
+            if sd2:
+                print('seed: not an input of seedance2 (fal returns the seed it used; recorded in the .json)')
+            elif seed_source != 'given':
                 print('seed: chosen at random for this printout; a real run picks its own and records it (--seed N '
                       'to fix it)')
-            print(f'estimate: {unit} USD/s x {a.duration} s = {unit * a.duration:.2f} USD (price as of 2026-10-29; a '
+            print(f'estimate: {unit} USD/s x {a.duration} s = {unit * a.duration:.2f} USD (price as of {price_day}; a '
                   f'real run reads it live); cap {os.environ.get("V2R_FAL_MAX_USD", DEFAULT_CAP_USD)} USD; '
                   f'clip -> {clips / a.clip}.mp4')
             print('dry run: nothing sent')
@@ -554,6 +699,8 @@ def main():
                'image_source': 'url' if a.image_url else 'data_uri', 'end_frame': bool(a.end),
                'prompt': prompt, 'body': redacted(body, start), 'seed_source': seed_source,
                'price': price, 'estimate_usd': est, 'balance_before': bal}
+        if sd2:
+            job['provider'] = 'seedance2'
         job_write(path, job)                                    # the moment fal has it
         (clips / f'{a.clip}.prompt.txt').write_text(prompt + '\n', encoding='utf-8')
         print(f'{a.clip}: accepted, request {rid} (saved in {path})', flush=True)
