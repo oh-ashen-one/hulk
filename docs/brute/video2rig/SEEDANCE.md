@@ -63,3 +63,4 @@ only if credits remain (WallAttach/WallClimb need a wall in the picture; see `pr
 | punchl_sd_v2 (fal, same prompt as v1) | 01a18e00 | 0 (refused after 468 s: copyright) | not generated; PunchL = two fal refusals, keeps the old clip | | | | no |
 | throw_sd_v1 (fal) | 01a18e07 | 0 (refused after 488 s: copyright) | not generated; retry once as throw_sd_v2, same prompt | | | | no |
 | throw_sd_v2 (fal, same prompt) | 01a18e0f | 0 (refused after 549 s: copyright) | not generated; Throw = two fal refusals, keeps the old clip. fal tally this batch: 4 of 4 refused | | | | no |
+| run_sd_v1 (fal, 6 s) | 01a18e18 | 0 (refused after 559 s: copyright) | not generated; retry once as run_sd_v2 | | | | no |
