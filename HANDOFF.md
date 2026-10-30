@@ -1,5 +1,15 @@
 ## video2rig animation upgrade — Phase 6 handoff: FINAL SET = r3 (2026-10-29 22:45 EDT, Opus 5.5 high)
 
+> **2026-10-30 04:45 — ROUND 4 CAPTURED AND PACKED (not shipped unless it wins).** r4 = the final r3 set with Run (run_v2), Land
+> (land_v3, hold-compressed) and Fall (range-fix refit) from `Local/video2rig/motion-v2r-r4/`, assembled in `~/hulk-scratch/brute_v2r_r4/`
+> (8 new/hc + 9 old; Run 3.77 s, 3.80 m/s vs 3.70 s, 4.23 m/s; Land 3.00, Fall 4.67 unchanged). Timing JSON re-measured (6dc9c38): acts
+> unchanged (Slap, Clap), LandStart 0.000, LungeStart 0.533. **`/Game/Brute/Body` now holds r4** (17 assets): if r4 loses, re-import the
+> shipped set with `python3 unreal/WebHomage/Scripts/build_brute.py` (brute_v5 = r3) and re-run measure_timing on brute_v5. Captures
+> `--label r4` loco_* + jump_* 6/6 ok; final checks: old 24/24, new 24/24, r3 9/9, r4 6/6 ok. Blind pack
+> `~/hulk-scratch/ab-ingame/blind-r4` (critic gets ONLY `blind-r4/critic`): loco_* = r4 vs r2 new (Run v2 vs Run v1; Walk identical),
+> jump_* = r4 vs r3 (Land v3 vs hc Land, Fall refit vs Fall; Jump identical). Tonight's hulk engine launches (gpu_slot runs.jsonl,
+> label hulk-*, since 2026-10-29 18:00): 54 = 46 captures + 8 build commandlets (4 builds x 2, -nullrhi), all outcome ran.
+
 Branch `chinese-animation-upgrades` (never `main`; the owner merges). Plan `docs/brute/video2rig/PLAN.md`, ledger
 `docs/brute/video2rig/LEDGER.md` (every take, check, fit, refine, verdict, dollar), blind verdicts `AB-ingame-critique.md` (r2) and
 `AB-ingame-r3-critique.md` (r3), hold compression `HOLD-COMPRESSION.md`.
