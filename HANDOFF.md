@@ -45,6 +45,7 @@ minimum; numbers from LEDGER rows and `Local/video2rig/hc-refined/*_hc.json`; fo
 ```
 GATE reader-ground PASS 2.41/2.83 px
 GATE reader-air PASS 2.85/3.30 px
+GATE reader-dense PASS median_px front 1.65 side 1.85 (bar <4)
 GATE Idle check 0.54 fit 1.81 seam 0.30 drift 1.6 toe 0.0 ab NEW
 GATE Walk check 0.28 fit 2.51 seam 0.76 drift 9.5 toe 0.0 ab NEW
 GATE Run check 1.02 fit 4.65 seam 0.67 drift 0.0 toe 0.0 ab tie->new
@@ -161,7 +162,7 @@ the GPU belongs to the Dragon-boss and Markhor sessions until then, and every la
   2. Joints tuning (`creature.json clips.<clip>.joints`, as Lift/Uppercut exp B): Fall's LeftFoot; Land/Run range warnings
      (Land v1: RightFoot, RightShoulder, Spine1, Head). StopLunge v2 stays unadopted unless a new take rises (it never does).
   3. If still > 4 px: train the dense reader warm-started from reader.pt and refit run_v2, land_v3 (after check), stoplunge_v2 and
-     land_v1 with it: see the **Round 4 dense reader** block below (also in `docs/brute/video2rig/ROUND4.md`).
+     land_v1 with it: see the **Round 4 dense reader** block below (also in `docs/brute/video2rig/ROUND4.md`). **DONE 2026-10-30 (01:05-03:42 EDT)**: dense reader trained (8000 steps, final loss 5.21, `reader/reader-dense.pt`), gate PASS 1.65 / 1.85 px; refits with it in progress.
   4. In-game blind A/B round 4 (`ab_ingame.py run/check/pack`) for every clip that changed; a clip ships only if it wins or ties.
   5. Final build (`assemble_motion.py` -> `measure_timing.py` -> `build_brute.py`), HANDOFF + LEDGER gate lines.
 
