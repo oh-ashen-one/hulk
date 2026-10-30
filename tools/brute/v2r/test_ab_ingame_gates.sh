@@ -168,6 +168,92 @@ assert all(sum(1 for s in starts if s0 <= s < s0 + 3600) <= 6 for s0 in starts),
 print('starts', [round(s) for s in starts])
 EOF
 
+echo "== ab_ingame.py run --cam-dist / --hide-help (stub capture.sh; case files rewritten, never the repo's)"
+cat > "$W/capstub_cam.sh" <<'EOF'
+#!/bin/bash
+# records the args, BRUTE_CASES_DIR and the camDist of the case file the real capture.sh would hand the game
+CF="${BRUTE_CASES_DIR:-$AB_REPO_CASES}/$1.json"
+echo "STUB $* | BRUTE_CASES_DIR=${BRUTE_CASES_DIR:-unset} | camDist=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["spawn"]["camDist"])' "$CF")" >> "$AB_STUB_LOG"
+mkdir -p "$AB_CAP_ROOT/$1"; echo x > "$AB_CAP_ROOT/$1/$1.mp4"; echo "movie frames: 9999" > "$AB_CAP_ROOT/$1/capture.txt"; exit 0
+EOF
+chmod +x "$W/capstub_cam.sh"
+AB="$REPO/tools/brute/v2r/ab_ingame.py"
+export AB_REPO_CASES="$REPO/tools/brute/cases"
+CAMENV=(env AB_CAPTURE_SH="$W/capstub_cam.sh" AB_SET_ROOT="$W/camset" AB_STUB_LOG="$W/camstub.log" AB_COOLDOWN_S=0)
+ps_json "1|S|/sbin/launchd|launchd"; wd healthy
+for bad in abc 0 -1 nan inf 0.4 101; do
+  expect "--cam-dist $bad is refused by the parser" 2 "must be a number of metres" "${CAMENV[@]}" python3 "$AB" run --label cam1 --cases idle_front --cam-dist=$bad --dry-run
+done
+expect "default dry run: camDist 7.5, help shown, no case rewrite, no -WHNoHud" 0 "camera: camDist 7.5, help box shown" "${CAMENV[@]}" python3 "$AB" run --label cam1 --cases idle_front --ignore-window --dry-run
+grep -q "BRUTE_CASES_DIR" "$W/out" && no "default dry run must not set BRUTE_CASES_DIR" "$W/out" || ok "default dry run does not set BRUTE_CASES_DIR"
+grep -q "WHNoHud" "$W/out" && no "default dry run must not add -WHNoHud" "$W/out" || ok "default dry run does not add -WHNoHud"
+expect "--cam-dist 4.0 --hide-help dry run shows the rewrite, env and -WHNoHud" 0 "camera: camDist 4 \(case files rewritten.*help box hidden \(-WHNoHud\)" "${CAMENV[@]}" python3 "$AB" run --label cam1 --cases idle_front --ignore-window --dry-run --cam-dist 4.0 --hide-help
+grep -qE "BRUTE_CASES_DIR=.*capstub_cam.sh ab_idle_front .* -- -WHNoHud" "$W/out" && ok "dry-run command carries BRUTE_CASES_DIR and the -WHNoHud extra" || no "dry-run command line" "$W/out"
+expect "--hide-help does not duplicate an -WHNoHud already in --extra" 0 "help box hidden" "${CAMENV[@]}" python3 "$AB" run --label cam1 --cases idle_front --ignore-window --dry-run --hide-help --extra "-WHNoHud -WHBruteNoClipTiming"
+[ "$(grep -o WHNoHud "$W/out" | wc -l | tr -d ' ')" = 2 ] && ok "-WHNoHud appears once in the command (+ once in the camera line)" || no "-WHNoHud duplicated" "$W/out"
+[ ! -d "$W/camset/cam1/.cases" ] && ok "dry run wrote no case copies" || no "dry run wrote case copies"
+rm -f "$W/camstub.log"
+expect "real run (stub), default flags" 0 "DONE ab_idle_front" "${CAMENV[@]}" python3 "$AB" run --label camd --cases idle_front --ignore-window
+grep -q "BRUTE_CASES_DIR=unset | camDist=7.5" "$W/camstub.log" && ok "default run: no BRUTE_CASES_DIR, repo case file (camDist 7.5)" || no "default run stub" "$W/camstub.log"
+python3 - "$W/camset/camd/ab_idle_front" <<'PYEOF' > "$W/out" 2>&1 && ok "default run.json records cam_dist 7.5, hide_help false; capture.txt line" || no "default run.json" "$W/out"
+import json, sys, os
+d = sys.argv[1]; r = json.load(open(os.path.join(d, 'run.json')))
+assert r['cam_dist'] == 7.5 and r['hide_help'] is False and r['extra'] == [], r
+assert 'ab_ingame: cam_dist=7.5 hide_help=0' in open(os.path.join(d, 'capture.txt')).read()
+assert not os.path.exists(os.path.join(d, 'case.json'))
+PYEOF
+rm -f "$W/camstub.log"
+expect "real run (stub), --cam-dist 4.0 --hide-help, 2 cases" 0 "DONE ab_idle_left" "${CAMENV[@]}" python3 "$AB" run --label camc --cases idle_front,idle_left --ignore-window --cam-dist 4.0 --hide-help
+[ "$(grep -c "BRUTE_CASES_DIR=$W/camset/camc/.cases | camDist=4.0" "$W/camstub.log")" = 2 ] && ok "close-up run: stub saw the rewritten case dir and camDist 4.0 for both cases" || no "close-up stub log" "$W/camstub.log"
+grep -q -- "-- -WHNoHud | " "$W/camstub.log" && ok "close-up run passes -WHNoHud after --" || no "-WHNoHud arg" "$W/camstub.log"
+python3 - "$W/camset/camc/ab_idle_left" "$REPO" <<'PYEOF' > "$W/out" 2>&1 && ok "close-up run.json/capture.txt/case.json record 4.0 + hidden help; rewritten case differs only in camDist" || no "close-up record" "$W/out"
+import json, sys, os
+d, repo = sys.argv[1], sys.argv[2]; r = json.load(open(os.path.join(d, 'run.json')))
+assert r['cam_dist'] == 4.0 and r['hide_help'] is True and r['extra'] == ['-WHNoHud'], r
+assert 'ab_ingame: cam_dist=4 hide_help=1' in open(os.path.join(d, 'capture.txt')).read()
+new = json.load(open(os.path.join(d, 'case.json'))); old = json.load(open(os.path.join(repo, 'tools/brute/cases/ab_idle_left.json')))
+assert new['spawn']['camDist'] == 4.0 and old['spawn']['camDist'] == 7.5
+new['spawn']['camDist'] = 7.5; assert new == old
+PYEOF
+python3 "$AB" gen --check > "$W/out" 2>&1
+grep -q DIFFERS "$W/out" && no "gen --check: a repo case file differs" "$W/out" || ok "the repo's generated case files are untouched (gen --check: no DIFFERS)"
+grep -q 'BRUTE_CASES_DIR:-\$ROOT/tools/brute/cases' "$REPO/tools/brute/capture.sh" && grep -q '"-WHBruteScript=\$CASES/\$CASE.json"' "$REPO/tools/brute/capture.sh" && ok "capture.sh builds -WHBruteScript from BRUTE_CASES_DIR (default: repo cases)" || no "capture.sh BRUTE_CASES_DIR"
+
+echo "== ab_ingame.py pack: same camera setup required (--allow-mixed-cam)"
+AB_SET_ROOT="$W/packcam" python3 - "$REPO" "$W" <<'PYEOF' > "$W/out" 2>&1 && ok "pack refuses mixed camDist / help, --allow-mixed-cam packs with a NOTE, legacy sets count as 7.5 + help shown, capture.txt fallback" || no "pack camera gate" "$W/out"
+import os, sys, json, shutil, io, contextlib
+sys.path.insert(0, sys.argv[1] + '/tools/brute/v2r'); import ab_ingame as A
+W = sys.argv[2]; R = os.path.join(W, 'packcam')
+def mk(lab, cam=None, hide=False, how='run.json'):
+    d = os.path.join(R, lab, 'ab_jump_front'); os.makedirs(d)
+    open(os.path.join(d, 'ab_jump_front.mp4'), 'w').write(lab)
+    if cam is not None and how == 'run.json': json.dump({'label': lab, 'cam_dist': cam, 'hide_help': hide}, open(os.path.join(d, 'run.json'), 'w'))
+    if cam is not None and how == 'capture.txt': open(os.path.join(d, 'capture.txt'), 'w').write('x\nab_ingame: cam_dist=%g hide_help=%d\n' % (cam, hide))
+mk('close_a', 4.0, True); mk('close_b', 4.0, True); mk('wide', 7.5, False); mk('legacy'); mk('close_nohide', 4.0, False); mk('close_txt', 4.0, True, 'capture.txt'); mk('d5', 5.0, True)
+A.check_case = lambda d, n: []; A.events = lambda log: [(0.0, 'e1')]; A.trim = lambda src, dst, t0, t1: shutil.copy(src, dst)
+n = [0]
+def run(a, b, *more):
+    n[0] += 1; sys.argv = ['ab_ingame.py', 'pack', '--a', a, '--b', b, '--cases', 'jump_front', '--out', os.path.join(W, 'pk%d' % n[0])] + list(more); buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf): A.main()
+    except SystemExit as e:
+        return (e.code if isinstance(e.code, int) else 1), buf.getvalue() + str(e.code)
+    return 0, buf.getvalue()
+assert A.cam_setup(os.path.join(R, 'legacy', 'ab_jump_front'))[:2] == (7.5, False)
+assert A.cam_setup(os.path.join(R, 'close_txt', 'ab_jump_front'))[:3] == (4.0, True, 'capture.txt')
+rc, o = run('close_a', 'close_b'); assert rc == 0 and 'NOT PACKED' not in o, o                       # same close-up setup: packs
+rc, o = run('close_a', 'close_txt'); assert rc == 0, o                                               # run.json vs capture.txt record: same
+rc, o = run('close_a', 'wide'); assert rc and 'not captured with the same camera setup' in o and 'camDist 4' in o and 'camDist 7.5' in o and '--allow-mixed-cam' in o, o
+assert not os.path.exists(os.path.join(W, 'pk%d' % n[0], 'critic')), 'a refused pack wrote files'
+rc, o = run('close_a', 'd5'); assert rc and 'camDist 4' in o and 'camDist 5' in o, o                  # 4.0 vs 5.0: any difference refused
+rc, o = run('close_a', 'close_nohide'); assert rc and 'help hidden' in o and 'help shown' in o, o     # same distance, help differs: refused
+rc, o = run('close_a', 'legacy'); assert rc and 'legacy (not recorded' in o, o                         # an unrecorded set is the wide setup
+rc, o = run('wide', 'legacy'); assert rc == 0, o                                                     # unrecorded vs recorded wide: same
+rc, o = run('close_a', 'wide', '--allow-mixed-cam')
+assert rc == 0 and 'NOTE --allow-mixed-cam' in o and os.path.exists(os.path.join(W, 'pk%d' % n[0], 'critic', 'jump_front', 'A.mp4')), o
+k = json.load(open(os.path.join(W, 'pk%d' % n[0], '_director', 'KEY.json'))); assert sorted(k['pairs']) == ['jump_front'], k
+PYEOF
+
 echo "== run_game.sh frame-1 watchdog (stub engine via WH_UE_BIN)"
 cat > "$W/ue_silent.sh" <<'EOF'
 #!/bin/bash

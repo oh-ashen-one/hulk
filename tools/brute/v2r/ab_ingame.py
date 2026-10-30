@@ -4,7 +4,7 @@
 
   python3 tools/brute/v2r/ab_ingame.py list                      cases, clips covered, GPU time estimate
   python3 tools/brute/v2r/ab_ingame.py gen [--check]             (re)write tools/brute/cases/ab_<group>_<angle>.json
-  python3 tools/brute/v2r/ab_ingame.py run --label old|new|r3.. [--cases a,b] [--extra "-WHBruteNoClipTiming"] [--dry-run]
+  python3 tools/brute/v2r/ab_ingame.py run --label old|new|r3.. [--cases a,b] [--extra "-WHBruteNoClipTiming"] [--cam-dist 4.0] [--hide-help] [--dry-run]
   python3 tools/brute/v2r/ab_ingame.py check <set_dir> | --label old   telemetry gates for every case of one set
   python3 tools/brute/v2r/ab_ingame.py pack --old DIR --new DIR --out DIR [--seed N] [--dry-run]
   python3 tools/brute/v2r/ab_ingame.py pack --a r3 --b new --cases jump_front,... --out DIR   (labels or dirs; extends an existing pack)
@@ -12,6 +12,10 @@
 Read tools/brute/v2r/ab_ingame.md first. `run` calls tools/brute/capture.sh (GPU slot, capture class) one case at a time and never
 in parallel; it refuses while ~/.cache/gpu-slot/STREAMING exists. `gen`, `list`, `check` and `pack --dry-run` never start an engine.
 Cases are generated, not hand-edited: the camera-angle trigonometry lives here (see CAMERA below).
+Close-up capture (owner rule: judge animation on close-ups, never wide shots): `run --cam-dist 4.0 --hide-help`. --cam-dist sets every
+case's spawn.camDist (default 7.5 = the generated files, unchanged); --hide-help adds the game's existing -WHNoHud (no controls card,
+no collateral counter). Both are recorded in each case folder's run.json / capture.txt and `pack` refuses two sets that differ in either
+unless --allow-mixed-cam (a set without the record counts as 7.5, help box shown).
 """
 import argparse
 import datetime
@@ -37,6 +41,8 @@ STREAM_FLAG = os.path.expanduser(os.environ.get('AB_STREAM_FLAG', '~/.cache/gpu-
 CPP = os.path.join(REPO, 'unreal', 'WebHomage', 'Source', 'WebHomage', 'Brute', 'BruteCharacter.cpp')
 RES = '960x540'               # the size the earlier -movie evidence (v2_loco, v3_combat, m3_wallrun) used
 MAP = '/Game/Maps/Manhattan'  # every spawn below is a Manhattan coordinate taken from an existing case
+CAM_DIST = 7.5                # spawn.camDist of the generated cases (= the wide default; BruteCharacter honours spawn.camDist)
+HIDE_HELP_ARG = '-WHNoHud'    # existing BruteHUD.cpp command-line switch: hides the whole HUD (controls card + collateral counter + charge meter)
 MIN_FREE_GB = 8.0             # one movie capture writes ~0.5-1 GB of PNG frames before they are encoded and deleted
 # launch budget (owner 2026-10-29 after the 7-hour GPU wedge: 15 cold launches back to back, 0 s gaps): one `run` makes at most
 # LAUNCHES_PER_HOUR (10: owner 10:55 "cold launches are fine, just not 11 on your own") engine launches in any rolling hour and waits COOLDOWN_S after each case before the next launch.
@@ -160,7 +166,7 @@ def case_name(g, an):
 
 def build(g, an, off):
     """(file text, parsed dict) of one case."""
-    sp = {'pos': list(g['spawn'][0]), 'yaw': g['spawn'][1], 'camPitch': g['spawn'][2], 'camDist': 7.5}
+    sp = {'pos': list(g['spawn'][0]), 'yaw': g['spawn'][1], 'camPitch': g['spawn'][2], 'camDist': CAM_DIST}
     if g['kind'] == 'patch':
         sp['camYawOff'] = off
     ab = {'group': g['id'], 'angle': an, 'cam_offset_deg': off,
@@ -318,7 +324,12 @@ def cmd_run(a):
     sel = select(a.cases)
     patched = 'camYawOff' in open(CPP).read()
     extra = shlex.split(a.extra) if a.extra else []
+    if a.hide_help and HIDE_HELP_ARG not in extra:
+        extra.append(HIDE_HELP_ARG)
+    cam_dist = a.cam_dist
     root = os.path.join(SET_ROOT, a.label)
+    cases_dir = os.path.join(root, '.cases')    # per-run copies of the case files when --cam-dist differs from the generated 7.5
+    cap_env = None
     why = preflight(a, wait=not a.dry_run)
     if why and not a.dry_run:
         print('REFUSED:\n  ' + '\n  '.join(why))
@@ -328,6 +339,8 @@ def cmd_run(a):
     skipped = []
     budget = Budget()
     print('launch budget: at most %d launches per rolling hour, %.0f s cool-down between cases' % (budget.per_hour, budget.cooldown))
+    print('camera: camDist %g%s, help box %s' % (cam_dist, '' if cam_dist == CAM_DIST else ' (case files rewritten into %s, BRUTE_CASES_DIR)' % cases_dir,
+                                                 'hidden (%s)' % HIDE_HELP_ARG if HIDE_HELP_ARG in extra else 'shown'))
     planned = []
     os.makedirs(root, exist_ok=True) if not a.dry_run else None
     for name, (g, an, off) in sel:
@@ -339,10 +352,19 @@ def cmd_run(a):
             print('SKIP %s: %s exists (--redo to capture again)' % (name, dst))
             continue
         cmd = [CAPTURE_SH, name, '-map', MAP, '-movie', '-res', RES, '-quit', str(g['quit'])] + (['--'] + extra if extra else [])
-        print('RUN %s  (est %.0f s)\n    %s' % (name, est_seconds(g['quit']), ' '.join(shlex.quote(c) for c in cmd)))
+        print('RUN %s  (est %.0f s)\n    %s%s' % (name, est_seconds(g['quit']), 'BRUTE_CASES_DIR=%s ' % shlex.quote(cases_dir) if cam_dist != CAM_DIST else '',
+                                              ' '.join(shlex.quote(c) for c in cmd)))
         if a.dry_run:
             planned.append(est_seconds(g['quit']))
             continue
+        case_copy = None
+        if cam_dist != CAM_DIST:
+            doc = load_case(name)
+            doc['spawn']['camDist'] = cam_dist
+            os.makedirs(cases_dir, exist_ok=True)
+            case_copy = os.path.join(cases_dir, name + '.json')
+            json.dump(doc, open(case_copy, 'w'), indent=1)
+            cap_env = dict(os.environ, BRUTE_CASES_DIR=cases_dir)
         budget.wait_turn(name)
         again = preflight(a)
         if again:
@@ -350,7 +372,7 @@ def cmd_run(a):
             return 3
         t0 = datetime.datetime.now()
         budget.launched(name)
-        rc = subprocess.run(cmd).returncode
+        rc = subprocess.run(cmd, env=cap_env).returncode
         budget.ended()
         src = os.path.join(CAP_ROOT, name)
         mp4 = os.path.join(src, name + '.mp4')
@@ -362,7 +384,12 @@ def cmd_run(a):
             shutil.rmtree(dst)
         shutil.move(src, dst)
         json.dump({'label': a.label, 'extra': extra, 'rc': rc, 'started': t0.isoformat(timespec='seconds'),
-                   'wall_s': round((datetime.datetime.now() - t0).total_seconds(), 1)}, open(os.path.join(dst, 'run.json'), 'w'))
+                   'wall_s': round((datetime.datetime.now() - t0).total_seconds(), 1),
+                   'cam_dist': cam_dist, 'hide_help': HIDE_HELP_ARG in extra}, open(os.path.join(dst, 'run.json'), 'w'))
+        with open(os.path.join(dst, 'capture.txt'), 'a') as f:   # the second record of the camera setup (cam_setup() reads either)
+            f.write('\nab_ingame: cam_dist=%g hide_help=%d\n' % (cam_dist, HIDE_HELP_ARG in extra))
+        if case_copy:
+            shutil.copy(case_copy, os.path.join(dst, 'case.json'))
         print('DONE %s rc=%d -> %s' % (name, rc, dst))
     if planned:
         starts, end = schedule(planned)
@@ -539,6 +566,23 @@ def set_dir(v):
     return os.path.abspath(os.path.expanduser(v))
 
 
+def cam_setup(d):
+    """(cam_dist, hide_help, how) a capture folder was shot with: run.json, else the capture.txt line, else the legacy wide setup."""
+    try:
+        r = json.load(open(os.path.join(d, 'run.json')))
+        if 'cam_dist' in r:
+            return float(r['cam_dist']), bool(r.get('hide_help')), 'run.json'
+    except (OSError, ValueError):
+        pass
+    try:
+        m = re.search(r'^ab_ingame: cam_dist=(\S+) hide_help=([01])$', open(os.path.join(d, 'capture.txt'), errors='replace').read(), re.M)
+        if m:
+            return float(m.group(1)), m.group(2) == '1', 'capture.txt'
+    except OSError:
+        pass
+    return CAM_DIST, False, 'legacy (not recorded: assumed %g, help box shown)' % CAM_DIST
+
+
 def cmd_pack(a):
     """Blind pairs of two capture sets. --old/--new (labels 'old' / 'new') or --a/--b (any labels or dirs; the key records the
     labels). --cases limits the pairs. An --out that already holds a pack is extended: the new pairs are added to
@@ -567,6 +611,17 @@ def cmd_pack(a):
         print('NOT PACKED (missing in %s or %s): %s' % (la, lb, ', '.join(only_one)))
     if not names:
         sys.exit('no case exists in both sets')
+    mixed = []
+    for n in names:
+        sa, sb = cam_setup(os.path.join(da, n)), cam_setup(os.path.join(db, n))
+        if sa[:2] != sb[:2]:
+            mixed.append('%s: %s camDist %g help %s (%s) vs %s camDist %g help %s (%s)' % (
+                n, la, sa[0], 'hidden' if sa[1] else 'shown', sa[2], lb, sb[0], 'hidden' if sb[1] else 'shown', sb[2]))
+    if mixed:
+        if not a.allow_mixed_cam:
+            sys.exit('pack: the two sets were not captured with the same camera setup (a close-up against a wide shot is not a fair A/B):\n  %s\n'
+                     'recapture one set with the same --cam-dist / --hide-help, or pass --allow-mixed-cam' % '\n  '.join(mixed))
+        print('NOTE --allow-mixed-cam: packing sets with different camera setups:\n  ' + '\n  '.join(mixed))
     crit, direc = os.path.join(out, 'critic'), os.path.join(out, '_director')
     kpath, rpath = os.path.join(direc, 'KEY.json'), os.path.join(direc, 'report.json')
     key = json.load(open(kpath)) if os.path.exists(kpath) else None
@@ -642,6 +697,16 @@ def label_arg(v):
     return v
 
 
+def cam_dist_arg(v):
+    try:
+        f = float(v)
+    except ValueError:
+        f = float('nan')
+    if not (math.isfinite(f) and 0.5 <= f <= 100.0):
+        raise argparse.ArgumentTypeError('--cam-dist must be a number of metres in 0.5..100 (got %r)' % v)
+    return f
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -653,6 +718,8 @@ def main():
     p.add_argument('--label', required=True, type=label_arg, help='set name: old, new, or any [a-z0-9_-] label (r3, ...) -> %s/<label>' % SET_ROOT)
     p.add_argument('--cases', default='', help='comma list (ab_ prefix optional); default all')
     p.add_argument('--extra', default='', help='extra UE args passed after -- to capture.sh, e.g. "-WHBruteNoClipTiming"')
+    p.add_argument('--cam-dist', type=cam_dist_arg, default=CAM_DIST, help='spawn.camDist for every case (default %g = the generated files; 4.0 = close-up); recorded in run.json / capture.txt, pack refuses mixed distances' % CAM_DIST)
+    p.add_argument('--hide-help', action='store_true', help='add %s: no controls box / HUD in the capture (recorded; pack refuses sets that differ)' % HIDE_HELP_ARG)
     p.add_argument('--redo', action='store_true')
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--ignore-window', action='store_true')
@@ -671,6 +738,7 @@ def main():
     p.add_argument('--out', required=True, help='pack dir; an existing pack there is extended (new pairs added, brief rewritten)')
     p.add_argument('--seed', type=int, default=None)
     p.add_argument('--force', action='store_true')
+    p.add_argument('--allow-mixed-cam', action='store_true', help='pack two sets captured with different --cam-dist / --hide-help (refused by default)')
     p.add_argument('--dry-run', action='store_true')
     p.set_defaults(f=cmd_pack)
     a = ap.parse_args()

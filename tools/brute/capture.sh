@@ -25,7 +25,8 @@ OUT="$HOME/hulk-scratch/cap/$CASE"; rm -rf "$OUT"; mkdir -p "$OUT"
 ARGS=("$OUT" -map "$MAP" -res "$RES" -quit "$QUIT" -name "$CASE" -timeout "$TIMEOUT")
 [ -n "$SHOTS" ] && ARGS+=(-shots "$SHOTS")
 if [ "$MOVIE" = 1 ]; then ARGS+=(-movie); FPSARGS=(); else FPSARGS=(-benchmark -fps=30); fi
-SCRIPTARG=(); [ "$CASE" != none ] && [ -f "$ROOT/tools/brute/cases/$CASE.json" ] && SCRIPTARG=("-WHBruteScript=$ROOT/tools/brute/cases/$CASE.json")
+SCRIPTARG=(); CASES="${BRUTE_CASES_DIR:-$ROOT/tools/brute/cases}"   # ab_ingame.py --cam-dist points this at its rewritten copies
+[ "$CASE" != none ] && [ -f "$CASES/$CASE.json" ] && SCRIPTARG=("-WHBruteScript=$CASES/$CASE.json")
 [ ${#SCRIPTARG[@]} -gt 0 ] && ARGS+=(-firstline 'WH_BRUTE (tick1|t=)' -firstline_s 120)
 export GPU_SLOT_DIR="$HOME/.cache/gpu-slot" GPU_SLOT_CAPTURE_MAX_HOLD="$MAXHOLD"
 "$ROOT/tools/gpu/gpu_slot.sh" capture --label "hulk-$CASE" --timeout 3600 -- "$ROOT/unreal/WebHomage/Scripts/run_game.sh" "${ARGS[@]}" -- \

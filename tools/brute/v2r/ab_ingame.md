@@ -37,6 +37,7 @@ yaw -90 (v2_loco, m4), jump `(249,150)` down the same lane (its landing, y about
 yaw 0 (v3_combat; the old `look -25` aim at a parked car is dropped), uppercut `(259,170)` yaw 90 (m10_launcher), grab `(244.6,183.2)` yaw 180
 (m2_grab_throw, same grab time 1.0), wall `(249,140)` yaw 0 (m3_wallrun; wall_run_start 1.03 s after the sprint, as measured there).
 All cases: map `/Game/Maps/Manhattan`, `camDist` 7.5 (the game's initial arm length, so no transient), camPitch from the source case.
+Close-ups: `run --cam-dist 4.0 --hide-help` rewrites `spawn.camDist` per run (copies in `<set>/.cases`, `BRUTE_CASES_DIR` for capture.sh) and adds the game's `-WHNoHud` (hides the controls box and the rest of the HUD; no C++ change). Both are recorded in run.json / capture.txt; `pack` refuses two sets with different values unless `--allow-mixed-cam` (an unrecorded set = 7.5, help shown).
 The top-level `"ab"` block in each file (film window, expected events, beats) is ignored by `LoadScript` (it reads only `spawn` and `keys`).
 
 ## The three camera angles
