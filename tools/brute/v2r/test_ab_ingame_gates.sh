@@ -1,6 +1,6 @@
 #!/bin/bash
 # Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
-# Offline test of the GPU launch gates (tools/gpu/gpu_gates.py), their use in capture.sh / ab_ingame.py, the launch budget and the
+# Offline test of the GPU launch gates (tools/gpu/gpu_gates.py: cap 3 + watchdog tripwire, owner 2026-10-29), their use in capture.sh / ab_ingame.py, the launch budget and the
 # run_game.sh frame-1 watchdog, and ab_ingame.py pack --a/--b. Fake ps / ioreg via GPU_GATES_FAKE_*; a stub engine (WH_UE_BIN) and a stub capture.sh. NEVER starts an
 # engine: capture.sh is only run with CAPTURE_GATES_ONLY=1, ab_ingame.py only with a stub AB_CAPTURE_SH.
 #   tools/brute/v2r/test_ab_ingame_gates.sh        (exit 0 = all pass)
@@ -20,6 +20,24 @@ expect() {  # name want_rc want_regex cmd...
 ps_json() { python3 -c 'import json,sys; print(json.dumps([dict(zip(("pid","stat","comm","args"),r.split("|"))) for r in sys.argv[1:]]))' "$@" > "$W/ps.json"; }
 UE='/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor'
 export GPU_GATES_FAKE_PS="$W/ps.json" GPU_GATES_FAKE_UTIL=10
+# the watchdog tripwire reads a private fake, never ~/.cache/gpu-slot/gpu_watchdog.json
+export GPU_GATES_WATCHDOG_JSON="$W/wd.json" GPU_GATES_WATCHDOG_STALE_S=120
+unset GPU_GATES_MAX_CLIENTS
+wd() {  # wd healthy | warn | strike | stuck | trip | old | oldtrip   (updated = now, or 600 s ago for old*)
+  python3 - "$GPU_GATES_WATCHDOG_JSON" "$1" <<'PY'
+import datetime, json, sys
+p, m = sys.argv[1], sys.argv[2]
+now = datetime.datetime.now().astimezone()
+d = {"schema": "gpu_watchdog/1", "hang_strikes": 0, "stuck_since": {}, "warn": None, "trip": None, "last_trip": None,
+     "tripped": False, "updated": (now - datetime.timedelta(seconds=600 if m.startswith("old") else 0)).isoformat(timespec="milliseconds")}
+if m == "warn": d["warn"] = {"why": "metal probe 900 ms"}
+if m == "strike": d["hang_strikes"] = 1
+if m == "stuck": d["stuck_since"] = {"4242": 1793300000}
+if m in ("trip", "oldtrip"): d.update(trip={"why": "metal probe hung"}, tripped=True, last_trip="2026-10-29T03:28:00-04:00")
+json.dump(d, open(p, "w"))
+PY
+}
+wd healthy
 
 echo "== a. stuck engine"
 ps_json "101|S|/sbin/launchd|launchd" "202|SE|$UE|$UE x.uproject -game"
@@ -27,7 +45,8 @@ expect "UnrealEditor in state E refuses" 3 "engine stuck exiting: machine-wide p
 ps_json "202|Z|$UE|$UE"
 expect "UnrealEditor in state Z refuses" 3 "engine stuck exiting" python3 "$G" check
 
-echo "== b. GPU client count"
+echo "== b. GPU client count (legacy cap-2 cases, pinned with GPU_GATES_MAX_CLIENTS=2: the env override still works)"
+export GPU_GATES_MAX_CLIENTS=2
 ps_json "1|S|/Applications/Blender.app/Contents/MacOS/blender-thumbnailer|thumb" "2|S|npm exec @coding-solo/godot-mcp|npm exec @coding-solo/godot-mcp" \
         "3|S|/usr/bin/python3|python3 -m http.server" "4|S|/Applications/Unity Hub.app/Contents/MacOS/Unity Hub|hub"
 expect "thumbnailer, godot-mcp title, plain python, Unity Hub are not clients" 0 "gpu_gates: go" python3 "$G" check
@@ -40,6 +59,51 @@ ps_json "1|S|$UE|$UE a.uproject" "2|S|/x/Game-Mac-Shipping|Game-Mac-Shipping"
 expect "UnrealEditor + *-Shipping refuses" 3 "2 GPU clients" python3 "$G" check
 ps_json "1|S|/Library/Python/bin/python3|python3 -m video2rig fit proj clip"
 expect "one client (video2rig) is allowed" 0 "1 other GPU client.*" python3 "$G" check
+unset GPU_GATES_MAX_CLIENTS
+
+echo "== b3. cap 3 (owner 2026-10-29 23:20) + watchdog tripwire (fake gpu_watchdog.json)"
+TWO=("1|S|/Applications/Blender.app/Contents/MacOS/Blender|Blender -b x.blend" "2|S|/opt/homebrew/bin/python3.12|python -m reader.train --epochs 9")
+wd healthy; ps_json "${TWO[@]}"
+expect "healthy watchdog, 2 clients (Blender + MPS trainer): go, ours is #3" 0 "2 other GPU client\(s\), cap 3: ours would be #3" python3 "$G" check
+ps_json "${TWO[@]}" "3|S|$UE|$UE a.uproject -game"
+expect "healthy watchdog, 3 clients: refuses at cap 3" 3 "3 GPU clients already running \(cap 3, ours would be #4\)" python3 "$G" check
+ps_json "${TWO[@]}" "3|S|/Users/x/Library/Application Support/CrossOver/Bottles/b/drive_c/Games/GTA5.exe|GTA5.exe"
+expect "  ... an owner CrossOver game .exe counts as the third client" 3 "3 GPU clients already running \(cap 3.*" python3 "$G" check
+ps_json "${TWO[@]}"
+wd warn;   expect "watchdog warn: demoted to cap 2, 2 clients refuse" 3 "2 GPU clients already running \(cap 2 \(demoted: watchdog warn" python3 "$G" check
+wd strike; expect "watchdog hang_strikes=1: demoted to cap 2, refuses" 3 "cap 2 \(demoted: watchdog hang_strikes=1" python3 "$G" check
+wd stuck;  expect "watchdog stuck_since entry: demoted to cap 2, refuses" 3 "cap 2 \(demoted: watchdog stuck_since" python3 "$G" check
+wd old;    expect "watchdog updated 600 s ago: stale -> cap 2, refuses" 3 "cap 2 \(demoted: watchdog stale: updated 600 s ago" python3 "$G" check
+rm -f "$GPU_GATES_WATCHDOG_JSON"
+expect "watchdog file missing: stale -> cap 2, refuses" 3 "watchdog stale: .*wd.json missing" python3 "$G" check
+echo '{not json' > "$GPU_GATES_WATCHDOG_JSON"
+expect "watchdog file unreadable: stale -> cap 2, refuses" 3 "watchdog stale: .*unreadable" python3 "$G" check
+wd warn; ps_json "1|S|/opt/homebrew/bin/python3.12|python -m reader.train"
+expect "watchdog warn, 1 client: go at cap 2, the demotion is printed" 0 "watchdog demotes the client cap to 2: watchdog warn" python3 "$G" check
+wd warn; ps_json "${TWO[@]}"
+GPU_GATES_MAX_CLIENTS=4 expect "a demotion also caps an env override (GPU_GATES_MAX_CLIENTS=4 + warn -> 2)" 3 "cap 2 \(demoted" python3 "$G" check
+wd trip; ps_json "1|S|/sbin/launchd|launchd"
+expect "watchdog trip: refuses every launch, even on an idle machine" 3 "watchdog TRIP .*every launch refused until the owner clears it" python3 "$G" check
+wd oldtrip; expect "a stale file that says trip still refuses" 3 "watchdog TRIP" python3 "$G" check
+wd healthy; expect "cap: healthy -> 'cap 3', exit 0" 0 "^cap 3$" python3 "$G" cap
+wd strike;  expect "cap: strike -> 'cap 2' + reason, exit 0" 0 "hang_strikes=1 -> cap 2" python3 "$G" cap
+wd trip;    expect "cap: trip -> 'cap 0', exit 3" 3 "^cap 0$" python3 "$G" cap
+wd healthy; expect "status prints the effective cap" 0 "effective cap: 3 of 3" python3 "$G" status
+python3 - "$REPO" "$GPU_GATES_WATCHDOG_JSON" <<'PYEOF' > "$W/out" 2>&1 && ok "a trip that appears during the util wait refuses (re-check after the wait)" || no "trip during util wait" "$W/out"
+import json, sys
+sys.path.insert(0, sys.argv[1] + '/tools/gpu'); import gpu_gates as G
+calls = [0]
+def util():
+    calls[0] += 1
+    if calls[0] == 2:   # mid-wait: the watchdog trips
+        d = json.load(open(sys.argv[2])); d.update(trip={'why': 'hang'}, tripped=True); json.dump(d, open(sys.argv[2], 'w'))
+    return 10.0
+G.read_util = util
+why = G.gates(wait=True, log=lambda m: None)
+assert why and 'watchdog TRIP' in why[0] and 'during the util wait' in why[0], why
+print('ok', why)
+PYEOF
+wd healthy
 
 echo "== c. GPU utilization"
 ps_json "1|S|/sbin/launchd|launchd"
@@ -62,7 +126,15 @@ echo "== capture.sh is gated too (CAPTURE_GATES_ONLY=1: never launches)"
 ps_json "202|SE|$UE|$UE"
 CAPTURE_GATES_ONLY=1 expect "capture.sh refuses on a stuck engine" 3 "REFUSED by the GPU gates" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
 ps_json "1|S|/Applications/Blender.app/Contents/MacOS/Blender|Blender" "2|S|$UE|$UE"
-CAPTURE_GATES_ONLY=1 expect "capture.sh refuses at 2 clients" 3 "REFUSED by the GPU gates" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+GPU_GATES_MAX_CLIENTS=2 CAPTURE_GATES_ONLY=1 expect "capture.sh refuses at 2 clients (cap pinned to 2)" 3 "REFUSED by the GPU gates" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+CAPTURE_GATES_ONLY=1 expect "capture.sh at 2 clients, cap 3, healthy watchdog: gates pass, nothing launched" 0 "gates passed \(CAPTURE_GATES_ONLY=1" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+ps_json "1|S|/Applications/Blender.app/Contents/MacOS/Blender|Blender" "2|S|$UE|$UE" "3|S|/x/Game-Mac-Shipping|Game-Mac-Shipping"
+CAPTURE_GATES_ONLY=1 expect "capture.sh refuses at 3 clients (cap 3)" 3 "REFUSED by the GPU gates" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+ps_json "1|S|/Applications/Blender.app/Contents/MacOS/Blender|Blender" "2|S|$UE|$UE"
+wd warn; CAPTURE_GATES_ONLY=1 expect "capture.sh refuses at 2 clients when the watchdog warns (cap 2)" 3 "cap 2 \(demoted: watchdog warn" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+wd trip; ps_json "1|S|/sbin/launchd|launchd"
+CAPTURE_GATES_ONLY=1 expect "capture.sh refuses on a watchdog trip" 3 "watchdog TRIP" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
+wd healthy
 ps_json "1|S|/sbin/launchd|launchd"
 CAPTURE_GATES_ONLY=1 expect "capture.sh clean machine: gates pass, nothing launched" 0 "gates passed \(CAPTURE_GATES_ONLY=1" "$REPO/tools/brute/capture.sh" ab_idle_front -movie
 
@@ -76,6 +148,10 @@ export AB_CAPTURE_SH="$W/capstub.sh" AB_CAP_ROOT="$W/cap" AB_SET_ROOT="$W/set" A
 ps_json "202|SE|$UE|$UE"
 expect "run refuses on a stuck engine, stub never called" 3 "REFUSED:.*|engine stuck exiting" python3 "$REPO/tools/brute/v2r/ab_ingame.py" run --label new --cases idle_front --ignore-window
 [ ! -f "$W/stub.log" ] && ok "no capture call after a refusal" || no "no capture call after a refusal" "$W/stub.log"
+ps_json "1|S|/sbin/launchd|launchd"; wd trip
+expect "run refuses on a watchdog trip" 3 "watchdog TRIP" python3 "$REPO/tools/brute/v2r/ab_ingame.py" run --label new --cases idle_front --ignore-window
+[ ! -f "$W/stub.log" ] && ok "no capture call after a trip refusal" || no "no capture call after a trip refusal" "$W/stub.log"
+wd healthy
 ps_json "1|S|/sbin/launchd|launchd"
 AB_COOLDOWN_S=2 expect "two cases: budget lines + cool-down printed" 0 "budget: cool-down 2 s before ab_idle_left" python3 "$REPO/tools/brute/v2r/ab_ingame.py" run --label new --cases idle_front,idle_left --ignore-window
 grep -q "budget: launch 2/10 this hour" "$W/out" && ok "launch count printed" || no "launch count printed" "$W/out"

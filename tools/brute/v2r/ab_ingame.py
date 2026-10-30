@@ -222,9 +222,11 @@ def now_et():
 
 def preflight(a, wait=True):
     """Reasons not to launch a capture right now (empty list = go). The STREAMING flag is absolute; the 11:00-13:00 ET window can be
-    overridden. Then the machine-wide gates (tools/gpu/gpu_gates.py): an UnrealEditor stuck exiting (E/Z) refuses; >= 2 GPU clients of
-    any kind (engines, Blender, torch / video2rig trainers) refuse; GPU util must be < 90 on three readings 5 s apart (polls up to
-    10 min when wait); the 20 s gap after the last launch anywhere is waited out (wait) or reported (no wait)."""
+    overridden. Then the machine-wide gates (tools/gpu/gpu_gates.py, see tools/gpu/README.md): a GPU watchdog trip refuses every
+    launch; an UnrealEditor stuck exiting (E/Z) refuses; GPU clients of any kind (engines, Blender, torch / video2rig MPS trainers,
+    an owner game .exe) at or above the effective cap refuse (cap 3, demoted to 2 on a watchdog warn / hang strike / stuck entry /
+    stale file); GPU util must be < 90 on three readings 5 s apart (polls up to 10 min when wait), which keeps trainers serialized
+    with engine launches; the 20 s gap after the last launch anywhere is waited out (wait) or reported (no wait)."""
     why = []
     if os.path.exists(STREAM_FLAG):
         mode = ''

@@ -97,15 +97,20 @@ Why: on 2026-10-29 the Studio wedged for 7 hours: `run` made 15 cold `-game` edi
 GPU at 100 % at every launch) while Metal/torch trainers ran that the slot tool does not count; the WindowServer watchdog killed the
 session at 03:28 and the owner power-cycled at 10:16. Cold launches are allowed; unattended back-to-back launches into a busy GPU are not.
 
-- **Machine-wide gates** (`tools/gpu/gpu_gates.py`), checked by `ab_ingame.py run` before every case AND by `tools/brute/capture.sh`
-  before it asks for a slot (so a direct `capture.sh` call is gated too):
+- **Machine-wide gates** (`tools/gpu/gpu_gates.py`, full rule set in `tools/gpu/README.md`), checked by `ab_ingame.py run` before
+  every case AND by `tools/brute/capture.sh` before it asks for a slot (so a direct `capture.sh` call is gated too):
+  w. GPU watchdog tripwire (`~/.cache/gpu-slot/gpu_watchdog.json`, owner decision 2026-10-29 23:20): `trip` set -> refuse every
+     launch ("watchdog TRIP"); `warn` non-null, `hang_strikes` > 0 or any `stuck_since` entry -> effective cap 2, reason printed;
+     file missing, unreadable or `updated` older than 120 s -> effective cap 2 ("watchdog stale"); otherwise cap 3.
+     `python3 tools/gpu/gpu_gates.py cap` prints the effective cap and why.
   a. an `UnrealEditor` in ps state `E` (exiting) or `Z` -> refuse: "engine stuck exiting: machine-wide pause, notify the owner".
   b. every GPU client is counted, not only Unreal: `UnrealEditor*`, `Godot*`, `Unity*` editors (not Unity Hub / shader compiler),
-     `*-Shipping`, `Blender` (not blender-thumbnailer), python whose command line contains `reader.train`, `video2rig` or `torch`.
-     Two or more -> refuse (ours would be the third) and print the list. A process title that is not a path counts by its first
-     word (`npm exec @coding-solo/godot-mcp` is npm, not Godot).
+     `*-Shipping`, `Blender` (not blender-thumbnailer), python whose command line contains `reader.train`, `video2rig` or `torch`
+     (MPS trainers), an owner CrossOver/Wine game `.exe`. At or above the effective cap (3, or 2 when demoted) -> refuse (ours would
+     be one over) and print the list. A process title that is not a path counts by its first word (`npm exec @coding-solo/godot-mcp`
+     is npm, not Godot); a child of a listed client folds into its parent.
   c. GPU `Device Utilization %` (`ioreg -r -d 1 -c IOAccelerator`) below 90 on three readings 5 s apart; otherwise poll every 15 s
-     for up to 10 min, then refuse.
+     for up to 10 min, then refuse. This is what keeps MPS trainers serialized with engine launches.
   d. at least 20 s since the last engine launch anywhere: `run_game.sh` stamps `~/.cache/gpu-slot/last_launch` right before it
      starts the engine (and waits out the gap there too, inside the slot); anyone else may write the same file. Waits, never refuses.
   e. unchanged: `~/.cache/gpu-slot/STREAMING` refuses (and stops `run` between cases); 11:00-13:00 ET refuses without `--ignore-window`.
@@ -115,10 +120,9 @@ session at 03:28 and the owner power-cycled at 10:16. Cold launches are allowed;
   `NO FIRST FRAME`; never retried. The game logs `WH_BRUTE tick1 frame=<GFrameCounter> t=<world s>` on the Brute's first tick (log
   only). The `OriginX <= OriginMax` ensure early in every log is benign and not a failure. (An old binary without the tick1 line would
   trip the watchdog on `idle`, which has no `t=` events: rebuild first.)
-- **Launch budget** in `run`: at most 6 engine launches in any rolling hour from one run, and a 30 s cool-down after each case before
-  the next launch; every wait and every launch (`budget: launch n/6 this hour`) is printed. A full set of 24 cases therefore takes
-  about 3.3 h of wall time for about 58 min of engine time (`run --dry-run` prints the plan). Env `AB_LAUNCHES_PER_HOUR`,
-  `AB_COOLDOWN_S` exist for tests only.
+- **Launch budget** in `run`: at most 10 engine launches in any rolling hour from one run (per-session budget, owner 2026-10-29),
+  and a 30 s cool-down after each case before the next launch; every wait and every launch (`budget: launch n/10 this hour`) is
+  printed (`run --dry-run` prints the plan). Env `AB_LAUNCHES_PER_HOUR`, `AB_COOLDOWN_S` exist for tests only.
 - Captures go **only** through `tools/brute/capture.sh` -> `tools/gpu/gpu_slot.sh capture` (shared capture class, `-RenderOffScreen`,
   `t.MaxFPS` capped by `run_game.sh`). Never start `UnrealEditor` by hand, never open a window. One of ours at a time, strictly
   sequential; never run the old and new sets together.
@@ -129,20 +133,21 @@ session at 03:28 and the owner power-cycled at 10:16. Cold launches are allowed;
   wait up to 60 s, SIGKILL only if it is still alive, and do not launch another until it is gone.
 - Disk is tight (APFS about 97 % full): one movie capture writes up to about 0.8 GB of PNG frames; `run` deletes them as soon as the mp4
   exists and refuses under 8 GB free. The mp4s are about 0.7 MB per game second.
-- Offline test of all of the above (fake ps / ioreg, stub engine, stub capture; never launches anything):
-  `tools/brute/v2r/test_ab_ingame_gates.sh`.
+- Offline test of all of the above (fake ps / ioreg / watchdog JSON via `GPU_GATES_WATCHDOG_JSON`, stub engine, stub capture; never
+  launches anything): `tools/brute/v2r/test_ab_ingame_gates.sh` (55 checks: cap 3, demote-to-2 on warn / strike / stuck / stale /
+  missing, refuse on trip, plus the legacy cap-2 cases pinned with `GPU_GATES_MAX_CLIENTS=2`).
 
 ## GPU time
 
 `python3 tools/brute/v2r/ab_ingame.py list` prints it. 24 captures per set, 202 game seconds. Wall time per capture is modelled as
 35 s (engine start and map load: log open to first tick in the old-set logs) + 13 s per game second at 960x540 `-movie` with `t.MaxFPS 30`
 (the 18 old-set captures of 2026-10-29 took 64-241 s, 16.5 s per game second including the start): about **58 min of engine time
-per set**, about 3.3 h wall per set with the launch budget. A third optional set (new clips with `-WHBruteNoClipTiming`) costs the same.
+per set**, at least 2.4 h wall per set with the 10/h launch budget (24 launches). A third optional set (new clips with `-WHBruteNoClipTiming`) costs the same.
 
 ## Procedure
 
 Run from `~/hulk` on `chinese-animation-upgrades`, outside the stream window, `~/.cache/gpu-slot/STREAMING` absent
-(`ls ~/.cache/gpu-slot/`), `~/.cache/gpu-slot/bin/gpu_status.sh` showing at most one other engine, editor closed.
+(`ls ~/.cache/gpu-slot/`), `python3 tools/gpu/gpu_gates.py status` showing fewer GPU clients than the effective cap, editor closed.
 
 0. One-time: apply the C++ patch above (if `combat` and `grab` are wanted), `unreal/WebHomage/Scripts/build_editor.sh`, then
    `python3 tools/brute/v2r/ab_ingame.py gen --check` (files unchanged). Both sets must use this same binary and the same `Config/`

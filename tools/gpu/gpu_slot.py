@@ -2,7 +2,8 @@
 # Homage fan game tooling. Not an official Marvel, Sony or Insomniac project; no affiliation.
 """gpu_slot: shared-GPU capture slots + exclusive perf lock for the Night-1 Unreal loop.
 
-  gpu_slot.sh capture [opts] -- CMD...   hold one of N (default 2) shared capture slots while CMD runs
+  gpu_slot.sh capture [opts] -- CMD...   hold one of N (default 3, clamped to the gpu_gates effective cap) shared
+                                         capture slots while CMD runs
   gpu_slot.sh perf    [opts] -- CMD...   EXCLUSIVE: waits for no capture slot held, no other Unreal
                                          capture process, and GPU "Device Utilization %" < 15 for 10
                                          consecutive seconds; then runs CMD (max hold 15 min)
@@ -20,9 +21,17 @@ crashed / kill -9'd holder can never wedge the lock; stale holder/queue records 
 reused: start time differs) are detected, logged as "stale-recovered" and removed by any waiter.
 Fairness: strict FIFO ticket queue, only the head waiter may try to acquire.
 
+Capture slot count (owner decision 2026-10-29 23:20, see tools/gpu/README.md): GPU_SLOT_CAPTURE_SLOTS (default 3) is
+clamped at every acquire attempt to the effective cap of tools/gpu/gpu_gates.py, i.e. the GPU watchdog tripwire in
+~/.cache/gpu-slot/gpu_watchdog.json (env GPU_GATES_WATCHDOG_JSON): healthy -> 3; warn / hang_strikes > 0 / stuck_since /
+missing or > 120 s stale -> 2; trip -> 0, no capture acquires (waits, then exit 75 wait-timeout). The clamp counts every
+held capture slot, so a demotion while three run lets nobody new in until fewer than two are held. If gpu_gates cannot be
+imported the clamp is 2. The machine-wide client gates themselves (stuck engine, client count, util < 90, 20 s gap) run
+in gpu_gates.py check, which tools/brute/capture.sh and ab_ingame.py call before asking for a slot.
+
 Environment (all optional; tests shrink the timings):
   GPU_SLOT_DIR, GPU_SLOT_LOG, GPU_SLOT_POLL=1, GPU_SLOT_UTIL_MAX=15, GPU_SLOT_CALM_SECONDS=10,
-  GPU_SLOT_CAPTURE_SLOTS=2, GPU_SLOT_PERF_MAX_HOLD=900, GPU_SLOT_CAPTURE_MAX_HOLD=2400,
+  GPU_SLOT_CAPTURE_SLOTS=3 (clamped as above), GPU_SLOT_PERF_MAX_HOLD=900, GPU_SLOT_CAPTURE_MAX_HOLD=2400,
   GPU_SLOT_PERF_WAIT_TIMEOUT=1800, GPU_SLOT_CAPTURE_WAIT_TIMEOUT=3600, GPU_SLOT_SAMPLE_INTERVAL=2,
   GPU_SLOT_LABEL, GPU_SLOT_QUIET=1,
   GPU_SLOT_MOCK_UTIL=<int> | GPU_SLOT_MOCK_UTIL_FILE=<file holding an int>   (replaces ioreg),
@@ -46,6 +55,24 @@ DEFAULT_CAPTURE_PAT = r"(^|\s)-game(\s|$)|-WHShotDir=|-WHPerfFrom="
 EX_TIMEOUT = 75
 EX_MAXHOLD = 124
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import gpu_gates  # watchdog tripwire: effective_cap()
+except Exception as _e:  # noqa: BLE001
+    gpu_gates = None
+    _GATES_IMPORT_ERR = str(_e)
+
+
+def effective_slots(cfg):
+    """(slots, reasons): configured capture slots clamped to the gpu_gates effective cap (0 on a watchdog trip)."""
+    if gpu_gates is None:
+        return min(cfg.slots, 2), ["gpu_gates not importable (%s) -> cap 2" % _GATES_IMPORT_ERR[:100]]
+    try:
+        cap, why = gpu_gates.effective_cap()
+    except Exception as e:  # noqa: BLE001
+        return min(cfg.slots, 2), ["gpu_gates.effective_cap failed (%s) -> cap 2" % str(e)[:100]]
+    return max(0, min(cfg.slots, cap)), why
+
 
 def _f(name, default):
     v = os.environ.get(name)
@@ -66,7 +93,8 @@ class Cfg:
         self.poll = _f("GPU_SLOT_POLL", 1.0)
         self.util_max = _f("GPU_SLOT_UTIL_MAX", 15.0)
         self.calm = _f("GPU_SLOT_CALM_SECONDS", 10.0)
-        self.slots = int(_f("GPU_SLOT_CAPTURE_SLOTS", 2))
+        self.slots = int(_f("GPU_SLOT_CAPTURE_SLOTS", 3))
+        self.eff_slots, self.cap_why = self.slots, []   # set by try_acquire_capture (watchdog clamp)
         self.max_hold = {"perf": _f("GPU_SLOT_PERF_MAX_HOLD", 900.0),
                          "capture": _f("GPU_SLOT_CAPTURE_MAX_HOLD", 2400.0)}
         self.wait_timeout = {"perf": _f("GPU_SLOT_PERF_WAIT_TIMEOUT", 1800.0),
@@ -410,7 +438,10 @@ def run_wrapped(cls, label, json_path, wait_timeout, cmd):
                     break
             waited = time.monotonic() - m_enq
             if wait_timeout > 0 and waited > wait_timeout:
-                log("wait-timeout", waited_s=round(waited, 1), echo=True)
+                if cls == "capture" and cfg.eff_slots < cfg.slots:
+                    log("wait-timeout", waited_s=round(waited, 1), cap=cfg.eff_slots, cap_why="; ".join(cfg.cap_why)[:300], echo=True)
+                else:
+                    log("wait-timeout", waited_s=round(waited, 1), echo=True)
                 result.update(exit_code=EX_TIMEOUT, outcome="wait-timeout", wait_s=round(waited, 1),
                               exclusive=False, contaminated=True)
                 write_result(cfg, json_path, result)
@@ -418,9 +449,12 @@ def run_wrapped(cls, label, json_path, wait_timeout, cmd):
             if waited - last_log >= cfg.wait_log_every or last_log == 0.0:
                 ahead = [r for r in queue if r.get("pid") != me and r.get("ticket", "") < ticket]
                 holders = list_records(cfg.holders)
+                extra = {}
+                if cls == "capture" and cfg.eff_slots < cfg.slots:
+                    extra = {"cap": cfg.eff_slots, "cap_why": "; ".join(cfg.cap_why)[:300]}
                 log("wait", phase="queue", waited_s=round(waited, 1), ahead=len(ahead),
                     holders=",".join("%s:%s" % (h.get("class"), h.get("pid")) for h in holders),
-                    echo=(last_log == 0.0 or waited - last_log >= cfg.wait_log_every))
+                    echo=(last_log == 0.0 or waited - last_log >= cfg.wait_log_every), **extra)
                 last_log = waited
             time.sleep(cfg.poll)
         try:
@@ -609,14 +643,27 @@ def _killpg(child, sig, quiet=False):
 
 
 def try_acquire_capture(cfg):
-    """Shared: SH on perf.lock (fails while a perf run holds/settles) + one free capture slot."""
+    """Shared: SH on perf.lock (fails while a perf run holds/settles) + one free capture slot, and only while fewer
+    capture slots are held than the effective (watchdog-clamped) slot count."""
+    cfg.eff_slots, cfg.cap_why = effective_slots(cfg)
+    if cfg.eff_slots <= 0:
+        return None
     sh = try_flock(cfg.perf_lock, fcntl.LOCK_SH)
     if sh is None:
         return None
+    held, got = 0, None
     for i in range(cfg.slots):
         fd = try_flock(os.path.join(cfg.locks, "capture.%d.lock" % i), fcntl.LOCK_EX)
-        if fd is not None:
-            return [sh, fd], str(i)
+        if fd is None:
+            held += 1
+        elif got is None:
+            got = (fd, i)
+        else:
+            release_fd(fd)
+    if got is not None and held < cfg.eff_slots:
+        return [sh, got[0]], str(got[1])
+    if got is not None:
+        release_fd(got[0])
     release_fd(sh)
     return None
 
@@ -654,9 +701,11 @@ def cmd_status(as_json=False):
     ue = unreal_procs(cfg)
     for r in holders + queue:
         r["alive"] = pid_alive(r.get("pid", -1), r.get("start", ""))
+    eff, why = effective_slots(cfg)
     if as_json:
         print(json.dumps({"util": util, "util_max": cfg.util_max, "perf_ready_now": util is not None and util < cfg.util_max,
-                          "holders": holders, "waiters": queue, "unreal": ue, "slots": cfg.slots}, indent=1))
+                          "holders": holders, "waiters": queue, "unreal": ue, "slots": cfg.slots,
+                          "effective_slots": eff, "cap_why": why}, indent=1))
         return 0
     nowe = time.time()
     print("GPU Device Utilization now: %s %%   (perf gate: < %g %% for %g consecutive s)   %s"
@@ -668,7 +717,8 @@ def cmd_status(as_json=False):
     print("Perf lock:     %s" % ("HELD by pid %s label=%s state=%s for %ds" % (
         perf_h[0]["pid"], perf_h[0].get("label"), perf_h[0].get("state"), nowe - perf_h[0].get("since_epoch", nowe))
         if perf_h else "free"))
-    print("Capture slots: %d/%d in use" % (len(cap_h), cfg.slots))
+    print("Capture slots: %d/%d in use (configured %d, watchdog clamp %s)" % (
+        len(cap_h), eff, cfg.slots, "; ".join(why) if why else "none"))
     print("Holders (%d):" % len(holders))
     for h in holders:
         print("  %-7s slot=%-4s pid=%-6s label=%-12s state=%-9s for %5ds%s  cmd=%s" % (
@@ -680,7 +730,7 @@ def cmd_status(as_json=False):
             i, w.get("class"), w.get("pid"), w.get("label"), nowe - w.get("since_epoch", nowe),
             "" if w["alive"] else "  STALE(pid dead)", w.get("cmd", "")[:90]))
     ncap = sum(1 for p in ue if p["kind"] == "capture")
-    print("Unreal processes: %d (%d capture/-game, %d editor)   [hard cap 3]" % (len(ue), ncap, len(ue) - ncap))
+    print("Unreal processes: %d (%d capture/-game, %d editor)   [machine-wide GPU client cap: gpu_gates.py cap]" % (len(ue), ncap, len(ue) - ncap))
     for p in ue:
         print("  pid=%-6s %-7s project=%-12s etime=%s" % (p["pid"], p["kind"], p["project"] or "?", p["etime"]))
     tbl = proc_table(cfg)

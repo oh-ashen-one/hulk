@@ -5,7 +5,8 @@
 #   tools/brute/capture.sh <case> [-map /Game/Maps/Manhattan] [-shots 2,4] [-quit 10] [-res 1280x720] [-movie] [-- extra UE args]
 #   [-timeout 900] [-maxhold 1200]   run_game hard stop (wall s) / gpu_slot capture max hold
 # case = tools/brute/cases/<case>.json (or "none"); output ~/hulk-scratch/cap/<case>/
-# GPU gates first (tools/gpu/gpu_gates.py: stuck engine, >= 2 GPU clients, util < 90 x3, 20 s launch gap; 2026-10-29 wedge), then the slot.
+# GPU gates first (tools/gpu/gpu_gates.py: watchdog trip refuses, stuck engine, GPU clients >= cap 3 (2 when the watchdog warns / is
+# stale), util < 90 x3, 20 s launch gap; owner 2026-10-29, tools/gpu/README.md), then the slot (3 capture slots, same clamp).
 # A Brute run gets the frame-1 watchdog (no `WH_BRUTE tick1` within 120 s -> SIGTERM, exit 5). CAPTURE_GATES_ONLY=1: gates, then exit.
 set -uo pipefail
 CASE="$1"; shift
