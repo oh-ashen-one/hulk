@@ -164,6 +164,12 @@ Run from `~/hulk` on `chinese-animation-upgrades`, outside the stream window, `~
    the same ffmpeg line with metadata stripped, names them `A.mp4` / `B.mp4`, and assigns labels per case with a seeded RNG balanced to
    half old-first. It writes `blind/critic/<group>_<angle>/{A,B}.mp4` + `blind/critic/brief.md`, and, only for the director,
    `blind/_director/KEY.json` (which label is old, per case) and `report.json` (gate problems forced, event-sequence match).
+   **Later rounds** (2026-10-29): `run --label r3 --cases ...` captures a partial set under `~/hulk-scratch/ab-ingame/r3`, and
+   `pack --a r3 --b new --cases jump_front,jump_left,jump_tq --out DIR` pairs any two sets (labels or dirs) for the listed cases.
+   Run `pack` again with the same `--out` and another `--b` (`--a r3 --b old --cases combat_front,...`) to add more pairs to that
+   pack: `KEY.json` then records each pair's two labels (`pairs.<case>.A/B`), the set dirs (`sets`) and every pack call (`packs`);
+   `brief.md` is rewritten for all pairs; a pair already in the pack is refused without `--force`. Tested in
+   `test_ab_ingame_gates.sh` (stubbed trim / gates). `--old/--new` packs keep their original seed and order.
 7. **Critic**: `[Opus 5.5 high] opus-critic`, never skipped, given the `blind/critic` folder path and nothing else (see below).
    After its verdict only the director opens `_director/KEY.json`, then writes one row per clip into LEDGER.md
    (A/B score, winner, old/new, group cases used: Idle -> idle; Walk, Run -> loco; StopLunge -> lunge; Jump -> jump + lunge; Fall, Land -> jump;

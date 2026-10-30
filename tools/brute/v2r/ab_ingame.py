@@ -7,6 +7,7 @@
   python3 tools/brute/v2r/ab_ingame.py run --label old|new|r3.. [--cases a,b] [--extra "-WHBruteNoClipTiming"] [--dry-run]
   python3 tools/brute/v2r/ab_ingame.py check <set_dir> | --label old   telemetry gates for every case of one set
   python3 tools/brute/v2r/ab_ingame.py pack --old DIR --new DIR --out DIR [--seed N] [--dry-run]
+  python3 tools/brute/v2r/ab_ingame.py pack --a r3 --b new --cases jump_front,... --out DIR   (labels or dirs; extends an existing pack)
 
 Read tools/brute/v2r/ab_ingame.md first. `run` calls tools/brute/capture.sh (GPU slot, capture class) one case at a time and never
 in parallel; it refuses while ~/.cache/gpu-slot/STREAMING exists. `gen`, `list`, `check` and `pack --dry-run` never start an engine.
@@ -529,16 +530,52 @@ def brief(pairs, t_of):
     return '\n'.join(L)
 
 
+def set_dir(v):
+    """pack --a/--b: a label (SET_ROOT/<label>) or a directory path."""
+    if re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,31}', v):
+        return os.path.join(SET_ROOT, v)
+    return os.path.abspath(os.path.expanduser(v))
+
+
 def cmd_pack(a):
-    old, new, out = [os.path.abspath(os.path.expanduser(p)) for p in (a.old, a.new, a.out)]
-    names = [case_name(g, an) for g, an, off in cases() if os.path.isdir(os.path.join(old, case_name(g, an))) and os.path.isdir(os.path.join(new, case_name(g, an)))]
-    only_one = [case_name(g, an) for g, an, off in cases() if case_name(g, an) not in names]
+    """Blind pairs of two capture sets. --old/--new (labels 'old' / 'new') or --a/--b (any labels or dirs; the key records the
+    labels). --cases limits the pairs. An --out that already holds a pack is extended: the new pairs are added to
+    critic/ and _director/KEY.json (a pair that is already there is refused without --force), brief.md is rewritten for all pairs."""
+    if a.a or a.b:
+        if not (a.a and a.b) or a.old or a.new:
+            sys.exit('pack: give --a and --b together, or --old and --new')
+        da, db = set_dir(a.a), set_dir(a.b)
+        la, lb = os.path.basename(da.rstrip(os.sep)), os.path.basename(db.rstrip(os.sep))
+    elif a.old and a.new:
+        da, db = [os.path.abspath(os.path.expanduser(p)) for p in (a.old, a.new)]
+        la, lb = 'old', 'new'
+    else:
+        sys.exit('pack: give --old and --new, or --a and --b')
+    if la == lb:
+        sys.exit('pack: the two sets need different labels (got %s twice)' % la)
+    out = os.path.abspath(os.path.expanduser(a.out))
+    dirs = {la: da, lb: db}
+    want = None
+    if a.cases:
+        want = set(n for n, _ in select(a.cases))
+    allc = [case_name(g, an) for g, an, off in cases() if want is None or case_name(g, an) in want]
+    names = [n for n in allc if os.path.isdir(os.path.join(da, n)) and os.path.isdir(os.path.join(db, n))]
+    only_one = [n for n in allc if n not in names]
     if only_one:
-        print('NOT PACKED (missing in old or new): %s' % ', '.join(only_one))
+        print('NOT PACKED (missing in %s or %s): %s' % (la, lb, ', '.join(only_one)))
     if not names:
         sys.exit('no case exists in both sets')
+    crit, direc = os.path.join(out, 'critic'), os.path.join(out, '_director')
+    kpath, rpath = os.path.join(direc, 'KEY.json'), os.path.join(direc, 'report.json')
+    key = json.load(open(kpath)) if os.path.exists(kpath) else None
+    rep_all = json.load(open(rpath)) if os.path.exists(rpath) else {'gate_problems_forced': {}, 'event_sequences': {}}
+    if key:
+        dup = [n[3:] for n in names if n[3:] in key['pairs']]
+        if dup and not a.force:
+            sys.exit('pack: %s already holds %s (use another --out, or --force to replace them)' % (out, ', '.join(dup)))
+        print('extending the pack in %s (%d pairs there)' % (out, len(key['pairs'])))
     problems = {}
-    for lab, d in (('old', old), ('new', new)):
+    for lab, d in dirs.items():
         for n in names:
             b = check_case(os.path.join(d, n), n)
             if b:
@@ -548,40 +585,51 @@ def cmd_pack(a):
             print('GATE FAIL %s: %s' % (n, json.dumps(v)))
         sys.exit('refusing to pack failed cases (fix and re-capture, or --force)')
     seed = a.seed if a.seed is not None else zlib.crc32(b'ab_ingame')
+    if (la, lb) != ('old', 'new'):
+        seed ^= zlib.crc32(('%s|%s|%s' % (la, lb, ','.join(names))).encode())   # old/new packs keep their original order
     rng = random.Random(seed)
-    first = ['old'] * (len(names) // 2) + ['new'] * (len(names) - len(names) // 2)   # balanced: half the A takes are old
+    first = [la] * (len(names) // 2) + [lb] * (len(names) - len(names) // 2)   # balanced: half the A takes are from each set
     rng.shuffle(first)
-    crit, direc = os.path.join(out, 'critic'), os.path.join(out, '_director')
-    key = {'seed': seed, 'note': 'the critic is NOT given this file or this folder', 'old_dir': old, 'new_dir': new, 'pairs': {}}
-    pairs = {}
+    if key is None:
+        key = {'seed': seed, 'note': 'the critic is NOT given this file or this folder', 'pairs': {}}
+        if (la, lb) == ('old', 'new'):
+            key.update(old_dir=da, new_dir=db)
+    key.setdefault('sets', {}).update(dirs)
+    key.setdefault('packs', []).append({'a': la, 'b': lb, 'seed': seed, 'cases': [n[3:] for n in names]})
     for n, f in zip(names, first):
         g = next(x for x in G if case_name(x, n.split('_', 2)[2]) == n)
         cid = n[3:]
-        roles = {'A': f, 'B': 'new' if f == 'old' else 'old'}
+        roles = {'A': f, 'B': lb if f == la else la}
         key['pairs'][cid] = roles
-        pairs.setdefault(g['id'], []).append(cid)
         t0, t1 = g['film']
         print('%s: A=%s B=%s  trim %.1f-%.1f s' % (cid, roles['A'], roles['B'], t0, t1))
         if not a.dry_run:
             os.makedirs(os.path.join(crit, cid), exist_ok=True)
             for lab in ('A', 'B'):
-                src = os.path.join(old if roles[lab] == 'old' else new, n, n + '.mp4')
-                trim(src, os.path.join(crit, cid, lab + '.mp4'), t0, t1)
+                trim(os.path.join(dirs[roles[lab]], n, n + '.mp4'), os.path.join(crit, cid, lab + '.mp4'), t0, t1)
     # director-only: did both builds run the same script? (event name sequences; times legitimately differ with clip timing)
     rep = {}
+    skip = ('car_bounced', 'sprint_knock', 'blast_cars')
     for n in names:
-        so = [t for _, t in events(os.path.join(old, n, n + '.log')) if not t.startswith(('car_bounced', 'sprint_knock', 'blast_cars'))]
-        sn = [t for _, t in events(os.path.join(new, n, n + '.log')) if not t.startswith(('car_bounced', 'sprint_knock', 'blast_cars'))]
-        rep[n[3:]] = {'same_event_sequence': so == sn, 'old_events': len(so), 'new_events': len(sn)}
+        sa = [t for _, t in events(os.path.join(da, n, n + '.log')) if not t.startswith(skip)]
+        sb = [t for _, t in events(os.path.join(db, n, n + '.log')) if not t.startswith(skip)]
+        rep[n[3:]] = {'same_event_sequence': sa == sb, la + '_events': len(sa), lb + '_events': len(sb)}
+    rep_all['gate_problems_forced'].update(problems)
+    rep_all['event_sequences'].update(rep)
     if not a.dry_run:
         os.makedirs(direc, exist_ok=True)
-        json.dump(key, open(os.path.join(direc, 'KEY.json'), 'w'), indent=1)
-        json.dump({'gate_problems_forced': problems, 'event_sequences': rep}, open(os.path.join(direc, 'report.json'), 'w'), indent=1)
+        json.dump(key, open(kpath, 'w'), indent=1)
+        json.dump(rep_all, open(rpath, 'w'), indent=1)
+        pairs = {}
+        for g, an, off in cases():
+            cid = case_name(g, an)[3:]
+            if cid in key['pairs']:
+                pairs.setdefault(g['id'], []).append(cid)
         open(os.path.join(crit, 'brief.md'), 'w').write(brief(pairs, None))
         print('packed -> %s  (give the critic ONLY %s)' % (out, crit))
     diff = [k for k, v in rep.items() if not v['same_event_sequence']]
     if diff:
-        print('NOTE event sequence differs between old and new for: %s (see _director/report.json; usually a hit that missed a car)' % ', '.join(diff))
+        print('NOTE event sequence differs between %s and %s for: %s (see _director/report.json; usually a hit that missed a car)' % (la, lb, ', '.join(diff)))
     return 0
 
 
@@ -613,9 +661,12 @@ def main():
     p.add_argument('--label', default='', help='instead of set_dir: %s/<label>' % SET_ROOT)
     p.set_defaults(f=cmd_check)
     p = sub.add_parser('pack')
-    p.add_argument('--old', required=True)
-    p.add_argument('--new', required=True)
-    p.add_argument('--out', required=True)
+    p.add_argument('--old', default='', help='set dir labelled old (with --new)')
+    p.add_argument('--new', default='', help='set dir labelled new (with --old)')
+    p.add_argument('--a', default='', help='first set: a label (%s/<label>) or a dir; the key uses its name' % SET_ROOT)
+    p.add_argument('--b', default='', help='second set (with --a)')
+    p.add_argument('--cases', default='', help='comma list (ab_ prefix optional); default every case both sets hold')
+    p.add_argument('--out', required=True, help='pack dir; an existing pack there is extended (new pairs added, brief rewritten)')
     p.add_argument('--seed', type=int, default=None)
     p.add_argument('--force', action='store_true')
     p.add_argument('--dry-run', action='store_true')

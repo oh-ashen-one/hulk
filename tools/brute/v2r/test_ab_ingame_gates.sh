@@ -1,7 +1,7 @@
 #!/bin/bash
 # Hulk-in-Manhattan fan homage. Not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
 # Offline test of the GPU launch gates (tools/gpu/gpu_gates.py), their use in capture.sh / ab_ingame.py, the launch budget and the
-# run_game.sh frame-1 watchdog. Fake ps / ioreg via GPU_GATES_FAKE_*; a stub engine (WH_UE_BIN) and a stub capture.sh. NEVER starts an
+# run_game.sh frame-1 watchdog, and ab_ingame.py pack --a/--b. Fake ps / ioreg via GPU_GATES_FAKE_*; a stub engine (WH_UE_BIN) and a stub capture.sh. NEVER starts an
 # engine: capture.sh is only run with CAPTURE_GATES_ONLY=1, ab_ingame.py only with a stub AB_CAPTURE_SH.
 #   tools/brute/v2r/test_ab_ingame_gates.sh        (exit 0 = all pass)
 set -u
@@ -139,6 +139,59 @@ assert [p for p in problems('six', 6.00) if 'forbidden event wall_release' in p]
 assert [p for p in problems('kick', 7.50, ['WH_BRUTE t=7.20 wall_kick pos (1 1 1) vel (0 0 0)']) if 'wall_kick' in p]
 assert [p for p in problems('resc', 7.50, ['WH_BRUTE t=5.00 rescue']) if 'rescue' in p]
 print('release 7.50 ok; 7.45 ok; 7.44 fails; 6.00 fails; wall_kick and rescue fail')
+PYEOF
+
+echo "== ab_ingame.py pack --a/--b (labels, --cases, extending an existing pack; trim / gates / events stubbed)"
+AB_SET_ROOT="$W/sets" python3 - "$REPO" "$W" <<'PYEOF' > "$W/out" 2>&1 && ok "pack --a r3 --b new / --b old into one dir: labels in KEY, balanced A/B, brief lists all groups, duplicate refused" || no "pack --a/--b" "$W/out"
+import os, sys, json, shutil, argparse, io, contextlib
+sys.path.insert(0, sys.argv[1] + '/tools/brute/v2r'); import ab_ingame as A
+W = sys.argv[2]; R = os.path.join(W, 'sets'); O = os.path.join(W, 'blind-r3')
+assert A.SET_ROOT == R, A.SET_ROOT
+for lab, cs in (('old', ['combat_front', 'combat_left']), ('new', ['jump_front', 'lunge_front']), ('r3', ['jump_front', 'lunge_front', 'combat_front'])):
+    for c in cs:
+        d = os.path.join(R, lab, 'ab_' + c); os.makedirs(d)
+        open(os.path.join(d, 'ab_%s.mp4' % c), 'w').write(lab)          # content = set label, so the copies can be traced
+A.check_case = lambda d, n: []
+A.events = lambda log: [(0.0, 'e1')]
+A.trim = lambda src, dst, t0, t1: shutil.copy(src, dst)
+def run(*argv):
+    sys.argv = ['ab_ingame.py', 'pack'] + list(argv); buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf): A.main()
+    except SystemExit as e:
+        return (e.code if isinstance(e.code, int) else 1), buf.getvalue() + str(e.code)
+    return 0, buf.getvalue()
+assert A.label_arg('r3') == 'r3'
+for bad in ('R3', '../x', 'a b', ''):
+    try: A.label_arg(bad); raise AssertionError('label accepted: %r' % bad)
+    except argparse.ArgumentTypeError: pass
+rc, o = run('--a', 'r3', '--out', O); assert rc and '--a and --b together' in o, o
+rc, o = run('--a', 'r3', '--b', 'r3', '--out', O); assert rc and 'different labels' in o, o
+rc, o = run('--a', 'r3', '--b', 'new', '--cases', 'jump_front,lunge_front,combat_front', '--out', O)
+assert rc == 0 and 'NOT PACKED (missing in r3 or new): ab_combat_front' in o, o
+k = json.load(open(os.path.join(O, '_director', 'KEY.json')))
+assert sorted(k['pairs']) == ['jump_front', 'lunge_front'], k
+assert sorted(r['A'] for r in k['pairs'].values()) == ['new', 'r3'], k        # balanced: one A from each set
+for cid, r in k['pairs'].items():
+    for ab in 'AB':
+        assert open(os.path.join(O, 'critic', cid, ab + '.mp4')).read() == r[ab], (cid, ab, r)
+rc, o = run('--a', 'r3', '--b', 'old', '--cases', 'combat_front', '--out', O)
+assert rc == 0 and 'extending the pack' in o, o
+k = json.load(open(os.path.join(O, '_director', 'KEY.json')))
+assert sorted(k['pairs']) == ['combat_front', 'jump_front', 'lunge_front'] and set(k['pairs']['combat_front'].values()) == {'r3', 'old'}, k
+assert set(k['sets']) == {'r3', 'new', 'old'} and [p['b'] for p in k['packs']] == ['new', 'old'], k
+for cid, r in k['pairs'].items():
+    for ab in 'AB':
+        assert open(os.path.join(O, 'critic', cid, ab + '.mp4')).read() == r[ab], (cid, ab, r)
+br = open(os.path.join(O, 'critic', 'brief.md')).read()
+assert all('`%s_*`' % g in br for g in ('jump', 'lunge', 'combat')), br
+assert not any(w in br for w in ('r3', 'old_dir', 'new_dir')), 'brief leaks a label'
+rep = json.load(open(os.path.join(O, '_director', 'report.json')))['event_sequences']
+assert rep['combat_front'] == {'same_event_sequence': True, 'r3_events': 1, 'old_events': 1}, rep
+rc, o = run('--a', 'r3', '--b', 'old', '--cases', 'combat_front', '--out', O); assert rc and 'already holds combat_front' in o, o
+rc, o = run('--a', os.path.join(R, 'r3'), '--b', os.path.join(R, 'old'), '--cases', 'combat_front', '--out', O, '--force', '--dry-run')
+assert rc == 0 and 'combat_front: A=' in o, o                                   # dirs work as well as labels
+print('labels, --cases, extend, duplicate refusal, dirs: ok')
 PYEOF
 
 echo; echo "gates test: $PASS passed, $FAIL failed  (work dir $W)"
