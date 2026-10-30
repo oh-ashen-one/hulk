@@ -166,6 +166,8 @@ the GPU belongs to the Dragon-boss and Markhor sessions until then, and every la
   4. In-game blind A/B round 4 (`ab_ingame.py run/check/pack`) for every clip that changed; a clip ships only if it wins or ties.
   5. Final build (`assemble_motion.py` -> `measure_timing.py` -> `build_brute.py`), HANDOFF + LEDGER gate lines.
 
+**Round 4 dense refits DONE 2026-10-30** (reader/reader-dense.pt; run_v2, land_v3, stoplunge_v2, land_v1; GLBs in `Local/video2rig/motion-v2r-dense/`, LEDGER rows "dense refit"): the dense reader did NOT clear the 4 px bar and is no better than the standard one (median miss, dense vs standard: Run 4.92 vs 4.35, Land v3 4.80 vs 4.86, StopLunge 4.97 vs 4.60, Land v1 5.73 vs 5.52). Nothing adopted from it; out/<clip>.npz now holds the dense fit for these four clips (originals in work/<clip>/attempt-pre-dense/out-<clip>.npz; `tools/brute/v2r/dense_report.py` writes the outline/warning report for a `-dense` fit).
+
 **Round 4 dense reader** (plan only, nothing run; written 2026-10-29 by Opus 5.5 high; every flag dry-parsed with each module's own
 argparse on the exact argv, `render_poses.py` parsed with bpy stubbed; check: `tools/brute/v2r/dryparse_dense.py`, 17/17 parse, CPU only, writes nothing)
 
