@@ -4,7 +4,7 @@
 
   python3 tools/brute/v2r/ab_ingame.py list                      cases, clips covered, GPU time estimate
   python3 tools/brute/v2r/ab_ingame.py gen [--check]             (re)write tools/brute/cases/ab_<group>_<angle>.json
-  python3 tools/brute/v2r/ab_ingame.py run --label old|new [--cases a,b] [--extra "-WHBruteNoClipTiming"] [--dry-run]
+  python3 tools/brute/v2r/ab_ingame.py run --label old|new|r3.. [--cases a,b] [--extra "-WHBruteNoClipTiming"] [--dry-run]
   python3 tools/brute/v2r/ab_ingame.py check <set_dir> | --label old   telemetry gates for every case of one set
   python3 tools/brute/v2r/ab_ingame.py pack --old DIR --new DIR --out DIR [--seed N] [--dry-run]
 
@@ -585,6 +585,13 @@ def cmd_pack(a):
     return 0
 
 
+def label_arg(v):
+    """A capture-set label: old, new or a round name like r3 (lower-case letters, digits, '_' and '-'); the set lives in SET_ROOT/<label>."""
+    if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,31}', v):
+        raise argparse.ArgumentTypeError('label must match [a-z0-9][a-z0-9_-]* (got %r)' % v)
+    return v
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -593,7 +600,7 @@ def main():
     p.add_argument('--check', action='store_true', help='compare the files on disk with the generator, write nothing')
     p.set_defaults(f=cmd_gen)
     p = sub.add_parser('run')
-    p.add_argument('--label', required=True, choices=['old', 'new'])
+    p.add_argument('--label', required=True, type=label_arg, help='set name: old, new, or any [a-z0-9_-] label (r3, ...) -> %s/<label>' % SET_ROOT)
     p.add_argument('--cases', default='', help='comma list (ab_ prefix optional); default all')
     p.add_argument('--extra', default='', help='extra UE args passed after -- to capture.sh, e.g. "-WHBruteNoClipTiming"')
     p.add_argument('--redo', action='store_true')
