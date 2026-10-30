@@ -1,31 +1,24 @@
-## video2rig animation upgrade — Phase 6 handoff: FINAL SET = r3 (2026-10-29 22:45 EDT, Opus 5.5 high)
-
-> **2026-10-30 04:45 — ROUND 4 CAPTURED AND PACKED (not shipped unless it wins).** r4 = the final r3 set with Run (run_v2), Land
-> (land_v3, hold-compressed) and Fall (range-fix refit) from `Local/video2rig/motion-v2r-r4/`, assembled in `~/hulk-scratch/brute_v2r_r4/`
-> (8 new/hc + 9 old; Run 3.77 s, 3.80 m/s vs 3.70 s, 4.23 m/s; Land 3.00, Fall 4.67 unchanged). Timing JSON re-measured (6dc9c38): acts
-> unchanged (Slap, Clap), LandStart 0.000, LungeStart 0.533. **`/Game/Brute/Body` now holds r4** (17 assets): if r4 loses, re-import the
-> shipped set with `python3 unreal/WebHomage/Scripts/build_brute.py` (brute_v5 = r3) and re-run measure_timing on brute_v5. Captures
-> `--label r4` loco_* + jump_* 6/6 ok; final checks: old 24/24, new 24/24, r3 9/9, r4 6/6 ok. Blind pack
-> `~/hulk-scratch/ab-ingame/blind-r4` (critic gets ONLY `blind-r4/critic`): loco_* = r4 vs r2 new (Run v2 vs Run v1; Walk identical),
-> jump_* = r4 vs r3 (Land v3 vs hc Land, Fall refit vs Fall; Jump identical). Tonight's hulk engine launches (gpu_slot runs.jsonl,
-> label hulk-*, since 2026-10-29 18:00): 54 = 46 captures + 8 build commandlets (4 builds x 2, -nullrhi), all outcome ran.
+## video2rig animation upgrade — Phase 6 handoff: FINAL SET after round 4 (2026-10-30 04:45 EDT, Opus 5.5 high)
 
 Branch `chinese-animation-upgrades` (never `main`; the owner merges). Plan `docs/brute/video2rig/PLAN.md`, ledger
-`docs/brute/video2rig/LEDGER.md` (every take, check, fit, refine, verdict, dollar), blind verdicts `AB-ingame-critique.md` (r2) and
-`AB-ingame-r3-critique.md` (r3), hold compression `HOLD-COMPRESSION.md`.
+`docs/brute/video2rig/LEDGER.md` (every take, check, fit, refine, verdict, dollar), blind verdicts `AB-ingame-critique.md` (r2),
+`AB-ingame-r3-critique.md` (r3) and the round-4 rows in LEDGER, hold compression `HOLD-COMPRESSION.md`.
 
 **Verified state (commands run for this entry)**
 
-- `/Game/Brute/Body` holds the final set: `build_brute.py --fbx ~/hulk-scratch/brute_v2r_r3/out/brute_anim.fbx`, exit 0, 17 A_Brute_*
-  (log `~/hulk-scratch/brute_v2r_r3/build_brute-r3.log`; branch at `96ccd64`, timing JSON from `5fcac67`). Content/ is gitignored.
-- Reproducible from the documented shipped inputs: the 8 winning GLBs are copied into `~/hulk-scratch/brute_v2/motion/` (beside all
-  16 old files, nothing removed; the `-v2r` / `Brute_v2r_` names sort first, so a v2r file wins only where one exists), and
-  `assemble_motion.py` re-run into `~/hulk-scratch/brute_v5/` (pre-v2r copy of its 4 outputs in `brute_v5/pre-v2r-20261018/`).
-  Its `clips_meta.json` and `clips.json` equal the r3 build's exactly; `brute.glb` is byte-identical (md5 008429d7...); `brute_anim.fbx`
-  differs only in the FBX creation timestamp, the embedded texture path (out dir name) and Blender's per-export object ids: a node-tree
-  compare with those ignored finds 0 differences, so Unreal was NOT rebuilt. Log `~/hulk-scratch/brute_v2r_r3/assemble-shipped.log`.
-- `unreal/WebHomage/Config/BruteClipTiming.json` carries only the new clips (Slap, Clap acts; LandStart, LungeStart); the 9 old clips
-  use the C++ constants. GLBs, blends and captures are local only (`Local/` and `~/hulk-scratch/` are not in git).
+- `/Game/Brute/Body` holds the FINAL set: `python3 unreal/WebHomage/Scripts/build_brute.py` (default input = the shipped
+  `~/hulk-scratch/brute_v5/brute_anim.fbx`), exit 0 at 04:38:55 EDT, 17 A_Brute_* (log `~/hulk-scratch/brute_v2r_r4/build_brute-final.log`).
+  Content/ is gitignored; the build is reproducible from the inputs below.
+- Shipped motion dir `~/hulk-scratch/brute_v2/motion/`: the 8 winning GLBs (+ export JSONs) beside all 16 old files (nothing removed;
+  the `-v2r` / `Brute_v2r_` names sort first, so a new file wins only where one exists). Run = run_v2 and Fall = the round-4 refit
+  (both sha-equal to `Local/video2rig/motion-v2r-r4/`), Land = hold-compressed v1 (sha-equal to `motion-v2r-hc/`).
+- `assemble_motion.py` re-run into `~/hulk-scratch/brute_v5/` (log `~/hulk-scratch/brute_v2r_r4/assemble-final.log`): clips_meta 8 new/hc
+  + 9 old, every clip equal to the r4 build's meta (Run 3.767 s, 3.80 m/s); Land and Fall durations as r3. md5 brute.glb 22961571...,
+  brute_anim.fbx 89c7bce9.... Pre-v2r outputs kept in `brute_v5/pre-v2r-20261018/`.
+- `unreal/WebHomage/Config/BruteClipTiming.json` (8b1cbdc, measured on brute_v5): Slap 1.527 / 3.020 / 1.6 / hit 2.167, Clap 0.195 /
+  1.672 / 1.6 / hit 0.933 (game-time deltas 0.000), LandStart 0.000, LungeStart 0.533 = the r3 values. Run is NOT speed-matched from the
+  clip: BruteCharacter.cpp plays it at clamp(ground speed / 11, 0.9, 1.9), so Run v2 (3.80 m/s in place) vs v1 (4.23) may change
+  foot slide slightly; watch it in the playtest. The 9 old clips use the C++ constants. GLBs, blends and captures are local only.
 
 **Final set**
 
@@ -33,12 +26,12 @@ Branch `chinese-animation-upgrades` (never `main`; the owner merges). Plan `docs
 | --- | --- | --- | --- |
 | Idle | new (v2r) | Brute_v2r_idle.glb | in-game NEW (low-med) |
 | Walk | new (v2r) | Brute_v2r_walk.glb | in-game NEW (low-med) |
-| Run | new (v2r) | Brute_v2r_run.glb | in-game tie (sprint hidden by cars), tie rule ships new |
+| Run | new (v2r, run_v2) | Brute_v2r_run.glb (from motion-v2r-r4) | r2 v1 tie vs old; r4 v2 vs v1 tie on screen, v2 ships on numbers (fit 4.35 vs 4.65 px, seam 0.46 vs 0.67) |
 | StopLunge | new-hc | Brute_v2r_stoplunge.glb | r2 NEW (med); r3 hc vs r2 tie, hc kept (already built, 2.23 s) |
 | Slap | new (v2r) | Brute_slap-v2r.glb | NEW in r2 (med) and again in r3 (med) |
 | Clap | new-hc | Brute_clap-v2r.glb | r2 OLD (low-med); r3 hc beats old (med) |
-| Fall | new (v2r) | Brute_fall-v2r.glb | in-game tie (med-high), tie rule ships new |
-| Land | new-hc | Brute_land-v2r.glb | r2 NEW (med); r3 hc beats r2 Land (high) |
+| Fall | new (v2r, round-4 refit) | Brute_fall-v2r.glb (from motion-v2r-r4) | r2 tie vs old (med-high); r4 refit pixel-identical to r3 Fall, adopted (LeftFoot range warning cleared) |
+| Land | new-hc (v1) | Brute_land-v2r.glb (from motion-v2r-hc) | r2 NEW (med); r3 hc beats r2 Land (high); r4 Land v3 LOST to it (high) |
 | PunchL | old | Brute_punchl.glb | OLD (low); neither take lands a clean straight punch |
 | PunchR | old | Brute_punchr.glb | OLD (med); same note |
 | Uppercut | old | Brute_uppercut.glb | OLD (low-med); new is a mild overhead reach |
@@ -55,10 +48,10 @@ minimum; numbers from LEDGER rows and `Local/video2rig/hc-refined/*_hc.json`; fo
 ```
 GATE reader-ground PASS 2.41/2.83 px
 GATE reader-air PASS 2.85/3.30 px
-GATE reader-dense PASS median_px front 1.65 side 1.85 (bar <4)
+GATE reader-dense PASS 1.65/1.85 px (not adopted: refits with it were not better)
 GATE Idle check 0.54 fit 1.81 seam 0.30 drift 1.6 toe 0.0 ab NEW
 GATE Walk check 0.28 fit 2.51 seam 0.76 drift 9.5 toe 0.0 ab NEW
-GATE Run check 1.02 fit 4.65 seam 0.67 drift 0.0 toe 0.0 ab tie->new
+GATE Run check 1.08 fit 4.35 seam 0.46 drift 2.4 toe 0.0 ab tie->new (v2 by numbers)
 GATE StopLunge check 1.24 fit 4.60 seam 0.00 drift 4.0 toe 0.0 ab NEW (hc = r2 tie)
 GATE Slap check 0.46 fit 3.09 seam 0.00 drift 3.9 toe 0.6 ab NEW
 GATE Clap check 0.26 fit 2.59 seam 0.00 drift 2.7 toe 0.0 ab NEW (hc)
@@ -73,26 +66,34 @@ GATE WallClimb check 0.65 fit 3.42 seam 0.54 drift 1.2 toe 445.2 ab OLD
 GATE Jump check FAIL(visual x2) fit - seam - drift - toe - ab old (no new take)
 GATE Smash check 1.53 FAIL fit - seam - drift - toe - ab old (no new take)
 GATE WallAttach check 2.16 FAIL fit - seam - drift - toe - ab old (no new take)
-GATE spend fal 7.26 USD (16.69 left)
-GATE build r3 96ccd64 timing 5fcac67 fbx-md5 a5408935 (r3 out) / 51c7d4dc (brute_v5, same content) glb-md5 008429d7
+GATE spend fal 8.22 USD (15.43 left; round 4 added run_v2 0.36, land_v2 0.30, land_v3 0.30)
+GATE build final brute_v5 fbx-md5 89c7bce9 glb-md5 22961571 timing 8b1cbdc (build_brute exit 0, 17 assets, 2026-10-30 04:38)
 ```
 
-Fit over the 4 px bar on Run 4.65, StopLunge 4.60, Land 5.52 (the reading itself; a better reader or clip is the only lever).
+Bar misses (4 px), recorded honestly: Run 4.35, StopLunge 4.60, Land 5.52 px. The dense reader (1.65/1.85 px gate) did not lower
+them (Run 4.92, StopLunge 4.97, Land v1 5.73, Land v3 4.80): the takes themselves limit the fit, not the reader.
 Fall has planting off (airborne); WallClimb's toe 445 mm is the hang (feet off the floor all window).
 
-**Which captures prove the final content** (`~/hulk-scratch/ab-ingame/`, all gate-checked ok)
+**Round 4 outcome** (blind pack `~/hulk-scratch/ab-ingame/blind-r4`): Land v3 lost to hc Land v1 in all three angles (high); Run v2
+vs v1 tie on screen (same cycle, bob, swing), v2 ships on its numbers; Fall refit vs r3 Fall pixel-identical, refit adopted.
 
-- `idle_*`, `loco_*` (Idle, Walk, Run): set `new` (r2; same files as final). Fall also appears in r2 `jump_*`.
-- `lunge_*`, `jump_*`, `combat_*` (StopLunge, Jump, Fall, Land, PunchR/L, Slap, Clap, Smash): set `r3` (the final build exactly).
-- `uppercut_*`, `grab_*`, `wall_*` (Uppercut, Lift, Throw, WallAttach, WallClimb): set `old` (same old clips; the C++ per-clip wall
-  keys added today default to the old constants).
-- Blind packs: `blind/` (r2 vs old, 24 pairs), `blind-r3/` (9 pairs); keys in their `_director/KEY.json`.
+**Which captures prove the final content** (`~/hulk-scratch/ab-ingame/`; final `check`: old 24/24, new 24/24, r3 9/9, r4 6/6 ok)
+
+- `idle_*` (Idle): set `new` (r2).
+- `loco_*` (Walk, Run v2): set `r4` (Walk same file as r2).
+- `lunge_*`, `combat_*` (StopLunge, Jump, PunchR/L, Slap, Clap, Smash): set `r3`.
+- `jump_*` (Jump, Fall, Land hc v1): set `r3` (Land hc v1; the r4 Fall refit rendered pixel-identical to r3's Fall in `r4` jump_*).
+- `uppercut_*`, `grab_*`, `wall_*` (Uppercut, Lift, Throw, WallAttach, WallClimb): set `old` (the C++ per-clip wall keys added
+  today default to the old constants).
+- Blind packs with keys in `_director/KEY.json`: `blind/` (r2 vs old, 24), `blind-r3/` (9), `blind-r4/` (6).
+- Engine launches tonight (gpu_slot `runs.jsonl`, label `hulk-*`, since 2026-10-29 18:00): 56 = 46 captures + 10 build commandlets
+  (5 builds x 2, -nullrhi), every one outcome `ran`; the first 6 (grab/wall 18:36-18:46) may be another hulk session's.
 
 **Critics' open notes (not fixed)**
 
 - The HUD control-help box covers the feet in the front and tq angles; foot sliding is unjudgeable there. Next capture revision: hide
   help (H), add a 3 s Idle hold after landing and after each loco speed.
-- Landing: both takes stand upright ~0.55 s after the crater before the crouch; the crouch should start at touchdown.
+- Landing crouch timing: the takes stand upright ~0.55 s after the crater before the crouch; it should start at touchdown.
 - Punches: neither take has a closed-fist straight punch (old kept, still weak).
 - Lift / Throw: the new takes drop the car (old kept).
 - Uppercut: old wins; the new take is a mild overhead reach.
@@ -145,97 +146,9 @@ Fall has planting off (airborne); WallClimb's toe 445 mm is the hang (feet off t
   was 6), 30 s cool-down between cases, printed as it goes.
 - Offline check of all of it: `tools/brute/v2r/test_ab_ingame_gates.sh` (never launches anything; 31/31 PASS today).
 
-**Next (owner)**: feel playtest of the final set; merge decision for this branch and the fork branches; optional re-film with the HUD
-hidden. Disk is at 100 % (13 GB free): scratch sets `~/hulk-scratch/ab-ingame` (~0.6 GB), `brute_v2r_candidate` can go after merge.
-
-**Round 4 (queued behind Dragon-boss and Markhor on the GPU)** (written 2026-10-29 23:00 EDT, Opus 5.5 high)
-
-Rule: **nothing launches (no `video2rig check`, fit, reader training, Blender batch, build or capture) until Markhor reports done**;
-the GPU belongs to the Dragon-boss and Markhor sessions until then, and every launch still goes through the GPU gates above.
-
-- Goals: fit median < 4 px and no fit warnings on Run, StopLunge, Land and Fall.
-- Done already (GPU-free): two new takes, size gate + contact sheet only (LEDGER rows `run_v2`, `land_v2`; spend +0.66 USD, fal
-  balance 15.73): `Local/video2rig/brute-aligned/clips/run_v2.mp4` (size PASS 1.26, sharp full-speed run in place, wide arms,
-  snaps to stance only in the last 2 frames, so cut a treadmill window as for v1) and `land_v2.mp4` (size PASS 1.09, two-foot
-  fist+palm contact, no hop, no raised arm, but impact at ~0.67 s and a ~1.3 s still crouch: needs `--compress-holds`).
-- Done since (GPU-free): land_v2 failed `check` (1.96 %), so one more Land take, `land_v3.mp4` (LEDGER row `Land v3 (round 4)`,
-  +0.30 USD, live fal balance 15.73 -> 15.43): prompt fix for panel agreement (slow legible crouch, exact same timing in both panels);
-  size PASS 1.04, panels crouch and rise on the same frames, no hop/raised arm/twist, ends exactly on the stance; only the left fist
-  reaches the floor, ~1.3 s still crouch (`--compress-holds`), stance ~4.3 s. **check/fit pending GPU.** Land's second regeneration
-  after a failure: if v3 fails check, keep the hold-compressed v1; no fourth take.
-- Steps:
-  1. `check` + fit `run_v2` and `land_v2` with the lockfix fork: `run_clip.sh <P> run_v2 Run --loop --fork-dir ~/video2rig-lockfix
-     --run-args "--set steps=false" --refine-args "--treadmill --window <a> <b> --loop-win 0.5 --trim 0"` (as Run v1) and
-     `run_clip.sh <P> land_v2 Land --return-to-stance --fork-dir ~/video2rig-lockfix --refine-args "--max-lift 0.06
-     --compress-holds"`. land_v2 failed check; same for land_v3: `run_clip.sh <P> land_v3 Land --return-to-stance --fork-dir
-     ~/video2rig-lockfix --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.06"`. A take that does not beat v1's fit (Run 4.65, Land 5.52 px) is not used.
-  2. Joints tuning (`creature.json clips.<clip>.joints`, as Lift/Uppercut exp B): Fall's LeftFoot; Land/Run range warnings
-     (Land v1: RightFoot, RightShoulder, Spine1, Head). StopLunge v2 stays unadopted unless a new take rises (it never does).
-  3. If still > 4 px: train the dense reader warm-started from reader.pt and refit run_v2, land_v3 (after check), stoplunge_v2 and
-     land_v1 with it: see the **Round 4 dense reader** block below (also in `docs/brute/video2rig/ROUND4.md`). **DONE 2026-10-30 (01:05-03:42 EDT)**: dense reader trained (8000 steps, final loss 5.21, `reader/reader-dense.pt`), gate PASS 1.65 / 1.85 px; refits with it in progress.
-  4. In-game blind A/B round 4 (`ab_ingame.py run/check/pack`) for every clip that changed; a clip ships only if it wins or ties.
-  5. Final build (`assemble_motion.py` -> `measure_timing.py` -> `build_brute.py`), HANDOFF + LEDGER gate lines.
-
-**Round 4 dense refits DONE 2026-10-30** (reader/reader-dense.pt; run_v2, land_v3, stoplunge_v2, land_v1; GLBs in `Local/video2rig/motion-v2r-dense/`, LEDGER rows "dense refit"): the dense reader did NOT clear the 4 px bar and is no better than the standard one (median miss, dense vs standard: Run 4.92 vs 4.35, Land v3 4.80 vs 4.86, StopLunge 4.97 vs 4.60, Land v1 5.73 vs 5.52). Nothing adopted from it; out/<clip>.npz now holds the dense fit for these four clips (originals in work/<clip>/attempt-pre-dense/out-<clip>.npz; `tools/brute/v2r/dense_report.py` writes the outline/warning report for a `-dense` fit).
-
-**Round 4 dense reader** (plan only, nothing run; written 2026-10-29 by Opus 5.5 high; every flag dry-parsed with each module's own
-argparse on the exact argv, `render_poses.py` parsed with bpy stubbed; check: `tools/brute/v2r/dryparse_dense.py`, 17/17 parse, CPU only, writes nothing)
-
-- What it is: `python -m video2rig.reader.dense` (TUTORIAL.md "Advanced: the dense reader"). It reads a square window round the body
-  (~1.8x larger in its input than a whole panel) and adds per-pixel bone labels + depth; the author measured ~1.5x more exact joints,
-  "experimental, used on one creature". It is NOT `reader.prepare --init` (that retrains the standard whole-panel reader); `prepare`
-  stays unused here.
-- Warm start from the standard reader WORKS: `dense train --init reader/reader.pt` loads 262 of 298 tensors (backbone + keypoint heads;
-  reader.pt has the same 41 keypoints; only the depth and dense heads start fresh). Checked on the CPU, nothing trained.
-- Nothing overwrites `reader/reader.pt`: renders, poses and labels go to `reader/renders-dense/`, the weights to `reader/reader-dense.pt`
-  (`--out`, default is that same file), readings to `work/<clip>/dense/`, fits to `work/<clip>/fit-dense.npz` + `out/<clip>-dense.npz`.
-  No copy/swap of `reader/` is needed. The standard `reader/renders/` is not touched either (the dense set is its own folder).
-- GPU: the Blender render, `dense train` and every `dense read` are GPU clients. Each waits for `python3 tools/gpu/gpu_gates.py check`
-  (clients under the cap, util < 90 %, 20 s since the last launch, no STREAMING) and runs headless under `taskpolicy -b`. Only after the
-  Dragon-boss / Markhor GPU work reports done. Disk: 14 GB free now; the dense set is ~0.5-1 GB.
-
-Train (cwd `/Users/midir/video2rig-lockfix`, `PY=/Users/midir/video2rig/.venv/bin/python`, `P=/Users/midir/hulk/Local/video2rig/brute-aligned`,
-`R=$P/reader/renders-dense`, `B=/Applications/Blender.app/Contents/MacOS/Blender`):
-
-```
-$PY -m video2rig.reader.poses $P --n 6000 --seed 1 --out $R/poses.npz                                 # CPU, ~6 min
-$B $P/model.blend --background --factory-startup --python /Users/midir/video2rig-lockfix/blender/render_poses.py -- \
-   --poses $R/poses.npz --cameras $P/start/cameras.json --out $R --copies 12 --samples 8 --fit 896 --height 720 --project $P
-                                                                                                       # Blender (GPU), ~20-35 min
-$PY -m video2rig.reader.visible $P --poses $R/poses.npz --out $R/visible.npz                          # CPU, ~5-15 min
-$PY -m video2rig.reader.dense labels $P --renders reader/renders-dense                                 # CPU, ~10-30 min; check dense_labels_check.jpg
-$PY -m video2rig.reader.dense train $P --renders reader/renders-dense --init $P/reader/reader.pt \
-   --steps 8000 --out reader/reader-dense.pt                                                           # MPS, the long part
-```
-
-Expected: 8000 steps (author default, batch 24). The standard reader ran 0.89 s/step alone and 2.03 s/step beside two other trainers
-(9000 steps = 5.1 h); the dense net is the same 448 px ViT plus two heads, so about 1.0-1.2 s/step alone = **2.2-2.7 h**, up to ~5 h
-if another trainer shares the GPU. With poses, render, visible and labels: **~3-3.5 h wall alone, ~6 h contended.** RAM ~8 GB for the
-12000 windows. Never judge it before the last step (the dragon read 13 px at 300 steps, 4 px at 9000).
-
-Refit (per clip; joints and other `clips.<clip>` settings in creature.json still apply through `clip_cfg`):
-
-```
-$PY -m video2rig.reader.dense read $P <clip> --reader $P/reader/reader-dense.pt --locator masks        # GPU, ~1-3 min -> work/<clip>/dense/reading.npz
-$PY -m video2rig.reader.fit $P <clip> --reading $P/work/<clip>/dense/reading.npz --tag=-dense [--set steps=false]
-                                                                                                       # CPU ~2-3 min -> out/<clip>-dense.npz, work/<clip>/fit-dense.npz,
-                                                                                                       #   fit-dense-report.json; "median keypoint miss" in its output
-$PY -m video2rig review $P <clip> --tag=-dense                                                        # work/<clip>/review-dense.mp4
-```
-
-| clip | fit extras | install + refine (after the dense fit beats the standard one) |
-| --- | --- | --- |
-| run_v2 | `--set steps=false` | `run_clip.sh $P run_v2 Run --loop --refine-args "--treadmill --window 33 124 --loop-win 0.7 --trim 0"` (bar: 4.35 px) |
-| land_v3 | none; only once `check` has passed (else skip it) | `run_clip.sh $P land_v3 Land --return-to-stance --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.06"` |
-| stoplunge_v2 | none | `run_clip.sh $P stoplunge_v2 StopLunge --return-to-stance --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.07"` (bar 4.58 px; still not adoptable unless the take rises, which the fit cannot add) |
-| land_v1 | none | `run_clip.sh $P land_v1 Land --return-to-stance --refine-args "--compress-holds --return-frames 18 --stance-snap 8 --max-seconds 3.0 --max-lift 0.06"` (bar 5.52 px; the shipped hold-compressed Land) |
-
-Every `run_clip.sh` line also takes `--fork-dir /Users/midir/video2rig-lockfix --motion-dir /Users/midir/hulk/Local/video2rig/motion-v2r-dense
---from import` (a separate GLB folder: motion-v2r and motion-v2r-r4 stay untouched). Install step before it, as for Lift's `-jt` fit:
-`mkdir -p $P/work/<clip>/attempt-pre-dense && cp $P/out/<clip>.npz $P/work/<clip>/{fit.npz,report.json} $P/work/<clip>/attempt-pre-dense/ (the files that exist)
-&& cp $P/out/<clip>-dense.npz $P/out/<clip>.npz` (restore = copy back). run_clip's CLIP line then still prints the standard fit px from
-pipeline.state: record the dense px from the `reader.fit` output instead. The dense miss is measured against the dense reading itself,
-so judge by the review film and the in-game A/B, not by px alone.
+**Pending (owner)**: the feel playtest of the final set (not done yet); merge decision for this branch and the fork branches;
+optional re-film with the HUD hidden. No further GPU work by this run. Disk is at 100 % (18 GB free): scratch sets
+`~/hulk-scratch/ab-ingame` (~0.7 GB), `brute_v2r_candidate`, `brute_v2r_r3`, `brute_v2r_r4` can go after the merge.
 
 
 ## Owner play session 2026-10-24 (live)
