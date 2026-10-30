@@ -50,10 +50,20 @@
 #                            lift of the last N samples onto frame 0's lift (never below what the toes need), so the last frame equals
 #                            frame 0 and the toes stay above the floor (end-minus-start lift before/after in feet.stance_snap).
 #                            Tried first and dropped: blending the leg rotations after the clamp (PunchL: drift 1 -> 8 mm, toe -1.3 mm).
+#     --lock-yaw             (2026-10-30, after the Seedance straight punch: the whole body turns ~90 deg to profile and back) remove
+#                            the root's (Hips, creature.json root_bone) world yaw relative to frame 0 from every fit sample, before
+#                            anything else, so the body keeps frame 0's facing all clip while every other bone keeps its parent-relative
+#                            (body-relative) motion. Yaw = heading of the root's facing axis (creature.json facing, default -Y) and its
+#                            lateral axis about world Z, weighted by their horizontal lengths (robust to a forward lean); pitch/roll are
+#                            kept. The root's travel is kept body-relative: each step of the root location is turned by the yaw removed
+#                            at that step (a lunge toward the turned body's front stays a lunge toward the locked front; keeping the
+#                            world travel instead made the hips run sideways away from the planted foot: PunchR sd_v4 left toe drift
+#                            36 mm, 13 IK misses). The plant then re-pins the feet. Removed range in JSON yaw_lock and on
+#                            the REFINE_GATE line as `yaw_locked <deg span>` (max - min of the removed yaw).
 #     --action NAME --clip NAME --out PATH.blend   (defaults: active action; clip = action name; <fit>_refined.blend beside input)
 #     --stance-rig rig.json  the aligned rig.json whose start_pose is the start-picture stance (overlap check)
 # Writes <out>.blend and <out>.json; prints
-#   REFINE_GATE <clip> seam x.xx foot_drift_mm X toe_min_mm X peakhand_L f peakhand_R f
+#   REFINE_GATE <clip> seam x.xx foot_drift_mm X toe_min_mm X peakhand_L f peakhand_R f [yaw_locked D]   (D only with --lock-yaw)
 #   seam  = rotation step across the loop wrap / median step (loop: last DISTINCT frame -> frame 0, the end frame equals frame 0 as in
 #           assemble_motion; one-shot: last frame -> frame 0, i.e. how far the end is from the start stance)
 #   foot_drift_mm = worst horizontal slide vs that plant's mean, after the plant: toe joint over every planted sample, ankle over the
@@ -121,6 +131,7 @@ def parse():
     ap.add_argument('--max-seconds', type=float, default=0.0)
     ap.add_argument('--max-speedup', type=float, default=1.6)
     ap.add_argument('--stance-snap', type=int, default=0)
+    ap.add_argument('--lock-yaw', action='store_true')
     ap.add_argument('--action', default='')
     ap.add_argument('--clip', default='')
     ap.add_argument('--out', default='')
@@ -164,6 +175,41 @@ def gauss1d(v, sig=1.5, hw=4):
 
 def r3(x):
     return None if x is None else round(float(x), 3)
+
+
+AXES = {'X': (1, 0, 0), 'Y': (0, 1, 0), 'Z': (0, 0, 1)}
+
+
+def facing_axis(blend):
+    """creature.json `facing` ('-Y', '+X', ...) beside the fit .blend or one level up (the video2rig project dir); default -Y"""
+    for d in (os.path.dirname(blend), os.path.dirname(os.path.dirname(blend))):
+        f = os.path.join(d, 'creature.json')
+        if os.path.exists(f):
+            s = str(json.load(open(f)).get('facing', '-Y')).strip().upper()
+            v = Vector(AXES[s[-1]]) * (-1 if s.startswith('-') else 1)
+            return v, s, f
+    return Vector((0, -1, 0)), '-Y', None
+
+
+def root_yaw(qs, Bq, F):
+    """unwrapped world yaw (rad) of the root per sample, relative to the rest pose. qs: root basis quaternions (n, 4); Bq: the rest
+    root's world rotation (world rotation = Bq @ basis); F: facing axis in world. Heading of the facing axis and of the lateral axis
+    (Z x F), each weighted by its horizontal length, so a lean along either axis does not swing the estimate."""
+    Lt = Vector((0, 0, 1)).cross(F)
+    bi = Bq.inverted()
+    y = []
+    for q in qs:
+        D = Bq @ Quaternion(q) @ bi
+        sx = cx = 0.0
+        for ax in (F, Lt):
+            v = D @ ax
+            wv = math.hypot(v.x, v.y)
+            if wv < 1e-9:
+                continue
+            d = math.atan2(v.y, v.x) - math.atan2(ax.y, ax.x)
+            sx += wv * math.sin(d); cx += wv * math.cos(d)
+        y.append(math.atan2(sx, cx))
+    return np.unwrap(np.array(y))
 
 
 # ------------------------------------------------------------------ channels on the key grid
@@ -350,6 +396,44 @@ def main():
         REP['window'] = dict(samples=[wa, wb], seconds=[r3(wa / sr), r3(wb / sr)], kept=N0)
         REP['grid']['samples'] = N0; REP['grid']['seconds'] = (N0 - 1) / sr
         print('REFINE window', json.dumps(REP['window']))
+    # ---------- 0. yaw lock (one-shots whose take turns the whole body, e.g. Seedance punches): the root's world yaw relative to frame 0
+    #           is removed from every sample (basis q' = Bq^-1 Rz(-dyaw) Bq q); children are parent-relative, so the limbs keep their
+    #           body-relative motion. Done on the fit channels before everything else: the raw hand peaks, holds and contact windows are
+    #           then measured on the yaw-locked motion (the turn is not motion the game clip keeps). Frame 0 is unchanged.
+    if a.lock_yaw:
+        rb = L.ROOT
+        assert rb in ch0 and 'q' in ch0[rb], '--lock-yaw: no %s rotation keys in the fit' % rb
+        Fa, fs, fsrc = facing_axis(src)
+        Bq = arm.matrix_world.to_quaternion() @ arm.data.bones[rb].matrix_local.to_quaternion()
+        Fw = arm.matrix_world.to_quaternion() @ Fa
+        yw = root_yaw(ch0[rb]['q'], Bq, Fw)
+        dy = yw - yw[0]
+        Bi = Bq.inverted()
+        ch0[rb]['q'] = fix_hemi(np.array([list(Bi @ Quaternion((0, 0, 1), -float(dy[i])) @ Bq @ Quaternion(ch0[rb]['q'][i]))
+                                         for i in range(N0)]))
+        trav = None
+        sc_w = arm.matrix_world.to_scale().x
+        if 'l' in ch0[rb]:   # travel steps turned by the removed yaw (midpoint angle), in world; location keys are in the rest bone's axes
+            Mw = arm.matrix_world.to_quaternion().to_matrix() @ arm.data.bones[rb].matrix_local.to_3x3()
+            Mi = Mw.inverted()
+            lw = [Mw @ Vector(x) for x in ch0[rb]['l']]
+            nw = [lw[0].copy()]
+            for i in range(1, N0):
+                nw.append(nw[-1] + Matrix.Rotation(-0.5 * float(dy[i] + dy[i - 1]), 3, 'Z') @ (lw[i] - lw[i - 1]))
+            ch0[rb]['l'] = np.array([list(Mi @ v) for v in nw])
+            hz = lambda v: math.hypot(v.x, v.y)   # noqa: E731
+            trav = dict(end_xy_before_mm=r3(hz(lw[-1] - lw[0]) * sc_w * 1000), end_xy_after_mm=r3(hz(nw[-1] - nw[0]) * sc_w * 1000),
+                        max_xy_change_mm=r3(max(hz(nw[i] - lw[i]) for i in range(N0)) * sc_w * 1000), z_kept=True)
+        write_channels(arm, act, {rb: ch0[rb]}, grid0)
+        yr = root_yaw(ch0[rb]['q'], Bq, Fw)
+        imax = int(np.argmax(np.abs(dy)))
+        REP['yaw_lock'] = dict(bone=rb, facing=fs, facing_source=fsrc, removed_deg_min=r3(math.degrees(dy.min())),
+                               removed_deg_max=r3(math.degrees(dy.max())), removed_deg_span=r3(math.degrees(dy.max() - dy.min())),
+                               peak_sample=imax, peak_seconds=r3(imax / sr), frame0_yaw_deg=r3(math.degrees(yw[0])),
+                               residual_deg_max=r3(math.degrees(np.abs(yr - yr[0]).max())),
+                               removed_deg_every_5=[r3(math.degrees(x)) for x in dy[::5]], travel=trav,
+                               note='pitch and roll kept; root travel turned into the locked body frame; feet re-pinned by the plant')
+        print('REFINE yaw_lock', json.dumps({k: v for k, v in REP['yaw_lock'].items() if k != 'removed_deg_every_5'}))
     rotb = sorted(b for b in ch0 if 'q' in ch0[b])
     armb = [s + x for s in SIDES for x in ARM if s + x in ch0]
     legb = [s + x for s in SIDES for x in LEG]
@@ -918,9 +1002,10 @@ def main():
             clip, len(rt['spans']), len(rt['compressed']), rt['speedup'], rt['seconds_before'], rt['seconds_after'],
             peaks_raw['Left']['seconds'], peaks['Left']['seconds'], peaks_raw['Right']['seconds'], peaks['Right']['seconds'],
             REP.get('last_frame_vs_frame0', {}).get('mesh_mm_max')), flush=True)
-    print('REFINE_GATE %s seam %.2f foot_drift_mm %s toe_min_mm %.1f peakhand_L %d peakhand_R %d' % (
+    print('REFINE_GATE %s seam %.2f foot_drift_mm %s toe_min_mm %.1f peakhand_L %d peakhand_R %d%s' % (
         clip, seam, ('%.1f' % drift_after) if drift_after == drift_after else 'n/a', (toe_min - a.floor) * 1000,
-        peaks['Left']['sample'], peaks['Right']['sample']), flush=True)
+        peaks['Left']['sample'], peaks['Right']['sample'],
+        (' yaw_locked %.1f' % REP['yaw_lock']['removed_deg_span']) if 'yaw_lock' in REP else ''), flush=True)
 
 
 if __name__ == '__main__':

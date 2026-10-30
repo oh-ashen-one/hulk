@@ -109,13 +109,15 @@ PY
 }
 
 # refine_brute.py: "REFINE_GATE <clip> seam 1.18 foot_drift_mm 3.6 toe_min_mm 0.0 peakhand_L 21 peakhand_R 153" (foot_drift_mm may be n/a)
-parse_refine() {   # file -> REF_SEAM REF_DRIFT REF_TOE REF_PL REF_PR; returns 1 when there is no gate line
+# with --lock-yaw the line ends in " yaw_locked 84.2" (deg span of the removed root yaw) -> REF_YAW (empty without it)
+parse_refine() {   # file -> REF_SEAM REF_DRIFT REF_TOE REF_PL REF_PR REF_YAW; returns 1 when there is no gate line
   local line
-  REF_SEAM=''; REF_DRIFT=''; REF_TOE=''; REF_PL=''; REF_PR=''
+  REF_SEAM=''; REF_DRIFT=''; REF_TOE=''; REF_PL=''; REF_PR=''; REF_YAW=''
   line=$(grep -E '^REFINE_GATE [^ ]+ seam [^ ]+ foot_drift_mm [^ ]+ toe_min_mm [^ ]+ peakhand_L [0-9]+ peakhand_R [0-9]+' "$1" | tail -1)
   [ -n "$line" ] || return 1
   set -- $line
   REF_SEAM=$4; REF_DRIFT=$6; REF_TOE=$8; REF_PL=${10}; REF_PR=${12}
+  [ "${13-}" = yaw_locked ] && REF_YAW=${14-}
   return 0
 }
 
@@ -192,6 +194,9 @@ EOF
   parse_refine $d/g1; eq refine1 "$REF_SEAM $REF_DRIFT $REF_TOE $REF_PL $REF_PR" '1.18 3.6 0.0 21 153'
   printf 'REFINE_GATE PunchL seam 0.16 foot_drift_mm n/a toe_min_mm -5.5 peakhand_L 31 peakhand_R 29\n' > $d/g2
   parse_refine $d/g2; eq refine2 "$REF_SEAM $REF_DRIFT $REF_TOE" '0.16 n/a -5.5'
+  printf 'REFINE_GATE PunchR seam 0.20 foot_drift_mm 2.1 toe_min_mm 0.0 peakhand_L 40 peakhand_R 33 yaw_locked 84.2\n' > $d/g4
+  parse_refine $d/g4; eq refine4 "$REF_PR $REF_YAW" '33 84.2'
+  parse_refine $d/g1; eq refine5 "x$REF_YAW" 'x'
   printf 'Traceback\n' > $d/g3
   parse_refine $d/g3; eq refine3 "rc=$?" 'rc=1'
   printf 'EXPORT Idle wrote /m/Brute_v2r_idle.glb (4.2 MB); location keys on [Hips]\nEXPORT_GATE Idle max_vertex_delta_mm 0.0029 frames 5 PASS\n' > $d/e1
@@ -417,7 +422,7 @@ if step_on refine; then
   if is_num "$REF_TOE" && ! fnum_gt "$REF_TOE" -10.001; then say "WARN refine: toe_min $REF_TOE mm (feet through the floor)"; fi
   if is_num "$REF_DRIFT" && fnum_gt "$REF_DRIFT" 10; then say "WARN refine: foot drift $REF_DRIFT mm after the plant"; fi
   grep -E '^REFINE (trim|spikes|floor_mismatch)|floor_mismatch' "$L" | head -3 | sed 's/^/    /'
-  say "refine ok: REFINE_GATE seam $REF_SEAM foot_drift_mm $REF_DRIFT toe_min_mm $REF_TOE peakhand_L $REF_PL peakhand_R $REF_PR"
+  say "refine ok: REFINE_GATE seam $REF_SEAM foot_drift_mm $REF_DRIFT toe_min_mm $REF_TOE peakhand_L $REF_PL peakhand_R $REF_PR${REF_YAW:+ yaw_locked $REF_YAW}"
   save_state
 fi
 
