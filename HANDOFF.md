@@ -1,4 +1,42 @@
+## FINAL SET (2026-10-31): Seedance Smash + Seedance Lift ship; everything else as shipped
+
+Branch `chinese-animation-upgrades` (never `main`; the owner merges). Decision by the director from the blind in-game close-up A/B (`cuold` vs
+`cusd`, one Opus critic, decoded): **Smash = Seedance, Lift = Seedance**; PunchR stays old, Clap stays the shipped hold-compressed clip (tie), PunchL /
+Slap / Throw unchanged. Details and verdict wording: `docs/brute/video2rig/SEEDANCE.md` ("17-clip status").
+
+```
+FINAL Smash   SEEDANCE (Brute_smash-v2r.glb, motion-sd)      blind close-up A/B: Seedance wins (double-fist raise, head back; old twisted/side-on)
+FINAL Lift    SEEDANCE (Brute_liftthrow-v2r.glb, motion-sd)  blind close-up A/B: Seedance wins (palms on the car; old floats it ~35 px for ~2 s)
+FINAL PunchR  OLD (Brute_punchr.glb)                          Seedance lost (forearm swipe, head down, no fist at contact)
+FINAL Clap    video2rig MiniMax, hold-compressed (shipped)    Seedance tie -> old kept ("visibly better" rule)
+FINAL Idle Walk Run Slap Fall   video2rig MiniMax (shipped)
+FINAL StopLunge Land            video2rig MiniMax hold-compressed (shipped)
+FINAL PunchL Throw Uppercut Jump WallAttach WallClimb   OLD (shipped)
+TOTAL 2 Seedance + 5 MiniMax + 3 MiniMax-hc + 7 old = 17; clips_meta differs from brute_v5 in exactly Smash and Lift
+```
+
+- Final set dir: `~/hulk-scratch/brute_final_sd/` (`motion/` = copy of the shipped `~/hulk-scratch/brute_v2/motion/` + only `Brute_smash-v2r.glb` and
+  `Brute_liftthrow-v2r.glb` from `Local/video2rig/motion-sd/`; outputs `brute.glb`, `brute_anim.fbx`, `clips_meta.json`, `clips.json`, `logs/`). Local only (GLB/FBX are
+  not committed).
+- Rebuild (Blender one at a time, `taskpolicy -b`, then one headless commandlet through gpu_slot):
+  ```
+  cd ~/hulk; F=~/hulk-scratch/brute_final_sd
+  taskpolicy -b /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P tools/brute/assemble_motion.py -- ~/hulk-scratch/brute_corr/brute_rigged_corr.glb $F/motion $F
+  taskpolicy -b /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P tools/brute/v2r/measure_timing.py -- $F/brute.glb --all --out $F/logs/timing_all_raw.json --dump $F/logs/telemetry.json
+  python3 unreal/WebHomage/Scripts/build_brute.py --fbx $F/brute_anim.fbx      # expect 17 A_Brute_* lines
+  ```
+- `unreal/WebHomage/Config/BruteClipTiming.json` is now the COMMITTED FINAL STATE (shipped file + Smash, Grab, Carry acts, hit_table Smash, measured Smash/Lift, clip
+  list Smash/Lift; Carry.to = 2.7 by hand; Clap and PunchR rows = shipped). `~/hulk-scratch/brute_sd/BruteClipTiming.shipped.json` is the pre-Seedance backup. Fresh
+  measurement on the final set matched the Seedance A/B timing exactly for Smash, Grab and the telemetry; the only difference is the deliberate Carry.to (3.533 -> 2.700).
+- The Seedance A/B set `~/hulk-scratch/brute_sd/` (4 Seedance clips) is superseded; do not rebuild from it.
+- Capture gaps the critic found (OPEN, not fixed): no angle shows the feet, so foot contact is unproven; the car blocks the lens during the grab and the throw
+  release; the smash contact falls below the frame. A reshoot needs the camera pulled back and lowered (`--cam-dist` larger, lower camera height).
+- Confirmation capture `cufinal` (2026-10-31 02:24-02:36, `--cam-dist 4.0 --hide-help`, combat_tq + grab_tq): `ab_ingame.py check --label cufinal` ok for both. Unreal import printed 17 A_Brute_* lines; the 7 BruteFx "Error opening file" linker warnings were already in the 10-30 build log (not new). Frames in `/private/tmp/claude-501/cufinal-frames/`: Lift carry at 2.5 s has the hands on the car; the Smash window from 5.675 s matches the judged `cusd` capture frame for frame (the first frames differ because the move before Smash is now the old Clap).
+- Still pending (owner): the feel playtest of the final set, the merge decision for this branch and the fork branches.
+
 ## video2rig animation upgrade — Phase 6 handoff: FINAL SET after round 4 (2026-10-30 04:45 EDT, Opus 5.5 high)
+
+> Superseded for Smash and Lift by the "FINAL SET (2026-10-31)" section above (both now Seedance; the rows below still describe the pre-Seedance shipped set, `brute_v5`).
 
 Branch `chinese-animation-upgrades` (never `main`; the owner merges). Plan `docs/brute/video2rig/PLAN.md`, ledger
 `docs/brute/video2rig/LEDGER.md` (every take, check, fit, refine, verdict, dollar), blind verdicts `AB-ingame-critique.md` (r2),
@@ -313,7 +351,7 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
 - Owner tone: blunt, curses, hates being shown unviewed output. Watch actual playback before claiming quality.
   Show, don't promise.
 
-## Seedance round (2026-10-30, owner brief 11:45 EDT; in progress)
+## Seedance round (2026-10-30, owner brief 11:45 EDT; CLOSED 2026-10-31, final set above)
 
 Owner rejected the MiniMax result ("80 % the same") and re-briefed: Seedance takes that look much better, then the pipeline, ship only what is
 visibly better. Rules, ledger and findings: `docs/brute/video2rig/SEEDANCE.md`; error log that led here: operating-rules "Fidelity gates are not

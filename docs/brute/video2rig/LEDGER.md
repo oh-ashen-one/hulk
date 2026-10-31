@@ -321,3 +321,12 @@ Spend: fal 8.22 USD total (balance 15.43 left). Higgsfield unused.
 Readers: 2.41 / 2.83 (standard), 2.85 / 3.30 (air), 1.65 / 1.85 (dense, held-out; did not lower any fit).
 Bar misses (fit, px): Run 4.35, StopLunge 4.60, Land 5.52. The AI takes limit the fit; the dense reader did not help.
 In-game launches tonight: 54 (46 captures + 8 build launches).
+
+## Seedance addendum (2026-10-31): final set
+
+Outcome above is superseded for two clips by the Seedance round (details `SEEDANCE.md`): **Smash and Lift now ship the Seedance takes**
+(`Local/video2rig/motion-sd/Brute_smash-v2r.glb`, `Brute_liftthrow-v2r.glb`; in-game blind close-up A/B, Seedance wins both). PunchR stays old
+(Seedance lost), Clap stays the shipped hold-compressed MiniMax clip (tie), PunchL / Slap / Throw unchanged (control ties). Final tally:
+2 Seedance, 5 MiniMax video2rig, 3 MiniMax hold-compressed, 7 old (17). Smash: no longer "two generation failures"; Lift: no longer "old wins,
+new drops the car" (that was the MiniMax take). Spend: Seedance 6 charged Higgsfield takes (210 credits, shared pool, closed at 127.64), 0 USD on fal.
+Build: `~/hulk-scratch/brute_final_sd/`; timing `unreal/WebHomage/Config/BruteClipTiming.json` (committed final state).
