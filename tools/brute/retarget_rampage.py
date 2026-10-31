@@ -1,0 +1,75 @@
+"""Retarget the 17 Hulk (Brute) clips onto Paragon: Rampage's Elemental (rock) skin.
+
+Run headless inside the WebHomage project:
+  UnrealEditor-Cmd WebHomage.uproject -run=pythonscript -script=tools/brute/retarget_rampage.py
+
+Needs the free Fab pack "Paragon: Rampage" under /Game/ParagonRampage (Epic, Unreal-only licence;
+never commit it to this public repo - Content/ is git-ignored, snapshots go to the private
+webhomage-unreal-content repo).  Writes only new assets under /Game/Brute/Rampage; the original
+/Game/Brute/Body clips and SK_Brute are untouched.
+"""
+import unreal
+
+SRC_MESH = "/Game/Brute/Body/SK_Brute"
+TGT_MESH = "/Game/ParagonRampage/Characters/Heroes/Rampage/Skins/Tier2/Elemental/Meshes/Rampage_Elemental"
+OUT = "/Game/Brute/Rampage"
+CLIPS = ["Clap", "Fall", "Idle", "Jump", "Land", "Lift", "PunchL", "PunchR", "Run", "Slap", "Smash",
+         "StopLunge", "Throw", "Uppercut", "Walk", "WallAttach", "WallClimb"]
+
+log = lambda m: unreal.log_warning("[rampage] " + m)
+tools = unreal.AssetToolsHelpers.get_asset_tools()
+eal = unreal.EditorAssetLibrary
+
+
+def make(name, cls, factory):
+    path = f"{OUT}/{name}"
+    if eal.does_asset_exist(path):
+        eal.delete_asset(path)
+    return tools.create_asset(name, OUT, cls, factory)
+
+
+src = unreal.load_asset(SRC_MESH)
+tgt = unreal.load_asset(TGT_MESH)
+assert src and tgt, f"missing mesh src={src} tgt={tgt}"
+log(f"target skeleton: {tgt.skeleton.get_path_name()}")
+
+rigs = {}
+for key, mesh in (("Brute", src), ("Rampage", tgt)):
+    rig = make(f"IK_{key}", unreal.IKRigDefinition, unreal.IKRigDefinitionFactory())
+    c = unreal.IKRigController.get_controller(rig)
+    c.set_skeletal_mesh(mesh)
+    ok_def = c.apply_auto_generated_retarget_definition()
+    ok_ik = c.apply_auto_fbik()
+    chains = [str(ch.chain_name) for ch in c.get_retarget_chains()]
+    log(f"IK_{key}: auto-def={ok_def} fbik={ok_ik} root={c.get_retarget_root()} chains={chains}")
+    rigs[key] = rig
+
+S, T = unreal.RetargetSourceOrTarget.SOURCE, unreal.RetargetSourceOrTarget.TARGET
+rtg = make("RTG_Brute_to_Rampage", unreal.IKRetargeter, unreal.IKRetargetFactory())
+rc = unreal.IKRetargeterController.get_controller(rtg)
+rc.set_ik_rig(S, rigs["Brute"])
+rc.set_ik_rig(T, rigs["Rampage"])
+rc.set_preview_mesh(S, src)
+rc.set_preview_mesh(T, tgt)
+rc.add_default_ops()
+rc.assign_ik_rig_to_all_ops(S, rigs["Brute"])
+rc.assign_ik_rig_to_all_ops(T, rigs["Rampage"])
+rc.auto_map_chains(unreal.AutoMapChainType.FUZZY, True)
+rc.auto_align_all_bones(T)
+eal.save_loaded_asset(rtg)
+
+inputs = unreal.IKRetargetBatchOperationInputs()
+inputs.assets_to_retarget = [unreal.EditorAssetLibrary.find_asset_data(f"/Game/Brute/Body/A_Brute_{c}") for c in CLIPS]
+inputs.source_mesh = src
+inputs.target_mesh = tgt
+inputs.ik_retarget_asset = rtg
+inputs.target_path = OUT
+inputs.include_referenced_assets = False
+inputs.overwrite_existing_files = True
+out = unreal.IKRetargetBatchOperation.run_batch_retarget(inputs)
+log(f"retargeted {len(out)} assets: {[str(a.asset_name) for a in out]}")
+for a in out:
+    eal.save_asset(str(a.package_name), only_if_is_dirty=False)
+for k in rigs:
+    eal.save_loaded_asset(rigs[k])
+log("DONE")

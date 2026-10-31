@@ -1267,19 +1267,35 @@ void ABruteCharacter::ApplyPose()
 bool ABruteCharacter::BuildClipRig()
 {
 	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteV1"))) return false;
-	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Brute/Body/SK_Brute.SK_Brute"));
-	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: /Game/Brute/Body/SK_Brute missing (run Scripts/build_brute.py)")); return false; }
+	// -WHBruteRampage: Paragon: Rampage "Elemental" rock skin (free Fab pack, /Game/ParagonRampage) driven by the same 17 clips,
+	// retargeted by tools/brute/retarget_rampage.py into /Game/Brute/Rampage. Default stays the original SK_Brute.
+	const bool bRampage = FParse::Param(FCommandLine::Get(), TEXT("WHBruteRampage"));
+	const TCHAR* MeshPath = bRampage ? TEXT("/Game/ParagonRampage/Characters/Heroes/Rampage/Skins/Tier2/Elemental/Meshes/Rampage_Elemental.Rampage_Elemental")
+	                                 : TEXT("/Game/Brute/Body/SK_Brute.SK_Brute");
+	const TCHAR* ClipDir = bRampage ? TEXT("/Game/Brute/Rampage") : TEXT("/Game/Brute/Body");
+	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, MeshPath);
+	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %s missing (run Scripts/build_brute.py%s)"), MeshPath, bRampage ? TEXT(" / tools/brute/retarget_rampage.py") : TEXT("")); return false; }
 	static const TCHAR* Names[CNum] = { TEXT("Idle"), TEXT("Walk"), TEXT("Run"), TEXT("StopLunge"), TEXT("Jump"), TEXT("WallAttach"), TEXT("WallClimb"),
 		TEXT("PunchL"), TEXT("PunchR"), TEXT("Slap"), TEXT("Clap"), TEXT("Smash"), TEXT("Lift"), TEXT("Throw"), TEXT("Uppercut"), TEXT("Fall"), TEXT("Land") };
 	Clips.Reset();
 	for (const TCHAR* N : Names)
 	{
-		UAnimSequence* S = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Brute/Body/A_Brute_%s.A_Brute_%s"), N, N));
+		UAnimSequence* S = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("%s/A_Brute_%s.A_Brute_%s"), ClipDir, N, N));
 		if (!S) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: clip A_Brute_%s missing"), N); Clips.Reset(); return false; }
 		Clips.Add(S);
 	}
 	const FReferenceSkeleton& Ref = M->GetRefSkeleton();
-	auto Bi = [&Ref](const TCHAR* N) { return Ref.FindBoneIndex(FName(N)); };
+	// Mixamo names (SK_Brute) -> UE4-mannequin names (Paragon Rampage skeleton)
+	static const TMap<FString, FString> RampageBones = {
+		{TEXT("Hips"), TEXT("pelvis")}, {TEXT("Spine1"), TEXT("spine_02")}, {TEXT("Spine2"), TEXT("spine_03")}, {TEXT("Neck"), TEXT("neck_01")}, {TEXT("Head"), TEXT("head")},
+		{TEXT("LeftArm"), TEXT("upperarm_l")}, {TEXT("RightArm"), TEXT("upperarm_r")}, {TEXT("LeftForeArm"), TEXT("lowerarm_l")}, {TEXT("RightForeArm"), TEXT("lowerarm_r")},
+		{TEXT("LeftHand"), TEXT("hand_l")}, {TEXT("RightHand"), TEXT("hand_r")}, {TEXT("LeftFoot"), TEXT("foot_l")}, {TEXT("RightFoot"), TEXT("foot_r")},
+		{TEXT("LeftToeBase"), TEXT("ball_l")}, {TEXT("RightToeBase"), TEXT("ball_r")} };
+	auto Bi = [&Ref, bRampage](const TCHAR* N)
+	{
+		const FString* R = bRampage ? RampageBones.Find(N) : nullptr;
+		return Ref.FindBoneIndex(FName(R ? **R : N));
+	};
 	BHips = Bi(TEXT("Hips")); BSpine = Bi(TEXT("Spine1"));
 	BArm[0] = Bi(TEXT("LeftArm")); BArm[1] = Bi(TEXT("RightArm")); BFore[0] = Bi(TEXT("LeftForeArm")); BFore[1] = Bi(TEXT("RightForeArm"));
 	BHand[0] = Bi(TEXT("LeftHand")); BHand[1] = Bi(TEXT("RightHand"));
@@ -1287,13 +1303,14 @@ bool ABruteCharacter::BuildClipRig()
 	if (BHead == INDEX_NONE || BSpine2 == INDEX_NONE || BNeck == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: Head / Spine2 missing")); Clips.Reset(); return false; }
 	BFoot[0] = Bi(TEXT("LeftFoot")); BFoot[1] = Bi(TEXT("RightFoot")); BFoot[2] = Bi(TEXT("LeftToeBase")); BFoot[3] = Bi(TEXT("RightToeBase"));
 	for (int32 B : { BHips, BSpine, BArm[0], BArm[1], BFore[0], BFore[1], BHand[0], BHand[1], BFoot[0], BFoot[1], BFoot[2], BFoot[3] })
-		if (B == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: SK_Brute lacks a Mixamo-named bone")); Clips.Reset(); return false; }
+		if (B == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: %s lacks a mapped bone"), MeshPath); Clips.Reset(); return false; }
 
 	Body = NewObject<UPoseableMeshComponent>(this, TEXT("Brute_Body"));
 	Body->SetupAttachment(Fig);
 	Body->SetSkinnedAssetAndUpdate(M);
-	if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Body/M_Brute.M_Brute")))
-		for (int32 I = 0; I < FMath::Max(1, Body->GetNumMaterials()); ++I) Body->SetMaterial(I, Mat);
+	if (!bRampage)   // Rampage keeps the skin's own materials
+		if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Body/M_Brute.M_Brute")))
+			for (int32 I = 0; I < FMath::Max(1, Body->GetNumMaterials()); ++I) Body->SetMaterial(I, Mat);
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Body->SetGenerateOverlapEvents(false);
 	Body->SetCastShadow(true);
