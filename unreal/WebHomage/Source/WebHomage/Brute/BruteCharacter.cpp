@@ -1267,16 +1267,24 @@ void ABruteCharacter::ApplyPose()
 bool ABruteCharacter::BuildClipRig()
 {
 	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteV1"))) return false;
-	// -WHBruteSkin=<Rampage|Crunch> (-WHBruteRampage = Rampage): a free Paragon character from Fab (/Game/Paragon<Hero>) driven by the
+	// -WHBruteSkin=<Rampage|Crunch|Brute>: a free Paragon character from Fab (/Game/Paragon<Hero>) driven by the
 	// same 17 clips, retargeted by tools/brute/retarget_paragon.py into /Game/Brute/<Skin>. Default stays the original SK_Brute.
-	FString Skin;
+	// Default (owner 2026-10-31): Rampage's rock skin; -WHBruteSkin=Brute restores the original SK_Brute. A checkout without the Fab
+	// pack (Content/ is not in git) falls back to SK_Brute automatically.
+	FString Skin = TEXT("Rampage");
 	FParse::Value(FCommandLine::Get(), TEXT("WHBruteSkin="), Skin);
-	if (Skin.IsEmpty() && FParse::Param(FCommandLine::Get(), TEXT("WHBruteRampage"))) Skin = TEXT("Rampage");
+	if (Skin.Equals(TEXT("Brute"), ESearchCase::IgnoreCase) || Skin.Equals(TEXT("None"), ESearchCase::IgnoreCase)) Skin.Reset();
 	static const TMap<FString, FString> SkinMeshes = {
 		{TEXT("Rampage"), TEXT("/Game/ParagonRampage/Characters/Heroes/Rampage/Skins/Tier2/Elemental/Meshes/Rampage_Elemental.Rampage_Elemental")},
 		{TEXT("Crunch"), TEXT("/Game/ParagonCrunch/Characters/Heroes/Crunch/Meshes/Crunch.Crunch")} };
 	const FString* SkinMesh = Skin.IsEmpty() ? nullptr : SkinMeshes.Find(Skin);
 	if (!Skin.IsEmpty() && !SkinMesh) UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: unknown -WHBruteSkin=%s, using SK_Brute"), *Skin);
+	if (SkinMesh && (!LoadObject<USkeletalMesh>(nullptr, **SkinMesh)
+		|| !LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Brute/%s/A_Brute_Idle.A_Brute_Idle"), *Skin))))
+	{
+		UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %s skin content missing (Fab pack + tools/brute/retarget_paragon.py), using SK_Brute"), *Skin);
+		SkinMesh = nullptr;
+	}
 	const bool bRampage = SkinMesh != nullptr;   // any Paragon skin: UE4-mannequin bone names, own materials
 	const FString MeshPathS = SkinMesh ? *SkinMesh : FString(TEXT("/Game/Brute/Body/SK_Brute.SK_Brute"));
 	const FString ClipDirS = SkinMesh ? FString::Printf(TEXT("/Game/Brute/%s"), *Skin) : FString(TEXT("/Game/Brute/Body"));

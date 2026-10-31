@@ -3,6 +3,8 @@
 # Owner playtest: the Brute in the whole Manhattan island, starting in the Times Square plaza. 1920x1080 windowed, 60 fps cap.
 # Runs through the guarded launcher (shared GPU coordinator ~/.cache/gpu-slot): it refuses to start while another engine or GPU
 # holder is running, and stops the game gracefully if the shared GPU is PAUSED. Esc opens the settings menu / releases the mouse.
+# The Brute wears Paragon: Rampage's rock skin by default (free Fab pack, see docs/brute/ASSETS.md); append  -WHBruteSkin=Brute  for
+# the original body, -WHBruteSkin=Crunch for Paragon: Crunch (needs that pack + tools/brute/retarget_paragon.py).
 # Options: append  -WHSpidey  to play the old web-swinging hero instead;  /Game/Showcase/Maps/Manhattan_Island_Night  for night.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
