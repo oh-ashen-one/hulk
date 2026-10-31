@@ -104,6 +104,10 @@ WINE_SERVICES = ('wineserver', 'services.exe', 'explorer.exe', 'winedevice', 'pl
 def client_kind(p):
     """Why this process counts as a GPU client, or None."""
     b = exe_name(p['comm']).lower()
+    # iOS Simulator system processes are never engines: Apple's "Unity" lock-screen wallpaper (UnityPoster.appex,
+    # Unity2025Poster.appex) runs inside every booted simulator and used to count as two Unity editors (2026-10-31)
+    if '/CoreSimulator/' in p['comm'] or 'SimulatorRuntime' in p['comm']:
+        return None
     if b.startswith('unrealeditor'):
         return 'unreal'
     if b.startswith('godot'):

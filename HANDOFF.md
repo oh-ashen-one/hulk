@@ -34,6 +34,14 @@ TOTAL 2 Seedance + 5 MiniMax + 3 MiniMax-hc + 7 old = 17; clips_meta differs fro
 - Confirmation capture `cufinal` (2026-10-31 02:24-02:36, `--cam-dist 4.0 --hide-help`, combat_tq + grab_tq): `ab_ingame.py check --label cufinal` ok for both. Unreal import printed 17 A_Brute_* lines; the 7 BruteFx "Error opening file" linker warnings were already in the 10-30 build log (not new). Frames in `/private/tmp/claude-501/cufinal-frames/`: Lift carry at 2.5 s has the hands on the car; the Smash window from 5.675 s matches the judged `cusd` capture frame for frame (the first frames differ because the move before Smash is now the old Clap).
 - Still pending (owner): the feel playtest of the final set, the merge decision for this branch and the fork branches.
 
+## 2026-10-31 — Paragon Rampage rock skin is the default Brute (branch character-enhancement -> main)
+
+- Body: free Fab pack Paragon: Rampage, Elemental (rock) skin, at `Content/ParagonRampage` (not in git; acquisition + licence in docs/brute/ASSETS.md). On a Mac the launcher hides Windows-only Fab packs: use the UE 5.8 editor's Window -> Fab -> Add to Project (owner clicks; never drive his desktop).
+- Clips: the 17 A_Brute_* clips retargeted by `tools/brute/retarget_paragon.py` (BRUTE_SKIN=Rampage|Crunch) into `/Game/Brute/<Skin>`: FK only (SK_Brute bones carry ~110x scale; full-body IK chased goals 80 m away), no root motion, and our Hips turned in an editable retarget pose to the target's rest facing before auto-align (each clip carries an ~80 deg Hips turn; without it Paragon bodies ran sideways). Originals in /Game/Brute/Body are the source: keep them.
+- Game: BuildClipRig defaults to `-WHBruteSkin=Rampage`, `-WHBruteSkin=Brute` = original, falls back to SK_Brute when the pack is missing; Paragon skins face by torso (hips+shoulders); `-WHBruteYawTrim=<deg>` trims.
+- Tools: hulk `tools/gpu/gpu_gates.py` no longer counts iOS Simulator processes (Apple's Unity wallpaper) as Unity editors.
+- Crunch was tried and removed (content deleted); re-add via Fab + retarget script if wanted.
+
 ## video2rig animation upgrade — Phase 6 handoff: FINAL SET after round 4 (2026-10-30 04:45 EDT, Opus 5.5 high)
 
 > Superseded for Smash and Lift by the "FINAL SET (2026-10-31)" section above (both now Seedance; the rows below still describe the pre-Seedance shipped set, `brute_v5`).

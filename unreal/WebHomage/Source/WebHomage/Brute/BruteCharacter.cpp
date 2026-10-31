@@ -1267,19 +1267,53 @@ void ABruteCharacter::ApplyPose()
 bool ABruteCharacter::BuildClipRig()
 {
 	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteV1"))) return false;
-	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, TEXT("/Game/Brute/Body/SK_Brute.SK_Brute"));
-	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: /Game/Brute/Body/SK_Brute missing (run Scripts/build_brute.py)")); return false; }
+	// -WHBruteSkin=<Rampage|Crunch|Brute>: a free Paragon character from Fab (/Game/Paragon<Hero>) driven by the
+	// same 17 clips, retargeted by tools/brute/retarget_paragon.py into /Game/Brute/<Skin>. Default stays the original SK_Brute.
+	// Default (owner 2026-10-31): Rampage's rock skin; -WHBruteSkin=Brute restores the original SK_Brute. A checkout without the Fab
+	// pack (Content/ is not in git) falls back to SK_Brute automatically.
+	FString Skin = TEXT("Rampage");
+	FParse::Value(FCommandLine::Get(), TEXT("WHBruteSkin="), Skin);
+	if (Skin.Equals(TEXT("Brute"), ESearchCase::IgnoreCase) || Skin.Equals(TEXT("None"), ESearchCase::IgnoreCase)) Skin.Reset();
+	static const TMap<FString, FString> SkinMeshes = {
+		{TEXT("Rampage"), TEXT("/Game/ParagonRampage/Characters/Heroes/Rampage/Skins/Tier2/Elemental/Meshes/Rampage_Elemental.Rampage_Elemental")},
+		{TEXT("Crunch"), TEXT("/Game/ParagonCrunch/Characters/Heroes/Crunch/Meshes/Crunch.Crunch")} };
+	const FString* SkinMesh = Skin.IsEmpty() ? nullptr : SkinMeshes.Find(Skin);
+	if (!Skin.IsEmpty() && !SkinMesh) UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: unknown -WHBruteSkin=%s, using SK_Brute"), *Skin);
+	if (SkinMesh && (!LoadObject<USkeletalMesh>(nullptr, **SkinMesh)
+		|| !LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Brute/%s/A_Brute_Idle.A_Brute_Idle"), *Skin))))
+	{
+		UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %s skin content missing (Fab pack + tools/brute/retarget_paragon.py), using SK_Brute"), *Skin);
+		SkinMesh = nullptr;
+	}
+	const bool bRampage = SkinMesh != nullptr;   // any Paragon skin: UE4-mannequin bone names, own materials
+	const FString MeshPathS = SkinMesh ? *SkinMesh : FString(TEXT("/Game/Brute/Body/SK_Brute.SK_Brute"));
+	const FString ClipDirS = SkinMesh ? FString::Printf(TEXT("/Game/Brute/%s"), *Skin) : FString(TEXT("/Game/Brute/Body"));
+	const TCHAR* MeshPath = *MeshPathS;
+	const TCHAR* ClipDir = *ClipDirS;
+	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, MeshPath);
+	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %s missing (run Scripts/build_brute.py%s)"), MeshPath, bRampage ? TEXT(" / tools/brute/retarget_paragon.py") : TEXT("")); return false; }
 	static const TCHAR* Names[CNum] = { TEXT("Idle"), TEXT("Walk"), TEXT("Run"), TEXT("StopLunge"), TEXT("Jump"), TEXT("WallAttach"), TEXT("WallClimb"),
 		TEXT("PunchL"), TEXT("PunchR"), TEXT("Slap"), TEXT("Clap"), TEXT("Smash"), TEXT("Lift"), TEXT("Throw"), TEXT("Uppercut"), TEXT("Fall"), TEXT("Land") };
 	Clips.Reset();
 	for (const TCHAR* N : Names)
 	{
-		UAnimSequence* S = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("/Game/Brute/Body/A_Brute_%s.A_Brute_%s"), N, N));
+		UAnimSequence* S = LoadObject<UAnimSequence>(nullptr, *FString::Printf(TEXT("%s/A_Brute_%s.A_Brute_%s"), ClipDir, N, N));
 		if (!S) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: clip A_Brute_%s missing"), N); Clips.Reset(); return false; }
 		Clips.Add(S);
 	}
 	const FReferenceSkeleton& Ref = M->GetRefSkeleton();
-	auto Bi = [&Ref](const TCHAR* N) { return Ref.FindBoneIndex(FName(N)); };
+	// Mixamo names (SK_Brute) -> UE4-mannequin names (Paragon skeletons)
+	static const TMap<FString, FString> RampageBones = {
+		{TEXT("Hips"), TEXT("pelvis")}, {TEXT("Spine1"), TEXT("spine_02")}, {TEXT("Spine2"), TEXT("spine_03")}, {TEXT("Neck"), TEXT("neck_01")}, {TEXT("Head"), TEXT("head")},
+		{TEXT("LeftArm"), TEXT("upperarm_l")}, {TEXT("RightArm"), TEXT("upperarm_r")}, {TEXT("LeftForeArm"), TEXT("lowerarm_l")}, {TEXT("RightForeArm"), TEXT("lowerarm_r")},
+		{TEXT("LeftHand"), TEXT("hand_l")}, {TEXT("RightHand"), TEXT("hand_r")}, {TEXT("LeftFoot"), TEXT("foot_l")}, {TEXT("RightFoot"), TEXT("foot_r")},
+		{TEXT("LeftToeBase"), TEXT("ball_l")}, {TEXT("RightToeBase"), TEXT("ball_r")},
+		{TEXT("LeftUpLeg"), TEXT("thigh_l")}, {TEXT("RightUpLeg"), TEXT("thigh_r")} };
+	auto Bi = [&Ref, bRampage](const TCHAR* N)
+	{
+		const FString* R = bRampage ? RampageBones.Find(N) : nullptr;
+		return Ref.FindBoneIndex(FName(R ? **R : N));
+	};
 	BHips = Bi(TEXT("Hips")); BSpine = Bi(TEXT("Spine1"));
 	BArm[0] = Bi(TEXT("LeftArm")); BArm[1] = Bi(TEXT("RightArm")); BFore[0] = Bi(TEXT("LeftForeArm")); BFore[1] = Bi(TEXT("RightForeArm"));
 	BHand[0] = Bi(TEXT("LeftHand")); BHand[1] = Bi(TEXT("RightHand"));
@@ -1287,13 +1321,14 @@ bool ABruteCharacter::BuildClipRig()
 	if (BHead == INDEX_NONE || BSpine2 == INDEX_NONE || BNeck == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: Head / Spine2 missing")); Clips.Reset(); return false; }
 	BFoot[0] = Bi(TEXT("LeftFoot")); BFoot[1] = Bi(TEXT("RightFoot")); BFoot[2] = Bi(TEXT("LeftToeBase")); BFoot[3] = Bi(TEXT("RightToeBase"));
 	for (int32 B : { BHips, BSpine, BArm[0], BArm[1], BFore[0], BFore[1], BHand[0], BHand[1], BFoot[0], BFoot[1], BFoot[2], BFoot[3] })
-		if (B == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: SK_Brute lacks a Mixamo-named bone")); Clips.Reset(); return false; }
+		if (B == INDEX_NONE) { UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: %s lacks a mapped bone"), MeshPath); Clips.Reset(); return false; }
 
 	Body = NewObject<UPoseableMeshComponent>(this, TEXT("Brute_Body"));
 	Body->SetupAttachment(Fig);
 	Body->SetSkinnedAssetAndUpdate(M);
-	if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Body/M_Brute.M_Brute")))
-		for (int32 I = 0; I < FMath::Max(1, Body->GetNumMaterials()); ++I) Body->SetMaterial(I, Mat);
+	if (!bRampage)   // Paragon skins keep their own materials
+		if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Body/M_Brute.M_Brute")))
+			for (int32 I = 0; I < FMath::Max(1, Body->GetNumMaterials()); ++I) Body->SetMaterial(I, Mat);
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Body->SetGenerateOverlapEvents(false);
 	Body->SetCastShadow(true);
@@ -1319,7 +1354,21 @@ bool ABruteCharacter::BuildClipRig()
 	// face +X (toes ahead of the ankles), feet on the figure origin, 2.6 m tall
 	FVector Fw = (CS[BFoot[2]].GetLocation() - CS[BFoot[0]].GetLocation()) + (CS[BFoot[3]].GetLocation() - CS[BFoot[1]].GetLocation());
 	Fw.Z = 0.0; Fw = Fw.GetSafeNormal();
-	const double Yaw = FMath::Atan2(Fw.Y, Fw.X);
+	if (bRampage)
+	{	// Paragon skins: face the torso, not the toes. The clips' feet point ~15 deg off the hips/shoulders, which the old blocky
+		// mesh hid but a detailed body shows as running crooked, left shoulder leading (owner 2026-10-31, Rampage and Crunch).
+		const int32 TL = Bi(TEXT("LeftUpLeg")), TR = Bi(TEXT("RightUpLeg"));
+		if (TL != INDEX_NONE && TR != INDEX_NONE)
+		{
+			FVector Right = (CS[TR].GetLocation() - CS[TL].GetLocation()) + (CS[BArm[1]].GetLocation() - CS[BArm[0]].GetLocation());
+			Right.Z = 0.0;
+			const FVector TorsoFw = FVector::CrossProduct(Right, FVector::UpVector).GetSafeNormal();
+			if (!TorsoFw.IsNearlyZero()) Fw = TorsoFw;
+		}
+	}
+	float YawTrim = 0.f;   // -WHBruteYawTrim=<deg>: manual facing trim for tuning a new skin (+ = turn him clockwise from above)
+	FParse::Value(FCommandLine::Get(), TEXT("WHBruteYawTrim="), YawTrim);
+	const double Yaw = FMath::Atan2(Fw.Y, Fw.X) - FMath::DegreesToRadians(YawTrim);
 	BodyYawQ = FQuat(FVector::UpVector, -Yaw);
 	RefHipsCS = CS[BHips].GetLocation();
 	RefFootZ = 1e9; for (int32 B : BFoot) RefFootZ = FMath::Min(RefFootZ, CS[B].GetLocation().Z);
