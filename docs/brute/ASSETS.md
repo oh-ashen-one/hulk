@@ -8,3 +8,9 @@ Hulk-in-Manhattan fan homage. Third-party assets used by the Brute, with source,
 - Not in git: `Content/` is ignored in this public repo; binary snapshots belong in the private `webhomage-unreal-content` repo.
 - Used: `Skins/Tier2/Elemental/Meshes/Rampage_Elemental` + its own materials. Our 17 clips retargeted (auto IK Rig + IK Retargeter, `tools/brute/retarget_rampage.py`) into `/Game/Brute/Rampage`. Originals untouched. In game behind `-WHBruteRampage` / `Play-Rampage.command`.
 - Not yet verified in a capture (GPU gate full at the time); hand-contact moves (Clap, Lift, Smash) may need retarget fixes.
+
+## 2026-10-31 — Paragon: Crunch (base mesh), branch character-enhancement
+
+- Source: Fab listing c23ee3a7-4a73-4a83-9061-30b682d269f8, "Paragon: Crunch" by Epic Games, free, Standard License (Unreal Engine only; no PARAGON name in titles/ads). Added by the owner through the UE 5.8 editor's Fab panel (empty RampageDrop project), copied to `Content/ParagonCrunch` (2.0 GB). Not in git.
+- Used: `Characters/Heroes/Crunch/Meshes/Crunch` + own materials; 17 clips retargeted FK-only by `tools/brute/retarget_paragon.py` (`BRUTE_SKIN=Crunch`) into `/Game/Brute/Crunch`. In game behind `-WHBruteSkin=Crunch` / `Play-Crunch.command`. Verified in a capture: 2.61 m, upright, idle and run.
+- Other skins in the pack: Titanium, Military, GoldenGloves, Valentine (Tier 1); Black Site, Crash Site (Tier 3).
