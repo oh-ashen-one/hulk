@@ -1,0 +1,50 @@
+{
+ "name": "ab_uppercut_front",
+ "ab": {
+  "group": "uppercut",
+  "angle": "front",
+  "cam_offset_deg": 180.0,
+  "mode": "emulated: look-rate orbit + stick compensation, no C++ change",
+  "clips": [
+   "Uppercut"
+  ],
+  "purpose": "Sprint uppercut (launcher). Kept out of the standing combat case: it needs a 1 s run-up and the combat spot has no lane.",
+  "beats_s": [
+   [
+    2.0,
+    "sprint"
+   ],
+   [
+    3.05,
+    "attack while sprinting: launcher uppercut, he pops up with it"
+   ],
+   [
+    3.7,
+    "sprint released, lands"
+   ]
+  ],
+  "film_s": [
+   1.5,
+   6.4
+  ],
+  "quit_s": 6.5,
+  "expect_events": [
+   "act_launcher_uppercut",
+   "launcher_hit"
+  ],
+  "forbid_events": [
+   "rescue"
+  ],
+  "expect_travel_min_m": 20.0,
+  "expect_zmax_min_m": null
+ },
+ "spawn": {"pos": [259.0, 170.0, 0.0], "yaw": 90, "camPitch": -6, "camDist": 7.5},
+ "keys": [
+  {"t": 0.0, "move": [0, 0], "look": [180.0, 0]},
+  {"t": 0.999, "look": [0, 0]},
+  {"t": 2.0, "sprint": 1, "move": [0.0, -1.0]},
+  {"t": 3.05, "attack": 1},
+  {"t": 3.15, "attack": 0},
+  {"t": 3.7, "sprint": 0, "move": [0, 0]}
+ ]
+}

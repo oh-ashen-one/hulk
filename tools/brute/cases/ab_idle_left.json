@@ -1,0 +1,40 @@
+{
+ "name": "ab_idle_left",
+ "ab": {
+  "group": "idle",
+  "angle": "left",
+  "cam_offset_deg": 90.0,
+  "mode": "emulated: look-rate orbit + stick compensation, no C++ change",
+  "clips": [
+   "Idle"
+  ],
+  "purpose": "Stand 6 s.",
+  "beats_s": [
+   [
+    2.0,
+    "stands (Idle loop, game layers the menace posture on top)"
+   ]
+  ],
+  "film_s": [
+   2.0,
+   8.0
+  ],
+  "quit_s": 8.2,
+  "expect_events": [],
+  "forbid_events": [
+   "act_",
+   "rescue",
+   "super_jump",
+   "hop",
+   "wall_"
+  ],
+  "expect_travel_min_m": null,
+  "expect_zmax_min_m": null
+ },
+ "spawn": {"pos": [249.0, 150.0, 0.0], "yaw": 180, "camPitch": -4, "camDist": 7.5},
+ "keys": [
+  {"t": 0.0, "move": [0, 0], "look": [90.0, 0]},
+  {"t": 0.999, "look": [0, 0]},
+  {"t": 8.0, "move": [0, 0]}
+ ]
+}

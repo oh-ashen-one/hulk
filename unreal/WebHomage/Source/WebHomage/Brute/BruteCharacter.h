@@ -157,6 +157,7 @@ private:
 
 	// ---- camera (control rotation drives yaw / pitch; own collision + speed FOV + trauma shake)
 	double CamLift = 0.0, CamAltPitch = -55.0, CamDistOverride = 0.0;
+	double CamViewYawOff = 0.0;   // script spawn.camYawOff: VIEW-only orbit (deg) for A/B captures; move, facing, aim keep CamYaw
 	double CamYaw = 0.0, CamPitch = -12.0, CamDist = 7.5, CamFov = 72.0, Trauma = 0.0, FovKick = 0.0, LookIdle = 0.0;
 	void UpdateCamera(float Dt);
 
@@ -193,6 +194,10 @@ private:
 	/** combat clip segment per act: clip, start / end (s), play rate; the act's hit + duration follow from the clip's contact time */
 	struct FActClip { int32 Clip = -1; float From = 0.f, To = 0.f, Rate = 1.f, Hit = 0.f; };
 	FActClip ActClip(EBruteAct A) const;
+	/** per-act override from Config/BruteClipTiming.json (tools/brute/v2r/measure_timing.py); a negative field = not overridden */
+	struct FActTiming { int32 Clip = -1; float From = -1.f, To = -1.f, Rate = -1.f, Hit = -1.f; };
+	TMap<FName, FActTiming> ActTiming;   // keys: Punch PunchL PunchR Slap Clap Smash Uppercut Grab Carry Throw
+	void LoadClipTiming(const TCHAR* const* ClipNames);
 	int32 ActSerial = 0;
 	struct FClipPlay { int32 Clip = -1; double T = 0.0, Lo = 0.0, Hi = 0.0; float Rate = 1.f; bool bLoop = true, bHold = false; FName Tag; };
 	UPROPERTY(Transient) TArray<TObjectPtr<class UAnimSequence>> Clips;
@@ -212,7 +217,14 @@ private:
 	int32 BHips = 0, BSpine = 0, BArm[2] = { 0, 0 }, BFore[2] = { 0, 0 }, BHand[2] = { 0, 0 }, BFoot[4] = { 0, 0, 0, 0 };
 	// markers (s) measured by tools/brute/analyze_clips.py; defaults are the 2026-10-15 measurements
 	float JChargeLo = 0.17f, JChargeHi = 2.45f, JLaunch = 2.55f, JApex = 3.17f, JFallHi = 3.6f, LandFrom = 1.6f, WAttachImpact = 0.7f, WClimbLo = 0.55f, WClimbHi = 1.85f;
-	TArray<float> WImpacts;   // fist-in times inside the climb segment (a wall crater at each)
+	// segment starts AnimateClips used as literals (same values, same types); Config/BruteClipTiming.json 'segments' may override all of these
+	double AttachStart = 0.2, LandStart = 0.35, LungeStart = 1.0; float WClimbImpact2 = 1.5f;
+	// 2026-10-29: WallAttach and WallClimb were ONE clip (WallClimb reused the attach slam), so the attach segment's end and both fists'
+	// impact times were shared between them. A keep-the-best mix (video2rig WallClimb, old WallAttach) needs each clip's own times:
+	// the attach timeline uses WAttachImpact / WAttachImpact2 / WAttachEnd, the climb loop WClimbImpact1 / WClimbImpact2 / WClimbLo-Hi.
+	// Defaults = today's shared values, so behaviour is unchanged unless Config/BruteClipTiming.json sets them per clip.
+	float WAttachImpact2 = 1.5f, WAttachEnd = 1.85f, WClimbImpact1 = 0.7f;
+	TArray<float> WImpacts, WAttachImpacts;   // fist-in times inside the climb / attach segment (a wall crater at each)
 	bool bWasCharging = false, bChargeCracked = false;
 	EBruteMode PrevAnimMode = EBruteMode::Ground;
 	bool BuildClipRig();

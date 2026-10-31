@@ -1,3 +1,194 @@
+## FINAL SET (2026-10-31): Seedance Smash + Seedance Lift ship; everything else as shipped
+
+Branch `chinese-animation-upgrades` (never `main`; the owner merges). Decision by the director from the blind in-game close-up A/B (`cuold` vs
+`cusd`, one Opus critic, decoded): **Smash = Seedance, Lift = Seedance**; PunchR stays old, Clap stays the shipped hold-compressed clip (tie), PunchL /
+Slap / Throw unchanged. Details and verdict wording: `docs/brute/video2rig/SEEDANCE.md` ("17-clip status").
+
+```
+FINAL Smash   SEEDANCE (Brute_smash-v2r.glb, motion-sd)      blind close-up A/B: Seedance wins (double-fist raise, head back; old twisted/side-on)
+FINAL Lift    SEEDANCE (Brute_liftthrow-v2r.glb, motion-sd)  blind close-up A/B: Seedance wins (palms on the car; old floats it ~35 px for ~2 s)
+FINAL PunchR  OLD (Brute_punchr.glb)                          Seedance lost (forearm swipe, head down, no fist at contact)
+FINAL Clap    video2rig MiniMax, hold-compressed (shipped)    Seedance tie -> old kept ("visibly better" rule)
+FINAL Idle Walk Run Slap Fall   video2rig MiniMax (shipped)
+FINAL StopLunge Land            video2rig MiniMax hold-compressed (shipped)
+FINAL PunchL Throw Uppercut Jump WallAttach WallClimb   OLD (shipped)
+TOTAL 2 Seedance + 5 MiniMax + 3 MiniMax-hc + 7 old = 17; clips_meta differs from brute_v5 in exactly Smash and Lift
+```
+
+- Final set dir: `~/hulk-scratch/brute_final_sd/` (`motion/` = copy of the shipped `~/hulk-scratch/brute_v2/motion/` + only `Brute_smash-v2r.glb` and
+  `Brute_liftthrow-v2r.glb` from `Local/video2rig/motion-sd/`; outputs `brute.glb`, `brute_anim.fbx`, `clips_meta.json`, `clips.json`, `logs/`). Local only (GLB/FBX are
+  not committed).
+- Rebuild (Blender one at a time, `taskpolicy -b`, then one headless commandlet through gpu_slot):
+  ```
+  cd ~/hulk; F=~/hulk-scratch/brute_final_sd
+  taskpolicy -b /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P tools/brute/assemble_motion.py -- ~/hulk-scratch/brute_corr/brute_rigged_corr.glb $F/motion $F
+  taskpolicy -b /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P tools/brute/v2r/measure_timing.py -- $F/brute.glb --all --out $F/logs/timing_all_raw.json --dump $F/logs/telemetry.json
+  python3 unreal/WebHomage/Scripts/build_brute.py --fbx $F/brute_anim.fbx      # expect 17 A_Brute_* lines
+  ```
+- `unreal/WebHomage/Config/BruteClipTiming.json` is now the COMMITTED FINAL STATE (shipped file + Smash, Grab, Carry acts, hit_table Smash, measured Smash/Lift, clip
+  list Smash/Lift; Carry.to = 2.7 by hand; Clap and PunchR rows = shipped). `~/hulk-scratch/brute_sd/BruteClipTiming.shipped.json` is the pre-Seedance backup. Fresh
+  measurement on the final set matched the Seedance A/B timing exactly for Smash, Grab and the telemetry; the only difference is the deliberate Carry.to (3.533 -> 2.700).
+- The Seedance A/B set `~/hulk-scratch/brute_sd/` (4 Seedance clips) is superseded; do not rebuild from it.
+- Capture gaps the critic found (OPEN, not fixed): no angle shows the feet, so foot contact is unproven; the car blocks the lens during the grab and the throw
+  release; the smash contact falls below the frame. A reshoot needs the camera pulled back and lowered (`--cam-dist` larger, lower camera height).
+- Confirmation capture `cufinal` (2026-10-31 02:24-02:36, `--cam-dist 4.0 --hide-help`, combat_tq + grab_tq): `ab_ingame.py check --label cufinal` ok for both. Unreal import printed 17 A_Brute_* lines; the 7 BruteFx "Error opening file" linker warnings were already in the 10-30 build log (not new). Frames in `/private/tmp/claude-501/cufinal-frames/`: Lift carry at 2.5 s has the hands on the car; the Smash window from 5.675 s matches the judged `cusd` capture frame for frame (the first frames differ because the move before Smash is now the old Clap).
+- Still pending (owner): the feel playtest of the final set, the merge decision for this branch and the fork branches.
+
+## video2rig animation upgrade — Phase 6 handoff: FINAL SET after round 4 (2026-10-30 04:45 EDT, Opus 5.5 high)
+
+> Superseded for Smash and Lift by the "FINAL SET (2026-10-31)" section above (both now Seedance; the rows below still describe the pre-Seedance shipped set, `brute_v5`).
+
+Branch `chinese-animation-upgrades` (never `main`; the owner merges). Plan `docs/brute/video2rig/PLAN.md`, ledger
+`docs/brute/video2rig/LEDGER.md` (every take, check, fit, refine, verdict, dollar), blind verdicts `AB-ingame-critique.md` (r2),
+`AB-ingame-r3-critique.md` (r3) and the round-4 rows in LEDGER, hold compression `HOLD-COMPRESSION.md`.
+
+**Verified state (commands run for this entry)**
+
+- `/Game/Brute/Body` holds the FINAL set: `python3 unreal/WebHomage/Scripts/build_brute.py` (default input = the shipped
+  `~/hulk-scratch/brute_v5/brute_anim.fbx`), exit 0 at 04:38:55 EDT, 17 A_Brute_* (log `~/hulk-scratch/brute_v2r_r4/build_brute-final.log`).
+  Content/ is gitignored; the build is reproducible from the inputs below.
+- Shipped motion dir `~/hulk-scratch/brute_v2/motion/`: the 8 winning GLBs (+ export JSONs) beside all 16 old files (nothing removed;
+  the `-v2r` / `Brute_v2r_` names sort first, so a new file wins only where one exists). Run = run_v2 and Fall = the round-4 refit
+  (both sha-equal to `Local/video2rig/motion-v2r-r4/`), Land = hold-compressed v1 (sha-equal to `motion-v2r-hc/`).
+- `assemble_motion.py` re-run into `~/hulk-scratch/brute_v5/` (log `~/hulk-scratch/brute_v2r_r4/assemble-final.log`): clips_meta 8 new/hc
+  + 9 old, every clip equal to the r4 build's meta (Run 3.767 s, 3.80 m/s); Land and Fall durations as r3. md5 brute.glb 22961571...,
+  brute_anim.fbx 89c7bce9.... Pre-v2r outputs kept in `brute_v5/pre-v2r-20261018/`.
+- `unreal/WebHomage/Config/BruteClipTiming.json` (8b1cbdc, measured on brute_v5): Slap 1.527 / 3.020 / 1.6 / hit 2.167, Clap 0.195 /
+  1.672 / 1.6 / hit 0.933 (game-time deltas 0.000), LandStart 0.000, LungeStart 0.533 = the r3 values. Run is NOT speed-matched from the
+  clip: BruteCharacter.cpp plays it at clamp(ground speed / 11, 0.9, 1.9), so Run v2 (3.80 m/s in place) vs v1 (4.23) may change
+  foot slide slightly; watch it in the playtest. The 9 old clips use the C++ constants. GLBs, blends and captures are local only.
+
+**Final set**
+
+| clip | source | file (in `~/hulk-scratch/brute_v2/motion/`) | why |
+| --- | --- | --- | --- |
+| Idle | new (v2r) | Brute_v2r_idle.glb | in-game NEW (low-med) |
+| Walk | new (v2r) | Brute_v2r_walk.glb | in-game NEW (low-med) |
+| Run | new (v2r, run_v2) | Brute_v2r_run.glb (from motion-v2r-r4) | r2 v1 tie vs old; r4 v2 vs v1 tie on screen, v2 ships on numbers (fit 4.35 vs 4.65 px, seam 0.46 vs 0.67) |
+| StopLunge | new-hc | Brute_v2r_stoplunge.glb | r2 NEW (med); r3 hc vs r2 tie, hc kept (already built, 2.23 s) |
+| Slap | new (v2r) | Brute_slap-v2r.glb | NEW in r2 (med) and again in r3 (med) |
+| Clap | new-hc | Brute_clap-v2r.glb | r2 OLD (low-med); r3 hc beats old (med) |
+| Fall | new (v2r, round-4 refit) | Brute_fall-v2r.glb (from motion-v2r-r4) | r2 tie vs old (med-high); r4 refit pixel-identical to r3 Fall, adopted (LeftFoot range warning cleared) |
+| Land | new-hc (v1) | Brute_land-v2r.glb (from motion-v2r-hc) | r2 NEW (med); r3 hc beats r2 Land (high); r4 Land v3 LOST to it (high) |
+| PunchL | old | Brute_punchl.glb | OLD (low); neither take lands a clean straight punch |
+| PunchR | old | Brute_punchr.glb | OLD (med); same note |
+| Uppercut | old | Brute_uppercut.glb | OLD (low-med); new is a mild overhead reach |
+| Lift | old | Brute_liftthrow.glb | OLD (high); new take drops the car |
+| Throw | old | Brute_throw.glb | OLD (high); new take drops the car |
+| WallClimb | old | Emerald_Behemoth_attach_30fps.glb (reuses WallAttach) | OLD (low-med); new flails both hands off the wall |
+| Jump | old | Emerald_Behemoth_jump_30fps.glb | two generation failures, never fitted |
+| Smash | old | Brute_smash.glb | two check failures (1.65, 1.53 %), never fitted |
+| WallAttach | old | Emerald_Behemoth_attach_30fps.glb | two failures (visual, 2.16 % check), never fitted |
+
+**Gate lines** (check = video check %, fit = median keypoint px, seam = loop/one-shot seam ratio, drift / toe = refine foot drift / toe
+minimum; numbers from LEDGER rows and `Local/video2rig/hc-refined/*_hc.json`; for old clips they describe the rejected new take)
+
+```
+GATE reader-ground PASS 2.41/2.83 px
+GATE reader-air PASS 2.85/3.30 px
+GATE reader-dense PASS 1.65/1.85 px (not adopted: refits with it were not better)
+GATE Idle check 0.54 fit 1.81 seam 0.30 drift 1.6 toe 0.0 ab NEW
+GATE Walk check 0.28 fit 2.51 seam 0.76 drift 9.5 toe 0.0 ab NEW
+GATE Run check 1.08 fit 4.35 seam 0.46 drift 2.4 toe 0.0 ab tie->new (v2 by numbers)
+GATE StopLunge check 1.24 fit 4.60 seam 0.00 drift 4.0 toe 0.0 ab NEW (hc = r2 tie)
+GATE Slap check 0.46 fit 3.09 seam 0.00 drift 3.9 toe 0.6 ab NEW
+GATE Clap check 0.26 fit 2.59 seam 0.00 drift 2.7 toe 0.0 ab NEW (hc)
+GATE Fall check 0.24 fit 1.56 seam 0.37 drift n/a toe n/a ab tie->new
+GATE Land check 1.01 fit 5.52 seam 0.00 drift 5.5 toe 0.0 ab NEW (hc)
+GATE PunchL check 0.31 fit 3.08 seam 0.02 drift 3.3 toe 0.0 ab OLD
+GATE PunchR check 0.51 fit 3.41 seam 0.01 drift 2.8 toe 0.0 ab OLD
+GATE Uppercut check 0.53 fit 3.60 seam 0.01 drift 10.6 toe 0.0 ab OLD
+GATE Lift check 0.58 fit 3.75 seam 0.00 drift 3.5 toe 0.0 ab OLD
+GATE Throw check 0.69 fit 3.98 seam 0.01 drift 36.2 toe 0.0 ab OLD
+GATE WallClimb check 0.65 fit 3.42 seam 0.54 drift 1.2 toe 445.2 ab OLD
+GATE Jump check FAIL(visual x2) fit - seam - drift - toe - ab old (no new take)
+GATE Smash check 1.53 FAIL fit - seam - drift - toe - ab old (no new take)
+GATE WallAttach check 2.16 FAIL fit - seam - drift - toe - ab old (no new take)
+GATE spend fal 8.22 USD (15.43 left; round 4 added run_v2 0.36, land_v2 0.30, land_v3 0.30)
+GATE build final brute_v5 fbx-md5 89c7bce9 glb-md5 22961571 timing 8b1cbdc (build_brute exit 0, 17 assets, 2026-10-30 04:38)
+```
+
+Bar misses (4 px), recorded honestly: Run 4.35, StopLunge 4.60, Land 5.52 px. The dense reader (1.65/1.85 px gate) did not lower
+them (Run 4.92, StopLunge 4.97, Land v1 5.73, Land v3 4.80): the takes themselves limit the fit, not the reader.
+Fall has planting off (airborne); WallClimb's toe 445 mm is the hang (feet off the floor all window).
+
+**Round 4 outcome** (blind pack `~/hulk-scratch/ab-ingame/blind-r4`): Land v3 lost to hc Land v1 in all three angles (high); Run v2
+vs v1 tie on screen (same cycle, bob, swing), v2 ships on its numbers; Fall refit vs r3 Fall pixel-identical, refit adopted.
+
+**Which captures prove the final content** (`~/hulk-scratch/ab-ingame/`; final `check`: old 24/24, new 24/24, r3 9/9, r4 6/6 ok)
+
+- `idle_*` (Idle): set `new` (r2).
+- `loco_*` (Walk, Run v2): set `r4` (Walk same file as r2).
+- `lunge_*`, `combat_*` (StopLunge, Jump, PunchR/L, Slap, Clap, Smash): set `r3`.
+- `jump_*` (Jump, Fall, Land hc v1): set `r3` (Land hc v1; the r4 Fall refit rendered pixel-identical to r3's Fall in `r4` jump_*).
+- `uppercut_*`, `grab_*`, `wall_*` (Uppercut, Lift, Throw, WallAttach, WallClimb): set `old` (the C++ per-clip wall keys added
+  today default to the old constants).
+- Blind packs with keys in `_director/KEY.json`: `blind/` (r2 vs old, 24), `blind-r3/` (9), `blind-r4/` (6).
+- Engine launches tonight (gpu_slot `runs.jsonl`, label `hulk-*`, since 2026-10-29 18:00): 56 = 46 captures + 10 build commandlets
+  (5 builds x 2, -nullrhi), every one outcome `ran`; the first 6 (grab/wall 18:36-18:46) may be another hulk session's.
+
+**Critics' open notes (not fixed)**
+
+- The HUD control-help box covers the feet in the front and tq angles; foot sliding is unjudgeable there. Next capture revision: hide
+  help (H), add a 3 s Idle hold after landing and after each loco speed.
+- Landing crouch timing: the takes stand upright ~0.55 s after the crater before the crouch; it should start at touchdown.
+- Punches: neither take has a closed-fist straight punch (old kept, still weak).
+- Lift / Throw: the new takes drop the car (old kept).
+- Uppercut: old wins; the new take is a mild overhead reach.
+- Front/tq cameras are tight and chest-high; low combat poses drop out of frame.
+
+**Fork branches** (`oh-ashen-one/video2rig`, all pushed; the owner merges, nothing merged by agents)
+
+- `brute-lockfeet-floor` = c60a645 (lock_feet keeps the floor in the pinned foot's target height) + ede6cce (road.run `--set KEY=VALUE`
+  reaches the reader fit); worktree `~/video2rig-lockfix`. Every ground fit after the fix used it.
+- `brute-air-reader` = 1c720d4 (opt-in air poses) + cherry-picks 664409d / f8ba690 of the two commits above; worktree
+  `~/video2rig-brute-air`.
+- `mac-mps` unchanged at ec99e23.
+
+**How to rebuild the shipped set**
+
+1. `cd ~/hulk && /Applications/Blender.app/Contents/MacOS/Blender -b --factory-startup -P tools/brute/assemble_motion.py -- ~/hulk-scratch/brute_corr/brute_rigged_corr.glb ~/hulk-scratch/brute_v2/motion ~/hulk-scratch/brute_v5`
+2. Timing: `Blender -b --factory-startup -P tools/brute/v2r/measure_timing.py -- ~/hulk-scratch/brute_v5/brute.glb --check-today 0.15`
+   (writes `Config/BruteClipTiming.json` for the v2r clips only; exit 3 on absolute deltas is expected; the game-time table must
+   print 0.00 for every written act).
+3. `python3 unreal/WebHomage/Scripts/build_brute.py` (default input `~/hulk-scratch/brute_v5/brute_anim.fbx`; one headless commandlet
+   through gpu_slot) and confirm 17 `[brute] anim /Game/Brute/Body/A_Brute_*` lines.
+- Back to the pre-v2r clips: `build_brute.py --fbx ~/hulk-scratch/brute_v5/pre-v2r-20261018/brute_anim.fbx` and run the game with
+  `-WHBruteNoClipTiming`.
+- A new take wins only through its A/B: put its GLB in the motion dir (name from `export_clip.py` NAMES) only after it wins.
+
+**How to A/B again**
+
+- `python3 tools/brute/v2r/ab_ingame.py run --label <set> --ignore-window [--cases a,b]` (any `[a-z0-9_-]` label; budget-paced),
+  then `check --label <set>`, then `pack --a <set> --b <other> --cases ... --out <dir>` (labels or dirs; a second `pack` into the same
+  `--out` adds pairs). Give the critic only `<dir>/critic`; decode with `<dir>/_director/KEY.json` afterwards.
+
+**Rule fixes made today**
+
+- Timing rate rule (`measure_timing.py game_window`, `--selftest-rule` PASS): a length-scaled clip keeps today's game-time windows
+  exactly; Rate = min(today's x length ratio, 1.6), lowered to fit the clip, never below 1.0. Loops and Land keep speed-matching.
+- `ab_ingame.py check`: `wall_release` is forbidden only before the script's own release time (7d2d4e9).
+- Hold compression (`refine_brute.py --compress-holds` with `--hold-frac/--hold-min-dps/--hold-max-dps/--hold-min-s/--contact-s/
+  --hold-keep/--hold-keep-up/--max-seconds/--max-speedup`, plus `--stance-snap N`; 1709ce1; `HOLD-COMPRESSION.md`).
+- Also: refine burst pass (`--burst-*`, Throw frame-27 arm jump), assemble skips TRIM for v2r files, per-clip wall times in
+  BruteCharacter (WAttachImpact2 / WAttachEnd / WClimbImpact1), `ab_ingame.py run --label` any label and `pack --a/--b/--cases`.
+
+**Machine rules (2026-10-29, after the 7-hour GPU wedge; details `tools/brute/v2r/ab_ingame.md` "GPU gates")**
+
+- Every engine capture goes through `tools/brute/capture.sh`, which runs the machine-wide gates first (`tools/gpu/gpu_gates.py`):
+  an `UnrealEditor` in state E/Z = machine-wide pause, notify the owner; 2+ GPU clients of any kind (engines, Blender, torch /
+  `reader.train` / video2rig python) = refuse; GPU util < 90 % on three readings 5 s apart (waits up to 10 min); 20 s since the
+  last launch anywhere (`~/.cache/gpu-slot/last_launch`). STREAMING flag and the 11-13 ET window as before.
+- Frame-1 watchdog: a Brute run with no `WH_BRUTE tick1` line within 120 s is SIGTERMed (60 s, SIGKILL last), exit 5, not retried.
+- `ab_ingame.py run` launch budget: at most 10 cold launches per rolling hour (`LAUNCHES_PER_HOUR`, owner clarification, 2c9c693;
+  was 6), 30 s cool-down between cases, printed as it goes.
+- Offline check of all of it: `tools/brute/v2r/test_ab_ingame_gates.sh` (never launches anything; 31/31 PASS today).
+
+**Pending (owner)**: the feel playtest of the final set (not done yet); merge decision for this branch and the fork branches;
+optional re-film with the HUD hidden. No further GPU work by this run. Disk is at 100 % (18 GB free): scratch sets
+`~/hulk-scratch/ab-ingame` (~0.7 GB), `brute_v2r_candidate`, `brute_v2r_r3`, `brute_v2r_r4` can go after the merge.
+
+
 ## Owner play session 2026-10-24 (live)
 
 - Owner played live via `Play-Brute.command`; requested: remove the background music, fix the rooftop camera lock.
@@ -159,3 +350,31 @@ fucked up"). WallClimb = WallAttach was the owner's suggested fix.
 - `Content/` is git-ignored; imported assets regenerate via `build_brute.py`.
 - Owner tone: blunt, curses, hates being shown unviewed output. Watch actual playback before claiming quality.
   Show, don't promise.
+
+## Seedance round (2026-10-30, owner brief 11:45 EDT; CLOSED 2026-10-31, final set above)
+
+Owner rejected the MiniMax result ("80 % the same") and re-briefed: Seedance takes that look much better, then the pipeline, ship only what is
+visibly better. Rules, ledger and findings: `docs/brute/video2rig/SEEDANCE.md`; error log that led here: operating-rules "Fidelity gates are not
+quality gates" (agents-md PR #36). Progress page: http://127.0.0.1:8777/progress.html (visual; `status_loop.py` + `progress.html` in the session
+scratch `before-after/` dir, server `python3 -m http.server 8777`).
+
+- Provider: Seedance 2.5 on Higgsfield (720p, 16:9, 5 s, audio ON, literal prompt, preset declined, 35 cr); fal `bytedance/seedance-2.0/image-to-video`
+  via `generate_fal.py --provider seedance2` (~0.77 USD) as a second lane. Higgsfield credits are ONE pool shared with the Invincible session
+  (midir-d3): 442.64 -> 127.64 (Hulk 6 charged takes = 210, Invincible 3 = 105); Hulk stopped spending there at 127.64 by agreement.
+- KEY FINDING: ~60 % of outputs are refused AFTER rendering by ByteDance's copyright classifier (fal: "Potential copyright violation"; Higgsfield
+  shows "nsfw"); the figure's shape trips it, a desaturated start picture does not help on fal (the Invincible session reports black-and-white
+  start pictures DO pass on Higgsfield, 2 of 2). Refusals were never charged for start-only requests (Invincible saw a charged refusal with end_image).
+- Fitted + exported to `Local/video2rig/motion-sd/` (CPU, `V2R_DEVICE=cpu`, lockfix fork): Smash (check 0.69, fit 4.65 px with per-clip joint ranges
+  `clips.smash_sd_v1.joints` in creature.json), PunchR (0.47, 2.26 px, refine `--lock-yaw` removed an 84 deg body turn), Clap (0.72, 2.47 px),
+  Lift (fitting now). Two strikes, old clip stays: Jump, Uppercut, Slap, StopLunge (one check FAIL 3.97 % + one refusal), Land.
+- Director close-ups (CPU Cycles, `~/hulk-scratch/sd-compare/<clip>/`): Smash clearly better than old; PunchR and Clap marginal; the in-game blind
+  A/B decides.
+- Ready for the GPU: `~/hulk-scratch/brute_sd/` (brute_anim.fbx with the Seedance Smash/PunchR/Clap, BruteClipTiming.json re-measured, README.md
+  with the exact build + capture commands; add Lift once exported). Harness: `ab_ingame.py --cam-dist 4.0 --hide-help` (new; the old baseline must
+  be recaptured at the same settings; pack refuses mixed settings). GPU order: Markhor readers -> Dragon reader -> Hulk captures / Invincible reader.
+- New tools: refine_brute.py `--lock-yaw`; generate_fal.py `--provider seedance2` (+ selftest_fal.py); ab_ingame.py `--cam-dist`, `--hide-help`.
+- fal lane closed (14:55): bytedance/seedance-2.0 refused 8 of 8 outputs on this figure (copyright), 0 USD charged, fal balance still 15.43.
+  Remaining moves without a Seedance take (PunchL, Throw, Run, Walk, Idle, Fall, Jump, Uppercut, Slap, StopLunge, Land, WallAttach, WallClimb)
+  keep today's clips unless the owner adds Higgsfield credits (the ~35 % pass lane) or changes the figure's silhouette (hair/shorts), which is a
+  model change and the owner's call. Prompts for all of them are written under docs/brute/video2rig/prompts/seedance/.
+- 16:39: OLD baseline recaptured at the close-up settings (`cuold`: combat + grab, 3 angles, `--cam-dist 4.0 --hide-help`, 6 gated launches, check 6/6 ok, `~/hulk-scratch/ab-ingame/cuold/`). Remaining GPU steps (timing swap -> `build_brute.py --fbx brute_sd/brute_anim.fbx` -> `cusd` captures -> pack -> Opus blind critique -> restore/ship) run after Dragon's reader (~20:00) and Invincible's training; exact commands in `~/hulk-scratch/brute_sd/README.md`.

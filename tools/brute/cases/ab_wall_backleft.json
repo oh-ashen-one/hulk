@@ -1,0 +1,62 @@
+{
+ "name": "ab_wall_backleft",
+ "ab": {
+  "group": "wall",
+  "angle": "backleft",
+  "cam_offset_deg": 45.0,
+  "mode": "emulated: look-rate orbit + stick compensation, no C++ change",
+  "clips": [
+   "WallAttach",
+   "WallClimb"
+  ],
+  "purpose": "Sprint into a facade, wall attach and climb (about 3.7 s attached in total: 1.3 s on the first face, 2.4 s on the second).",
+  "beats_s": [
+   [
+    2.0,
+    "sprint into the facade"
+   ],
+   [
+    3.0,
+    "attach slam, climb (23.8 m face)"
+   ],
+   [
+    4.3,
+    "top out, catch the next face"
+   ],
+   [
+    4.7,
+    "climb to the roof (73 m), top out ~7.0 s"
+   ]
+  ],
+  "film_s": [
+   1.5,
+   8.5
+  ],
+  "quit_s": 8.6,
+  "expect_events": [
+   "wall_run_start",
+   "wall_punch",
+   "wall_top_out",
+   "wall_catch",
+   "wall_punch",
+   "wall_top_out"
+  ],
+  "forbid_events": [
+   "rescue",
+   {
+    "event": "wall_release",
+    "before": "script_release"
+   },
+   "wall_kick"
+  ],
+  "expect_travel_min_m": null,
+  "expect_zmax_min_m": 60.0
+ },
+ "spawn": {"pos": [249.0, 140.0, 0.0], "yaw": 0, "camPitch": -8, "camDist": 7.5},
+ "keys": [
+  {"t": 0.0, "move": [0, 0], "look": [45.0, 0]},
+  {"t": 0.999, "look": [0, 0]},
+  {"t": 2.0, "sprint": 1, "move": [-0.707107, 0.707107]},
+  {"t": 7.5, "sprint": 0, "move": [0, 0]}
+ ]
+}

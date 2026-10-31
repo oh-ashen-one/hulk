@@ -1,0 +1,110 @@
+# Brute Seedance round (owner brief 2026-10-30 11:45 EDT)
+
+Hulk-in-Manhattan fan homage; not affiliated with Marvel, Disney, Radical Entertainment, Vivendi, Activision or Sierra.
+
+Owner's words: whenever we use video2rig we are trying to increase the quality of the animations, the 3D and the fluidity; the current
+clips look blocky and glitchy. Generate Seedance takes that look much better, then run the pipeline. This replaces the MiniMax/fal brief
+of `PLAN.md` for every clip from here on. Error log that led here: `HANDOFF.md` "Fidelity gates are not quality gates" and the
+operating-rules section of the same name (agents-md PR #36).
+
+## Rules for this round
+
+- Provider: Seedance 2.5 on Higgsfield (`generate_video`, model `seedance_2_5`, mode `omni_reference`, `start_image` = our start
+  picture, 720p, 16:9, 5 s, audio off, literal prompt with the preset recommendation declined). 35 credits per 5 s take; balance at start
+  442.64. 1080p costs 80 and is not used (the reader reads 720-high panels).
+- One take at a time. The take is judged on its own look FIRST (frames beside the old clip's strip): weight, anticipation, follow-through,
+  fluidity, no stiffness. A take that is not visibly better than the old clip is not fitted, whatever `check` says.
+- Then the pipeline as before (size gate, check, fit, refine, export, build) with close-up captures, and a blind A/B whose ship rule is
+  "visibly better", never "tie". Timing data moves with the take (`measure_timing.py`, rate cap 1.6).
+- The mesh itself is out of scope for video2rig (it moves bones only); the model is the Customuse "Emerald Behemoth" (`docs/brute/ASSETS.md`).
+  A mesh upgrade is a separate job for the owner to call.
+- GPU: fits, Blender and captures go through the gates (cap 3, util < 90, no capture while the STREAMING flag is `manual`); Markhor's
+  and Dragon's readers run today, so GPU steps queue behind them. Generation and the first-look judgement need no GPU.
+
+## Order (most visible upgrade first, budget ~12 takes)
+
+Smash (pilot), PunchR, PunchL, Uppercut, Jump, Land, Lift, Throw, Clap, Slap, StopLunge, Run. Idle, Walk, Fall, WallAttach, WallClimb
+only if credits remain (WallAttach/WallClimb need a wall in the picture; see `prompts/INDEX.md` risks).
+
+## Ledger
+
+| take | job | credits | first look (director) | check | fit | A/B | ship |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| smash_sd_v0 | 2e1a88e5 | 0 (refused, status nsfw, not charged) | prompt had "violent", "slams", "snarl", "glare": moderation refusal | | | | no |
+| smash_sd_v1 | a7c145a4 | 35 | size gate PASS 1.08; sharp, model intact; wind-up 0.5-0.9 s, FROZEN 1.0-1.6 s at the top, slam 1.6-1.9 s (fast, deep fold), FROZEN 2.2-3.8 s in the crouch, rise 3.8-4.8 s. Slam beats the old clip; the two freezes are a prompt problem (next prompts: "never pauses or freezes"). Fitted with --compress-holds. | PASS 0.69 % | standard 4.88 px / 2 warn; joint ranges widened per clip (creature.json clips.smash_sd_v1.joints: shoulders 60 deg, spine 52, right foot 46) -> 4.65 px / 1 warn, the 54 deg arm jump gone; frame 42 fists still a head low (fit limit, not range). SHIPPED fit = -wide, refine seam 0.00 drift 6.9 mm toe 0.0, GLB motion-sd/Brute_smash-v2r.glb (Smash_v2r_v2_refined.blend) | CPU close-up old vs new (hulk-scratch/sd-compare/smash/ab_tq.mp4, strip_tq.jpg; rendered from the v1 refine, same fit family): NEW symmetric overhead raise, clean double-fist slam, planted feet; OLD lopsided raise with one arm round the head, crouch swings sideways. Director: new is visibly better. In-game blind A/B decided it (row "(smash_sd_v1 in-game A/B)"). | SHIPPED |
+| punchr_sd_v1 | 941e6204 | 35 | size gate 1.25 (near the limit); REJECTED at first look: he turns 90 deg to throw the punch (front camera sees his profile at 1.4-2.6 s), freezes at full extension 1.8-2.6 s, then turns back. Not fitted. | | | | no |
+| punchr_sd_v2 | 090730e9 | 0 (refused, nsfw, "straight right punch ... knuckles toward the camera") | not generated | | | | no |
+| punchr_sd_v3 | 54133316 | 0 (refused, nsfw: "toward the front camera" phrasing) | not generated; "shadow boxing" wording + facing pinned ("never turns, never pivots, never steps"), fist to the hip, "arm snaps straight back without stopping" | | | | |
+| punchr_sd_v4 | e0590850 | 35 | v1 wording that passed ("at the empty air in front of him") + neutral orientation sentence ("same orientation as the first frame ... no turning, no pivoting, no stepping"), fist to the hip, snaps back without stopping | | | | |
+| (punchr_sd_v4 first look) | | | size gate 1.20; sharp, model intact, good load-up and a fast strike at 1.5-1.7 s, BUT he again turns ~90 deg to deliver it (front panel sees his profile at 1.8-2.5 s) and freezes 1.9-2.3 s. Seedance frames a straight punch by rotating the body (2 of 2 real takes). Decision: fit it anyway and lock the root yaw in refine (the limb motion is good); if that fails, PunchR keeps the old clip. | | | | |
+| jump_sd_v1 | 87802bfa | 0 (refused after rendering, status nsfw, not charged) | not generated | | | | no |
+| jump_sd_v2 | 3945c169 | 0 (refused after rendering, nsfw, not charged) | not generated; Jump = two refusals, keeps the old clip for now (output classifier, not the prompt) | | | | no |
+| clap_sd_v1 | 6f8a8e1e | 0 (refused after rendering, nsfw, not charged) | not generated. Refusal tally: 4 of the last 5 submissions (smash v0 prompt-stage; punch v2, v3, jump v1, v2, clap v1 after rendering). Passed: smash v1, punch v1, punch v4. | | | | no |
+| clap_sd_v2 | 1e89a05c | 35 | PASSED moderation with audio on (same prompt). Size gate 1.09; sharp, model intact; arms spread wide with open palms 0.5-1.4 s (frozen 0.9-1.4), fast clap 1.5-1.8 s, hands together frozen 1.9-2.4 s, settle by 3.5 s. Big anticipation, crisp clap: USE with --compress-holds. Audio stays ON for every later take. | | | | |
+| (punchr_sd_v4 fit) | | | | PASS 0.47 % | 2.26 px, 1 warning, outline 0.896/0.908 (the body turn is consistent in both panels, so the fit is the best of the run). Refine with --lock-yaw (new flag, being added) to keep the game facing. | | |
+| (punchr_sd_v4 refine) | | | | | refine --lock-yaw (new flag, tools/brute/v2r/refine_brute.py: Hips world yaw and travel turned back to frame 0's facing, 83.8 deg removed, limb motion kept: hand moves 1.15 units forward at the strike either way), seam 0.00, drift 6.7 mm, toe 0.0; exported motion-sd/Brute_punchr-v2r.glb (PunchR_v2r_v3_refined.blend). Risk for the critic: the hips lunge ~0.6 units forward-left and return inside the 18-frame blend. | in-game A/B: OLD wins (row "(punchr_sd_v4 in-game A/B)") | |
+| uppercut_sd_v1 | 806e3665 | 0 (refused after rendering, nsfw, audio ON; so audio is not the whole story: pass rate ~50 % on this figure) | not generated | | | | no |
+| uppercut_sd_v2 | c3c2f4bb | 0 (refused after rendering, nsfw) | not generated; Uppercut = two refusals, keeps the old clip. Running tally: 7 refusals in 12 submissions, none charged. | | | | no |
+| slap_sd_v1 | d27f2882 | 0 (refused after rendering, nsfw) | not generated | | | | no |
+| slap_sd_v2 | 3b04d95f | 0 (refused after rendering, nsfw) | not generated; Slap = two Higgsfield refusals (9 of 14 submissions refused there). Redo on fal Seedance 2.0 if the fal test passes. | | | | no |
+| stoplunge_sd_v1 | 4151ef3b | 35 | PASSED moderation (18 min render). Size gate 1.21; no jog-in-place (he stands 0-0.9 s), hard plant at 1.1 s, deep wide braced crouch with arms out 1.4-2.5 s (frozen 1.8-2.3), rise by 3.6 s, small settle 3.9-4.6. Big grounded brace, body heading kept: USE with --compress-holds (the game plays only the stop+lunge segment). | FAIL 3.97 % (body size disagrees between the panels: the crouch leans toward the front camera) | not fitted (rule: regenerate, never fit a failed check) | | no |
+| stoplunge_sd_v2 | a6555ef8 | 0 (refused after rendering, copyright classifier) | not generated; StopLunge = one check FAIL + one refusal; keeps the old clip unless the grey route works | | | | no |
+| (clap_sd_v2 pipeline) | | | | PASS 0.72 % | 2.47 px, 1 warning, outline 0.887/0.905; refine --lock-yaw (4.3 deg) --compress-holds: seam 0.00, drift 2.2 mm, toe 0.3; exported motion-sd/Brute_clap-v2r.glb (Clap_v2r_v3_refined.blend) | in-game A/B: tie, old clip kept (row "(clap_sd_v2 in-game A/B)") | not shipped |
+| (punchr_sd_v4 close-up) | | | | | CPU close-up old vs new (sd-compare/punchr): NEW = compact load, torso lean into a straight right at 1.5 s, body heading fixed; OLD = big wide wind-up with the arm swung round the head. Director: new is cleaner and heavier but less flamboyant; too close to call from the strip, the in-game blind A/B decides. | in-game A/B: OLD wins | not shipped | |
+| uppercut_sd_v3 (fal) | 01a18dac | 0 (refused: fal 422 content_policy_violation, cause "copyright", "Output has sensitive content. Potential copyright violation.", partner_validation_failed) | FINDING: the refusals are ByteDance's COPYRIGHT classifier on the output frames (the green brute in purple shorts reads as the trademarked character), not nsfw/violence. Higgsfield reports the same partner refusal as "nsfw". Next: test a desaturated start picture (grey skin, dark shorts) on fal. | | | | no |
+| jump_sd_v3 (fal, grey start) | 01a18db7 | 0 (refused: copyright again) | FINDING: desaturation does not beat the classifier; it keys on the figure (silhouette, hair, shorts), not the colours. Jump stays old. Remaining strategy: keep rolling Higgsfield takes on clips with a strike left (Land, Lift, Throw, Run, Idle, Walk); refusals cost nothing but ~10 min. | | | | no |
+| land_sd_v2 | 251d8c11 | 0 (refused after rendering, copyright classifier) | not generated; Land = two refusals, keeps the hold-compressed v1. Higgsfield pool is SHARED with the Invincible session (midir-d3): 197.64 at 13:25, split agreed (Hulk: one more charged take max, then stop at ~127). | | | | no |
+| lift_sd_v1 | c0026b72 | 35 | PASSED moderation. Size gate 1.11; deep squat with hands wide at the floor 0.7-1.8 s (frozen 1.0-1.6), continuous heave to a full overhead lock 1.8-2.5 s, overhead frozen 2.5-3.5 s, lowers to a squat by 4.8 s (ends crouched, return-to-stance blend handles it). Nothing drawn in the hands, heading kept. USE with --compress-holds. Pool after: 127.64 = my cap; no more Hulk takes on Higgsfield (rest is Invincible's). | | | | |
+| (clap_sd_v2 close-up) | | | | | CPU close-up old vs new (sd-compare/clap): NEW symmetric lateral spread, planted feet, hands meet in front of the chest at 1.5 s but the contact reads soft in the three-quarter view; OLD punchier but lopsided. Director: marginal; the in-game blind A/B decides. | in-game A/B: tie, old kept | not shipped | |
+| land_sd_v1 | 1a729487 | 0 (refused after rendering, copyright classifier) | not generated | | | | no |
+| (lift_sd_v1 pipeline) | | | | PASS 0.60 % | 4.19 px, 1 warning, outline 0.863/0.869; refine --lock-yaw (6.9 deg) --compress-holds: seam 0.00, drift 3.5 mm, toe 0.0; exported motion-sd/Brute_liftthrow-v2r.glb | in-game A/B: Seedance wins (row "(lift_sd_v1 in-game A/B)") | SHIPPED |
+| (lift_sd_v1 close-up) | | | | | CPU close-up old vs new (sd-compare/lift): NEW = natural crouch, forward grasp, big straight overhead stretch, more fluid; weaker carry pose (hands apart, not clasped; relaxes after 2.7 s, so Carry.to is capped at 2.700 s by hand in brute_sd/BruteClipTiming.json; new hit 1.733 s vs old 2.400 s). OLD = fists-to-floor hunch then a clasped overhead hold. Director: better motion, weaker carry; in-game A/B decides. A/B set brute_sd now has Smash, PunchR, Clap, Lift (12 launches planned: old recapture + new at --cam-dist 4.0 --hide-help, two batches under the 10/h budget). | in-game A/B: Seedance wins | SHIPPED | |
+| (smash_sd_v1 in-game A/B) | | | | | | Blind in-game close-up A/B, `ab_ingame.py` `--cam-dist 4.0 --hide-help`, combat_{front,left,tq}, one Opus critic, decoded from `blind-cu/_director/KEY.json`: **Seedance wins.** A symmetric double-fist raise with the head thrown back reads at a glance; the old wind-up is twisted and side-on with a muddy silhouette. | **SHIP** (Smash = Seedance, `Brute_smash-v2r.glb`) |
+| (lift_sd_v1 in-game A/B) | | | | | | Same protocol, grab_{front,left,tq}: **Seedance wins.** The palms stay pressed on the car's underside through the carry; in the old clip the car floats about 35 px above the fists for about 2 s. | **SHIP** (Lift = Seedance, `Brute_liftthrow-v2r.glb`; Carry.to = 2.7 by hand) |
+| (punchr_sd_v4 in-game A/B) | | | | | | Same protocol, combat_*: **old wins.** The Seedance take swipes with the forearm, head down, and no fist shows at contact. | not shipped (PunchR = shipped old `Brute_punchr.glb`) |
+| (clap_sd_v2 in-game A/B) | | | | | | Same protocol, combat_*: **tie.** The ship rule is "visibly better", so a tie keeps the old clip. | not shipped (Clap = shipped hold-compressed `Brute_clap-v2r.glb`, byte-identical) |
+| (PunchL, Slap, Throw controls) | | | | | | Unchanged control clips in the same blind pairs: all ties, as they must be. | unchanged |
+| (confirmation capture `cufinal`) | | | | | | See "17-clip status" below: brute_final_sd build, close-up frames confirm the double-fist raise and the hands on the car. | final |
+| punchl_sd_v1 (fal Seedance 2.0, 720p, audio on, H264) | 01a18df7 | 0 (refused after 601 s: fal 422 content_policy_violation, cause copyright) | not generated; retry once with the same prompt as punchl_sd_v2 | | | | no |
+| punchl_sd_v2 (fal, same prompt as v1) | 01a18e00 | 0 (refused after 468 s: copyright) | not generated; PunchL = two fal refusals, keeps the old clip | | | | no |
+| throw_sd_v1 (fal) | 01a18e07 | 0 (refused after 488 s: copyright) | not generated; retry once as throw_sd_v2, same prompt | | | | no |
+| throw_sd_v2 (fal, same prompt) | 01a18e0f | 0 (refused after 549 s: copyright) | not generated; Throw = two fal refusals, keeps the old clip. fal tally this batch: 4 of 4 refused | | | | no |
+| run_sd_v1 (fal, 6 s) | 01a18e18 | 0 (refused after 559 s: copyright) | not generated; retry once as run_sd_v2 | | | | no |
+| run_sd_v2 (fal, same prompt) | 01a18e20 | 0 (refused after 479 s: copyright) | not generated; Run keeps the old clip | | | | no |
+| **fal lane closed: 8 of 8 refused** | | 0 USD spent (balance 15.43 USD before and after; refusals are not charged) | Every fal Seedance 2.0 submission on this figure was refused by the partner copyright check (uppercut v3, grey jump v3, punchl v1/v2, throw v1/v2, run v1/v2), vs ~35 % pass on Higgsfield. Coordinator rule: batch stopped; jump v4, slap v3, stoplunge v3, land v3, uppercut v4, walk v1, idle v1 and fall v1 (brute-air, prompt saved in prompts/seedance/fall_sd_v1.txt and brute-air/clips/) were NOT submitted. | | | | |
+
+## 17-clip status (final set, 2026-10-31)
+
+Final set = `~/hulk-scratch/brute_final_sd/` (shipped v2r motion inputs + ONLY `Brute_smash-v2r.glb` and `Brute_liftthrow-v2r.glb` from
+`Local/video2rig/motion-sd/`). The Seedance PunchR and Clap GLBs are NOT in it: PunchR and Clap are byte-identical to the shipped inputs.
+Ship rule of this round: "visibly better", a tie keeps the old clip.
+
+| clip | source in the final set | why |
+| --- | --- | --- |
+| Smash | **Seedance** (`Brute_smash-v2r.glb`) | in-game blind close-up A/B: Seedance wins (symmetric double-fist raise, head back, reads at a glance; old wind-up twisted, side-on, muddy) |
+| Lift | **Seedance** (`Brute_liftthrow-v2r.glb`) | in-game blind close-up A/B: Seedance wins (palms stay on the car's underside; old clip floats the car about 35 px above the fists for about 2 s) |
+| PunchR | old (`Brute_punchr.glb`) | Seedance take lost: forearm swipe, head down, no fist at contact |
+| Clap | MiniMax video2rig, hold-compressed (`Brute_clap-v2r.glb`, the shipped file) | Seedance Clap tied, so the shipped clip stays |
+| Idle, Walk, Run, Fall | MiniMax video2rig (shipped) | no Seedance take (fal lane refused 8/8, Higgsfield pool at the Hulk cap; Fall prompt written, not submitted) |
+| Slap | MiniMax video2rig (shipped) | two Seedance refusals on Higgsfield |
+| StopLunge | MiniMax video2rig, hold-compressed (shipped) | Seedance: one check FAIL 3.97 % and one refusal |
+| Land | MiniMax video2rig, hold-compressed (shipped) | Seedance: two refusals |
+| PunchL, Throw | old | two fal refusals each; unchanged control clips in the blind pairs, ties |
+| Uppercut, Jump | old | two Seedance refusals each |
+| WallAttach, WallClimb | old | need a wall in the start picture; left out of this round |
+
+Totals: 2 Seedance (Smash, Lift), 5 MiniMax video2rig (Idle, Walk, Run, Slap, Fall), 3 MiniMax hold-compressed (StopLunge, Clap, Land), 7 old
+(PunchL, PunchR, Uppercut, Throw, Jump, WallAttach, WallClimb) = 17. `clips_meta.json` of the final set differs from the shipped `brute_v5` in
+exactly Smash and Lift.
+
+Timing: `unreal/WebHomage/Config/BruteClipTiming.json` is the committed final state (shipped file + Smash 0.530 / 2.130 / 1.4 / hit 1.300,
+Grab 0.000 / 1.733 / 2.0, Carry 1.733 / 2.700 / 0, hit_table Smash 1.300, measured Smash and Lift, clip list Smash and Lift). Carry.to = 2.700 is a
+hand value: the tool gives 3.533 (the last frame), where the Seedance Lift has lowered its arms again and the game freezes on Carry.to. Clap and
+PunchR rows equal the shipped file. Pre-Seedance backup: `~/hulk-scratch/brute_sd/BruteClipTiming.shipped.json`.
+
+## Capture gaps the critic found (not fixed)
+
+- No angle shows the feet, so foot contact (sliding, planting) is unproven for Smash and Lift.
+- The car blocks the lens during the grab and at the throw release.
+- The smash contact falls below the frame.
+- A reshoot needs the camera pulled back and lowered.

@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCR = os.path.expanduser('~/hulk-scratch')
 OUTD = os.path.join(SCR, 'brute_mesh')
 IDLE_RIG = os.path.join(SCR, 'brute_v2/motion/Emerald_Behemoth_idle_30fps.glb')
-ANIM = os.path.join(SCR, 'brute_v5/brute.glb')
+ANIM = os.environ.get('BRUTE_ANIM_GLB') or os.path.join(SCR, 'brute_v5/brute.glb')   # BRUTE_ANIM_GLB: another assembled set (e.g. a v2r candidate)
 CLIPS_JSON = os.path.join(SCR, 'brute_v5/clips.json')
 
 

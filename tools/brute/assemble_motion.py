@@ -98,7 +98,11 @@ for name, pat, loop in CLIPS:
             for kp in fc.keyframe_points:
                 if int(round(kp.co.x)) in (fa_, fa_ + 1): kp.co.y = v2; kp.handle_left.y = v2; kp.handle_right.y = v2
             fc.update()
-    if name in TRIM:
+    if name in TRIM and 'v2r' in os.path.basename(f).lower():
+        # 2026-10-29: TRIM is frame windows on the OLD Meshy takes; a video2rig export is already cut and returned to the stance by
+        # refine_brute.py (applied to the 5 s v2r PunchR it ended the clip on the punch's contact frame 46)
+        print('TRIM', name, 'skipped: video2rig export', os.path.basename(f))
+    elif name in TRIM:
         fa = int(round(act.frame_range[0])); ta, tb = TRIM[name]
         for fc in fcs(act):
             pts = fc.keyframe_points
