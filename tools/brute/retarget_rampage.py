@@ -23,8 +23,8 @@ eal = unreal.EditorAssetLibrary
 
 def make(name, cls, factory):
     path = f"{OUT}/{name}"
-    if eal.does_asset_exist(path):
-        eal.delete_asset(path)
+    if eal.does_asset_exist(path):   # re-run: reuse (clips reference it, so a delete can fail) and rebuild its contents
+        return unreal.load_asset(path)
     return tools.create_asset(name, OUT, cls, factory)
 
 
@@ -51,9 +51,20 @@ rc.set_ik_rig(S, rigs["Brute"])
 rc.set_ik_rig(T, rigs["Rampage"])
 rc.set_preview_mesh(S, src)
 rc.set_preview_mesh(T, tgt)
+rc.remove_all_ops()
 rc.add_default_ops()
 rc.assign_ik_rig_to_all_ops(S, rigs["Brute"])
 rc.assign_ik_rig_to_all_ops(T, rigs["Rampage"])
+# FK only: SK_Brute's bones carry a ~110x scale (Blender export), which throws the IK goals ~80 m off and makes the
+# full-body IK op drag the whole body there; FK chains alone give the right pose. No root motion either: the game
+# moves and places the body itself (BuildClipRig measures facing and foot height from an idle frame).
+for i in reversed(range(rc.get_num_retarget_ops())):
+    n = str(rc.get_op_name(i))
+    if "Root Motion" in n:
+        rc.remove_retarget_op(i)
+    elif "IK Rig" in n:
+        rc.set_retarget_op_enabled(i, False)
+log("ops: " + str([(str(rc.get_op_name(i)), rc.get_retarget_op_enabled(i)) for i in range(rc.get_num_retarget_ops())]))
 rc.auto_map_chains(unreal.AutoMapChainType.FUZZY, True)
 rc.auto_align_all_bones(T)
 eal.save_loaded_asset(rtg)
