@@ -6,7 +6,7 @@ Hulk-in-Manhattan fan homage. Third-party assets used by the Brute, with source,
 
 - Source: Fab listing 0807cf74-08fd-4a33-8c8d-f33c9439fb1f, "Paragon: Rampage" by Epic Games, free, Standard License (Unreal Engine use only; the PARAGON name may not be used in titles or ads). Fab lists it Windows-only, so the Mac launcher hides every project; added through the UE 5.8 editor's Fab panel into an empty project, then copied to `Content/ParagonRampage` (3.2 GB).
 - Not in git: `Content/` is ignored in this public repo; binary snapshots belong in the private `webhomage-unreal-content` repo.
-- Used: `Skins/Tier2/Elemental/Meshes/Rampage_Elemental` + its own materials. Our 17 clips retargeted (auto IK Rig + IK Retargeter, `tools/brute/retarget_rampage.py`) into `/Game/Brute/Rampage`. Originals untouched. In game as the default skin (`-WHBruteSkin=Rampage`).
+- Used: `Skins/Tier2/Elemental/Meshes/Rampage_Elemental` + its own materials. Our 17 clips retargeted (auto IK Rig + IK Retargeter, `tools/brute/retarget_paragon.py`) into `/Game/Brute/Rampage`. Originals untouched. In game as the default skin (`-WHBruteSkin=Rampage`).
 - **Default Brute body since 2026-10-31** (owner): Play-Brute.command uses it; `-WHBruteSkin=Brute` restores the original. Without the pack the game falls back to SK_Brute. Verified in captures and owner play (crooked-run fix: retarget aligns rest-pose facing, see tools/brute/retarget_paragon.py).
 
 ## 2026-10-31 — Paragon: Crunch (base mesh), branch character-enhancement
@@ -15,3 +15,9 @@ Hulk-in-Manhattan fan homage. Third-party assets used by the Brute, with source,
 - Used: `Characters/Heroes/Crunch/Meshes/Crunch` + own materials; 17 clips retargeted FK-only by `tools/brute/retarget_paragon.py` (`BRUTE_SKIN=Crunch`) into `/Game/Brute/Crunch`. Was in game behind `-WHBruteSkin=Crunch`. Verified in a capture: 2.61 m, upright, idle and run.
 - Removed locally 2026-10-31 (owner kept Rampage); re-add via Fab + `BRUTE_SKIN=Crunch` retarget if wanted. `-WHBruteSkin=Crunch` still works then.
 - Other skins in the pack: Titanium, Military, GoldenGloves, Valentine (Tier 1); Black Site, Crash Site (Tier 3).
+
+## 2026-10-15 to 2026-10-31: original green Brute (SK_Brute) and its 17 clips
+
+- Mesh: a Customuse generation (text/image to 3D), then rigged with Mixamo bone names (52 bones), skinned, given 18 corrective morphs and baked PBR textures by `tools/brute/rig_brute.py`, `mesh_*.py` and `tex_*.py`. Imported as `/Game/Brute/Body/SK_Brute` by `unreal/WebHomage/Scripts/build_brute.py`.
+- Motions (final set, 2026-10-31): 2 Seedance and 8 MiniMax H3 (fal.ai) video2rig fits, and 7 earlier clips (Cartwheel text-to-motion through Customuse, Meshy text-to-motion, and hand splices for Clap and Throw). Each take, cost and blind A/B verdict is in `docs/brute/video2rig/LEDGER.md` and `SEEDANCE.md`.
+- Not in git: the source GLB/FBX files (`brute_rigged_corr.glb`, `brute_anim.fbx`) stay local, because each provider's output terms have not been reviewed for publication.

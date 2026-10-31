@@ -1,5 +1,18 @@
 # Third-party code and assets
 
+## Foundation: Spiderbench, by Shikhar (xikhar)
+- Source: https://github.com/xikhar/spiderbench (via the oh-ashen-one/spider-man-2 fork). Source-Available, View-Only License: see [LICENSE](LICENSE).
+- Everything under `src/`, `public/` and `index.html`, and the city that the Unreal builders export, derives from it.
+
+## Rampage (Elemental skin), by Epic Games — Fab Standard License
+- Source: Fab listing "Paragon: Rampage" (0807cf74-08fd-4a33-8c8d-f33c9439fb1f), free. Unreal Engine use only; the Paragon name is not used in titles or ads.
+- **Not in this repository.** Users add it to `Content/ParagonRampage` themselves. Our clips are retargeted onto it by `tools/brute/retarget_paragon.py`. Ledger: [docs/brute/ASSETS.md](docs/brute/ASSETS.md).
+
+## Brute mesh and animation sources
+- Mesh: generated with Customuse, then rigged, skinned and corrected by `tools/brute/`. Motions: Cartwheel text-to-motion (through Customuse), Meshy text-to-motion, MiniMax H3 (fal.ai) and ByteDance Seedance reference videos, fitted with video2rig (https://github.com/canitcode/video2rig, AGPL-3.0; our fork oh-ashen-one/video2rig). The tool's licence does not cover its outputs. Ledger: [docs/brute/video2rig/LEDGER.md](docs/brute/video2rig/LEDGER.md).
+- The generated GLB/FBX files are not in this repository.
+
+
 ## three-pinata — MIT, © Daniel Greenheck
 - Source: https://github.com/dgreenheck/three-pinata — npm `@dgreenheck/three-pinata@2.0.1` (dependency, not vendored).
 - Used for: Voronoi fracture (3D and 2.5D) of breakable props, glass panes, crates and bins

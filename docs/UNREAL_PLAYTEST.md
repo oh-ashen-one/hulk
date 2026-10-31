@@ -1,3 +1,5 @@
+> **Hulk in Manhattan note (2026-10-31):** this page is inherited from the Spider-Man 2 port. In this repo, clone `oh-ashen-one/hulk`, and see [BUILD_ON_THIS.md](BUILD_ON_THIS.md) for the brute's build, launch and capture steps. The Spider-Man controls below apply only with `-WHSpidey`.
+
 # Unreal Engine setup and playtest
 
 The current Unreal implementation is on [`main`](https://github.com/oh-ashen-one/spider-man-2/tree/main). It includes the integrated continuation branch. The latest full feedback/music runtime is `e9a8120c`; main also includes the final optional Times Square start. The owner authorized closeout and merge; see [the closure record](controls/project-closeout-20261012/CLOSEOUT.md).

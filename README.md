@@ -1,99 +1,111 @@
-# Spider-Man 2 — Spiderbench Enhanced & Unreal Engine Port
+# Hulk in Manhattan
 
-A non-commercial web-swinging homage built from **[Spiderbench](https://github.com/xikhar/spiderbench), originally created by Shikhar**. This fork extends the browser game and carries that work into **Unreal Engine 5.8**, with native traversal, richer environments, original suit work, and focused improvements to flips, catches, firing animations and camera framing.
+**An unofficial, non-commercial fan homage to *The Incredible Hulk: Ultimate Destruction* (2005), built with AI in Unreal Engine 5.8.** A huge rock-skinned brute runs, leaps and smashes his way across the whole island of Manhattan. Manhattan itself comes from our [Spider-Man 2 port](https://github.com/oh-ashen-one/spider-man-2), which started as Shikhar's [Spiderbench](https://github.com/xikhar/spiderbench).
 
-**[Explore the complete, current game on `main` →](https://github.com/oh-ashen-one/spider-man-2/tree/main)** · [Project history & proof](docs/PROJECT_HISTORY.md) · [Unreal setup](docs/UNREAL_PLAYTEST.md) · [Latest verified results](docs/controls/playtest-feedback-20261012/RESULTS.md)
+> **Homage game, not an official Marvel game.** It is not affiliated with or endorsed by Marvel, Disney, Radical Entertainment, Vivendi, Activision, Sierra, Sony Interactive Entertainment, Insomniac Games or Epic Games. It is not for sale and never will be. See [DISCLAIMER.md](DISCLAIMER.md).
 
-> **Which version should I use?** Use **`main`**. It now includes the browser game, the Unreal source, Kimi’s preserved starting point, and every enhancement that followed. The old continuation and preservation branches are historical checkpoints; you do not need to combine them.
+![The rock brute standing on a Manhattan crosswalk](docs/media/rampage_hero.jpg)
+*In-game capture, October 31, 2026. The body is Epic's free Rampage character in its rock "Elemental" skin, driven by our own 17 animation clips.*
 
-![The enhanced Unreal traversal checkpoint, captured from the running game](https://raw.githubusercontent.com/oh-ashen-one/spider-man-2/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-reach-closeout/staged-smoke_00_t003.0.png)
-*Actual Unreal gameplay capture from the October 12 checkpoint, using the Tessera suit.*
-
-## Final owner-approved checkpoint
-
-The owner closed the project on October 12, 2026 and authorized the complete work to be merged into **main**. Final additions keep tricks in the player-controlled camera view, stabilize high-sensitivity look, hide debug overlays while retaining rendering features, improve optional camera shake, limit visible webs to active swinging, and use a spider crouch at rest. **Q / L1** boosts along the camera direction; **E / Triangle** is the separate targeted perch action. The supplied **Curious Groove** track loops through gameplay and settings. The optional `-WHSpawnTimesSquare` launch flag starts in the Times Square plaza.
-
-See the [camera results](docs/controls/manual-camera-20261012/RESULTS.md), [feedback/music results](docs/controls/playtest-feedback-20261012/RESULTS.md), and [project closeout](docs/controls/project-closeout-20261012/CLOSEOUT.md). Closeout does not mean every bug is resolved: the owner-reported E fallback and repeated ledge-climb trap are retained as known limitations. Historical branch tips are preserved by commit history and archive tags; main is the single active branch.
-
-## Original creation and credit
-
-The original game belongs to **Shikhar / [xikhar](https://github.com/xikhar)**. Upstream describes Spiderbench as a Claude-written browser game developed under human direction. Its city, original traversal systems, rendering pipeline and assets are the foundation of this project.
-
-That origin is preserved in Git: [initial creation commit `9c223685`](https://github.com/oh-ashen-one/spider-man-2/commit/9c223685b5d3b6ddb2365e76284f193525c1f072), [upstream update `4361e159`](https://github.com/xikhar/spiderbench/commit/4361e15951d98519ba515da3ec31d3e537cb4a10), and the [original README at that starting point](https://github.com/xikhar/spiderbench/blob/4361e15951d98519ba515da3ec31d3e537cb4a10/README.md). The upstream update credits Claude Opus 5.5 as a co-author. Our [first attribution notice](https://github.com/oh-ashen-one/spider-man-2/commit/a0dbe98abe30581b3af11e547068fbc72960c4e8) explicitly identifies the fork and its original author.
-
-**Our contribution is the enhancement and porting work described below.** We retain the original attribution and [LICENSE](LICENSE).
-
-## What we added and enhanced
-
-| Area | Work in this fork | Source or recorded proof |
-|---|---|---|
-| **Swinging and traversal** | Refined real-anchor swinging and facade interaction, then ported the custom traversal state machine and chase camera to native C++. | [Swing dynamics](https://github.com/oh-ashen-one/spider-man-2/commit/7a8927698bfbb4872d38459893252b48150ad848) · [C++ traversal port](https://github.com/oh-ashen-one/spider-man-2/commit/0f1c3874237f8bc74e5da01269740191436e644d) |
-| **Unreal Engine 5.8 port** | Added the WebHomage C++ project, procedural-city export/import pipeline, Unreal materials and shaders, skeletal character animation, reproducible builders and gameplay captures. | [Port scaffold](https://github.com/oh-ashen-one/spider-man-2/commit/f65d4ea94698aad690c418a85bc5ce45624e03da) · [City/material pipeline](https://github.com/oh-ashen-one/spider-man-2/commit/11261555c0c05faf350878a05e7f7f4a6c2fb7f9) · [Native animation](https://github.com/oh-ashen-one/spider-man-2/commit/d5d6b82f3151c560715ab52693870164ef0293b0) |
-| **City and visual presentation** | Expanded island/showcase assembly, foliage and terrain integration; translated the original author's facade and night-light models into Unreal and refined exposure, atmosphere and presentation. | [Island showcase](https://github.com/oh-ashen-one/spider-man-2/commit/3a7650b3ed5d09d1cccc1192212f8f4a2f643e90) · [Night-light port](https://github.com/oh-ashen-one/spider-man-2/commit/d2eee0a79714b482c9dbf1ba7991b330d5afd9d0) · [Facade shader port](https://github.com/oh-ashen-one/spider-man-2/commit/c10bcd5fd62bbb4c429d4bdbfb581c8e131eda55) |
-| **Browser water and foliage** | Added water shading, waves, foam, wakes, splashes, underwater effects, caustics and lens droplets; improved procedural trees and grass. These are documented browser-stage additions, not a claim of identical feature parity in Unreal. | [Water implementation and audit](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/WATER-EFFECTS.md) · [Foliage/destruction work](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/PINATA-AND-TREES.md) |
-| **Characters, suits and props** | Added custom suit concepts and models, a 20-citizen browser crowd, street props and animals, followed by an Unreal character/suit pipeline and original hero suit work. | [Browser asset integration](https://github.com/oh-ashen-one/spider-man-2/commit/2901735f74aed67293931f5ca60bc42847ac3372) · [Unreal suit integration](https://github.com/oh-ashen-one/spider-man-2/commit/8011219b6b9c1e22b4435de9fd44eec6fc0d91a7) |
-| **Flips, catches and camera** | Developed multi-turn trick programs and readable open holds, diversified catch silhouettes, corrected rotation spikes, removed the reported off-screen camera losses, and synchronized the firing arm with the visible web. | [Final repair report](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-final/RESULTS.md) · [Independent visual review](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-final/FINAL_REACH.md) |
-| **Verification and continuity** | Added repeatable scenario recordings, telemetry, image checks, independent review, mathematical checks, reproducible asset builders and explicit build/handoff records. | [Review protocol](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-final/REVIEW_PROTOCOL.md) · [Rolling handoff](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/HANDOFF.md) |
-
-## Before and after: browser stage to Unreal
-
-<table>
-<tr><th>Browser baseline before the Unreal port</th><th>Enhanced Unreal checkpoint</th></tr>
-<tr><td><img src="https://raw.githubusercontent.com/oh-ashen-one/spider-man-2/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/baseline/stills/swing.jpg" width="480" alt="Recorded browser-stage web swing"></td><td><img src="https://raw.githubusercontent.com/oh-ashen-one/spider-man-2/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-reach-closeout/staged-smoke_00_t003.0.png" width="480" alt="Recorded Unreal traversal with Tessera suit"></td></tr>
-</table>
-
-The browser image is the [documented pre-port baseline](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/baseline/README.md), which already includes our early browser enhancements. The Unreal image is a later native capture. These show the engine transition at different camera positions, not a matched performance benchmark or an untouched-upstream comparison.
-
-### Browser water and foliage comparisons
-
-| Earlier water | Enhanced water |
+| | |
 |---|---|
-| ![Earlier East River water](https://raw.githubusercontent.com/oh-ashen-one/spider-man-2/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/water/before/eastRiver.jpg) | ![Enhanced East River shading and wakes](https://raw.githubusercontent.com/oh-ashen-one/spider-man-2/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/water/after/eastRiver.jpg) |
+| ![Punching a car across the street](docs/media/rampage_car_smash.jpg) | ![Grand slam sending a bus and a taxi flying](docs/media/rampage_grand_slam.jpg) |
+| ![Thunderclap in front of a crowd](docs/media/rampage_thunderclap.jpg) | ![Walking past a bank on a Manhattan street](docs/media/rampage_street.jpg) |
 
-| Earlier park foliage | Enhanced park foliage |
-|---|---|
-| ![Earlier park trees](https://raw.githubusercontent.com/oh-ashen-one/spider-man-2/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/trees/parkHigh_before.jpg) | ![Enhanced park trees](https://raw.githubusercontent.com/oh-ashen-one/spider-man-2/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/trees/parkHigh_after.jpg) |
+## What you can do
 
-These are existing committed captures. Implementation details and third-party credits are in [WATER-EFFECTS.md](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/WATER-EFFECTS.md), [PINATA-AND-TREES.md](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/PINATA-AND-TREES.md) and [THIRD_PARTY.md](THIRD_PARTY.md).
+- **Move around the whole island.** Sprint fast enough to knock cars aside. Charge a super jump (about 40 m high and 100 m long) and chain leaps by holding jump as you land. Run straight up buildings, hang on with a punch, climb, and kick off.
+- **Smash things.** Punch, punch and slap combos, a launcher uppercut, the thunderclap, a ground smash, and a grand slam dive from the air. Grab a car, carry it, and throw it wherever you look.
+- **Watch the city react.** Traffic, crowds that run away, flying cars and a running **COLLATERAL DAMAGE** counter. You start in the Times Square plaza.
 
-## Before and after: the latest traversal repairs
+## How we got here
 
-| Problem | Before | What changed / evidence |
+The whole game was built by AI agents ([Claude Code](https://claude.com/claude-code), mostly Claude Opus 5.5) under one person's direction. These captures come from the real game at each stage.
+
+| Stage | What changed | Capture |
 |---|---|---|
-| **Camera losing the hero** | Off-screen escapes around rooftop starts, flip catches and collision recovery. | Full-body framing and collision-aware camera placement, plus a bounded startup guard. [Earlier press footage](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-closeout/s2_press_variety.mp4) → [camera closeout footage](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-camera-closeout/s2_press_variety.mp4). |
-| **Abrupt firing arm** | A measured **131.6°** single-frame step in the roof-launch case. | A distributed reach with a **27.48°** largest measured step; the visible web follows the raised hand while original physical arrival/catch times remain. [Earlier launch](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-closeout/s2_press_variety.mp4) → [final roof/re-press replay](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-reach-closeout/s2_press_variety.mp4). |
-| **Repetitive catch endings** | Endings repeatedly returned to similar narrow silhouettes. | At least **three distinct whole-body silhouettes across six inspected catches**: compact, extended and wide split. [Before](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-closeout/s3b_flip_cases.mp4) → [after](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-final/s3b_flip_cases.mp4) · [independent verdict](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-final/CRITIC.md). |
-| **Rotation spikes** | An intermediate front-double capture measured about **827°/s** in 3D on the existing finite-window check. | About **796°/s** after the curve/alignment correction, with turn counts and open holds retained. [Intermediate recording](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes/s3_flip_chain.mp4) → [corrected recording](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-final/s3_flip_chain.mp4) · [measurement definitions](https://github.com/oh-ashen-one/spider-man-2/blob/9ad990d6ab482d5b1946b0bc9a60244eac8e320a/docs/night1/final/swing/round-13-four-fixes-final/MOTION_VERIFICATION.md). |
+| **0. Where we started** | The finished Spider-Man 2 Unreal port: Spiderbench's city, now in Unreal, with a web-swinging hero. | <img src="docs/brute/evidence/m0_baseline_spidey.png" width="360" alt="Spider-Man hero in Manhattan"> |
+| **1. First brute (Oct 15)** | Replaced the hero with an AI-generated brute made of 11 rigid parts on a simple rig. Ugly, but walking around the real city. | <img src="docs/brute/evidence/m1_brute_walks_manhattan.jpg" width="360" alt="First rigid-part brute"> |
+| **2. Skinned green body** | A properly skinned and textured green body with torn purple shorts and corrective shapes. | <img src="docs/brute/evidence/m1_skinned_body_closeup.jpg" width="360" alt="Skinned green body close-up"> |
+| **3. The moveset** | Super jump with crater landings, wall run, leap chains, car grab and throw, thunderclap, grand slam, and crowds fleeing Times Square. | <img src="docs/brute/evidence/m2_wall_run.jpg" width="175" alt="Wall run"> <img src="docs/brute/evidence/m4_car_throw.jpg" width="175" alt="Car throw"> |
+| **4. Video-driven animation (Oct 29–31)** | Generated reference videos of each move, then fitted them to the rig with [video2rig](https://github.com/oh-ashen-one/video2rig). Blind A/B critiques chose which clips shipped: 2 Seedance, 8 MiniMax, 7 older clips. | <img src="docs/media/v2r_green_combat.jpg" width="175" alt="Green body in combat"> <img src="docs/media/v2r_green_car_lift.jpg" width="175" alt="Green body lifting a car"> |
+| **5. Professional body (Oct 31)** | Swapped our homemade mesh for Epic's free Rampage character (rock skin). We retargeted all 17 clips onto it and fixed a sideways, crooked run. | <img src="docs/media/rampage_hero.jpg" width="360" alt="Rock brute"> |
 
-**Evidence boundaries matter.** The full 17-case suite is build `19521659`; the subsequent camera, launch and final reach patches have separately labeled targeted replays. That four-fix runtime source is **`2db14214`**, preserved with reports at **`9ad990d6`**; subsequent camera and owner-feedback changes are documented above. Read the [complete evidence index](docs/PROJECT_HISTORY.md#verification-records) for the build-by-build record.
+**The hardest bug at the end:** on the new body the brute ran sideways, facing left and leaning. Every source clip has an 80° hip turn, and the two skeletons face different ways at rest (10° and 90°). The fix turns our hips in an editable retarget pose to match the target's rest facing *before* auto-alignment. [`tools/brute/retarget_paragon.py`](tools/brute/retarget_paragon.py) explains it step by step.
 
-The remaining limits are recorded too: brief partial lower-body occlusion behind a parapet, faster visible web extension in the final firing-arm fix, and broader quality checks that do not all pass. The videos include fixed-step capture; **60 Hz footage is not proof of real-time 60 FPS**. The final local checkpoint compiled, launched and rendered successfully, but the reports do not claim universal controller, performance or reference-quality acceptance.
+More detail: [design brief](docs/brute/BRIEF.md) · [first-night results](docs/brute/RESULTS.md) · [moveset](docs/brute/MOVESET.md) · [animation upgrade ledger](docs/brute/video2rig/LEDGER.md) · [asset ledger](docs/brute/ASSETS.md) · [rolling handoff](HANDOFF.md)
 
-## Run or inspect the project
+## Controls
 
-### Browser version
+| Action | Keyboard / mouse | Gamepad |
+|---|---|---|
+| Move / look | WASD / mouse | Sticks |
+| Sprint (knocks cars aside) | Shift | R2 |
+| Hop / **super jump** | Space / **hold** Space (keep holding on landing to chain leaps) | A |
+| Air dash | Shift in the air | R2 |
+| Punch, punch, slap | Left mouse | X |
+| Launcher uppercut | Sprint + left mouse | |
+| Ground smash / **grand slam** dive in the air | Right mouse or C | Y |
+| **Thunderclap** | F | R1 |
+| Grab a car / throw it where you look | E, then E or left mouse | B |
+| Wall run | Sprint into a building | |
+| On a wall | Left mouse to punch in and hang, W/Shift to climb, S to drop, Space to kick off | |
+| Back to the street (if stuck) | Hold R | |
+| Show / hide the controls card | H | |
+| Settings menu / release mouse | Esc | |
 
-Use Node.js 20.19+ or 22.12+ and a WebGL2-capable browser:
+## Run it
 
-```bash
-git clone https://github.com/oh-ashen-one/spider-man-2.git
-cd spider-man-2
-npm ci
-npm run dev
-```
+This repo is **source plus builders**. Generated Unreal content and the licensed Rampage pack are not in Git, so the first build takes work. An agent can do most of it (see the next section).
 
-`npm run build` creates the browser production build. Press **H** in-game for its controls.
+**You need:** a Mac with Apple silicon (built and tested on a Mac Studio M3 Ultra), Unreal Engine 5.8 installed from the Epic Games Launcher, Xcode, Python 3, Node.js 20.19+ and Blender 4.x for the character tools.
 
-### Unreal continuation
+1. **Build the C++ module:** `unreal/WebHomage/Scripts/build_editor.sh`
+2. **Build Manhattan:** `python3 unreal/WebHomage/Scripts/build_manhattan.py`. It exports the browser city and imports it into Unreal in stages. Some steps still have machine-specific input paths, so read [docs/UNREAL_PLAYTEST.md](docs/UNREAL_PLAYTEST.md) and fix the paths for your checkout.
+3. **Build the brute:** `python3 unreal/WebHomage/Scripts/build_brute.py --fbx <brute_anim.fbx>`. This imports the green body and its 17 clips. The rigged source FBX is not published yet, so bring your own (see [BUILD_ON_THIS.md](docs/BUILD_ON_THIS.md#3-bring-your-own-character)).
+4. **Optional: the rock body.** Add the free *Paragon: Rampage* pack from Fab into `Content/ParagonRampage`, then run [`tools/brute/retarget_paragon.py`](tools/brute/retarget_paragon.py) headless. On a Mac, the Epic launcher hides this Windows-only pack, so use the UE 5.8 editor's **Window → Fab → Add to Project** instead. Without the pack, the game falls back to the green body automatically.
+5. **Play:** double-click `Play-Brute.command` for windowed 1920×1080 at a 60 fps cap. Append `-WHBruteSkin=Brute` for the green body, `-WHSpidey` for the old Spider-Man hero, or `/Game/Showcase/Maps/Manhattan_Island_Night` for night.
 
-The same `main` checkout contains the Unreal project. Read [Unreal setup and playtest controls](docs/UNREAL_PLAYTEST.md). This is a source-and-builder project: generated Unreal content and compiled binaries are not bundled in the Git checkout. The verified owner checkpoint uses the installed Unreal Engine 5.8 runtime on a Mac Studio.
+The browser version of the city from Spiderbench still runs with `npm ci && npm run dev`.
 
-Core DualSense controls: **left stick** move, **right stick** camera, **R2** swing, **Cross** jump, **Square** air trick, **Triangle** perch zip, **L1** forward boost, **Circle** drop, and **Options** pause/resume.
+## Use this as the base for your own game
 
-## Credits and license
+You can point your coding agent (Claude Code, Codex, Cursor and so on) at this repo and say:
 
-- Original Spiderbench: **Shikhar / xikhar**, with the upstream AI-assisted creation credit preserved above.
-- Enhancements and Unreal continuation: this `oh-ashen-one/spider-man-2` fork and its recorded contributors/history.
-- Water, foliage and destruction adaptations include work by **Daniel Greenheck / DRG Software Solutions** and **Evan Wallace**; see [THIRD_PARTY.md](THIRD_PARTY.md) for the exact sources and licenses.
+> Read `AGENTS.md` and `docs/BUILD_ON_THIS.md` in this repo. I want to make **[your game idea]** on top of this Manhattan, with **[your character]** as the player. Check the licence section first and tell me what I need permission for. Then set up the build on my machine, swap in my character, and show me a capture.
 
-This is an **unofficial, non-commercial fan homage**. It is not affiliated with or endorsed by Marvel, Disney, Sony Interactive Entertainment or Insomniac Games. The original source-available restrictions remain in [LICENSE](LICENSE); see also [DISCLAIMER.md](DISCLAIMER.md).
+[`AGENTS.md`](AGENTS.md) is the agent's map of the repo. [`docs/BUILD_ON_THIS.md`](docs/BUILD_ON_THIS.md) is the step-by-step recipe. It covers the build order, how to drop in any Unreal character (Fab, Mixamo or your own), the 17-clip animation contract, launch flags, the offscreen capture harness, and the problems we already solved.
+
+**Licence first:** the city and the browser foundation are Shikhar's Spiderbench, released under a *view-only* licence. It allows reading and running the code locally. It does **not** allow using it in a distributed game without Shikhar's written permission. Prototyping and learning are fine. To ship something, ask the original author first. See [Credits and licence](#credits-and-licence).
+
+## Credits and licence
+
+**Original game: Spiderbench by Shikhar ([xikhar](https://github.com/xikhar)).** Spiderbench is a Claude-written browser web-swinging game made under Shikhar's direction. Its procedural Manhattan, traffic, pedestrians, traversal ideas and Three.js rendering pipeline are the foundation of everything here. Where it came from: [initial creation commit `9c223685`](https://github.com/oh-ashen-one/spider-man-2/commit/9c223685b5d3b6ddb2365e76284f193525c1f072), the [upstream update `4361e159`](https://github.com/xikhar/spiderbench/commit/4361e15951d98519ba515da3ec31d3e537cb4a10) (which credits Claude Opus 5.5 as a co-author), and the [original README](https://github.com/xikhar/spiderbench/blob/4361e15951d98519ba515da3ec31d3e537cb4a10/README.md). Thank you, Shikhar.
+
+**Spider-Man 2 port: [oh-ashen-one/spider-man-2](https://github.com/oh-ashen-one/spider-man-2).** Our fork of Spiderbench added browser water and foliage, then ported the city, traversal, materials and characters to Unreal Engine 5.8. This repo started from its `main` at `0ca553f`. Its [project history](docs/PROJECT_HISTORY.md) lists every change with commit links.
+
+**This repo** adds the brute: character, moveset, destruction, HUD, animation pipeline and the Rampage retarget.
+
+**Characters and animation**
+- **Rampage (Elemental skin)** by **Epic Games**, from the free *Paragon: Rampage* pack on [Fab](https://www.fab.com/), under the Fab Standard License: Unreal Engine use only, and the Paragon name may not appear in titles or ads. The pack is not redistributed here. Provenance is in [docs/brute/ASSETS.md](docs/brute/ASSETS.md).
+- **The original green brute mesh**: generated with [Customuse](https://customuse.com/), then rigged, skinned and corrected by our Blender tools in [`tools/brute/`](tools/brute).
+- **Animation sources**: Cartwheel text-to-motion (through Customuse), Meshy text-to-motion, reference videos generated with MiniMax H3 (through fal.ai) and ByteDance Seedance, and fits by [video2rig](https://github.com/oh-ashen-one/video2rig) (our fork of [canitcode/video2rig](https://github.com/canitcode/video2rig), AGPL-3.0). Every take and decision is in the [animation ledger](docs/brute/video2rig/LEDGER.md).
+
+**Code and other third parties** (details in [THIRD_PARTY.md](THIRD_PARTY.md))
+- **Daniel Greenheck**: [three-pinata](https://github.com/dgreenheck/three-pinata), [ez-tree](https://github.com/dgreenheck/ez-tree) and techniques from [tidewater](https://github.com/dgreenheck/tidewater) (DRG Software Solutions), MIT.
+- **Evan Wallace**: [WebGL Water](https://madebyevan.com/webgl-water/) ripple and caustics ideas, MIT.
+- **Music**: *Curious Groove*, supplied by the owner ([assets/audio/README.md](assets/audio/README.md)).
+- **Engine**: Unreal Engine 5.8 by Epic Games.
+
+**Built by AI agents.** Claude Opus 5.5 in Claude Code led the build, with Claude Sonnet, Haiku and Fable helpers, under Ashen's direction. Earlier Spider-Man 2 stages also used OpenAI and Kimi models; [PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md) records which model did what.
+
+**Licence.** The upstream code and assets remain under Shikhar's [Source-Available, View-Only License](LICENSE): personal, non-commercial viewing and local running only. No redistribution, and no use in any product, service or distributed game without written permission. Third-party components keep their own licences, and Hulk and all related names and likenesses belong to Marvel/Disney. Nothing here grants rights to any of them.
+
+## About me
+
+I'm **Ashen**, a vibe coder exploring what I can make with AI-assisted development. *Ultimate Destruction* is a game people have wanted remade for twenty years. This project tests how far a team of AI agents can get in Unreal Engine with one person choosing the direction, playing every build, and saying what feels wrong. AI did the building; whether it is fun to play is still my call.
+
+- [GitHub: oh-ashen-one](https://github.com/oh-ashen-one)
+- [Website: ashenoneport.com](https://ashenoneport.com)
+
+More in [ABOUT_ME.md](ABOUT_ME.md). For bugs or ideas, please use [the issue tracker](https://github.com/oh-ashen-one/hulk/issues).

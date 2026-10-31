@@ -1268,7 +1268,7 @@ bool ABruteCharacter::BuildClipRig()
 {
 	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteV1"))) return false;
 	// -WHBruteSkin=<Rampage|Crunch|Brute>: a free Paragon character from Fab (/Game/Paragon<Hero>) driven by the
-	// same 17 clips, retargeted by tools/brute/retarget_paragon.py into /Game/Brute/<Skin>. Default stays the original SK_Brute.
+	// same 17 clips, retargeted by tools/brute/retarget_paragon.py into /Game/Brute/<Skin>.
 	// Default (owner 2026-10-31): Rampage's rock skin; -WHBruteSkin=Brute restores the original SK_Brute. A checkout without the Fab
 	// pack (Content/ is not in git) falls back to SK_Brute automatically.
 	FString Skin = TEXT("Rampage");
