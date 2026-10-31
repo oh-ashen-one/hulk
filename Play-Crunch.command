@@ -1,0 +1,9 @@
+#!/bin/bash
+# Hulk-in-Manhattan fan homage (unofficial, non-commercial). Same as Play-Brute.command, but the Brute wears the
+# Paragon: Crunch (base mesh) (free Fab pack from Epic, Unreal-only licence, not stored in this repo)
+# driven by the same 17 clips, retargeted by tools/brute/retarget_paragon.py. Needs Content/ParagonCrunch + Content/Brute/Crunch.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+if [ ! -d "$HERE/unreal/WebHomage/Content/Brute/Crunch" ]; then
+  echo "Crunch content missing: add Paragon: Crunch via the editor's Fab panel, then run tools/brute/retarget_paragon.py" >&2; exit 1
+fi
+exec "$HERE/Play-Brute.command" -WHBruteSkin=Crunch "$@"

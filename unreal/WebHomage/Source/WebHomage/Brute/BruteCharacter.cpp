@@ -1267,14 +1267,23 @@ void ABruteCharacter::ApplyPose()
 bool ABruteCharacter::BuildClipRig()
 {
 	if (FParse::Param(FCommandLine::Get(), TEXT("WHBruteBricks")) || FParse::Param(FCommandLine::Get(), TEXT("WHBruteV1"))) return false;
-	// -WHBruteRampage: Paragon: Rampage "Elemental" rock skin (free Fab pack, /Game/ParagonRampage) driven by the same 17 clips,
-	// retargeted by tools/brute/retarget_rampage.py into /Game/Brute/Rampage. Default stays the original SK_Brute.
-	const bool bRampage = FParse::Param(FCommandLine::Get(), TEXT("WHBruteRampage"));
-	const TCHAR* MeshPath = bRampage ? TEXT("/Game/ParagonRampage/Characters/Heroes/Rampage/Skins/Tier2/Elemental/Meshes/Rampage_Elemental.Rampage_Elemental")
-	                                 : TEXT("/Game/Brute/Body/SK_Brute.SK_Brute");
-	const TCHAR* ClipDir = bRampage ? TEXT("/Game/Brute/Rampage") : TEXT("/Game/Brute/Body");
+	// -WHBruteSkin=<Rampage|Crunch> (-WHBruteRampage = Rampage): a free Paragon character from Fab (/Game/Paragon<Hero>) driven by the
+	// same 17 clips, retargeted by tools/brute/retarget_paragon.py into /Game/Brute/<Skin>. Default stays the original SK_Brute.
+	FString Skin;
+	FParse::Value(FCommandLine::Get(), TEXT("WHBruteSkin="), Skin);
+	if (Skin.IsEmpty() && FParse::Param(FCommandLine::Get(), TEXT("WHBruteRampage"))) Skin = TEXT("Rampage");
+	static const TMap<FString, FString> SkinMeshes = {
+		{TEXT("Rampage"), TEXT("/Game/ParagonRampage/Characters/Heroes/Rampage/Skins/Tier2/Elemental/Meshes/Rampage_Elemental.Rampage_Elemental")},
+		{TEXT("Crunch"), TEXT("/Game/ParagonCrunch/Characters/Heroes/Crunch/Meshes/Crunch.Crunch")} };
+	const FString* SkinMesh = Skin.IsEmpty() ? nullptr : SkinMeshes.Find(Skin);
+	if (!Skin.IsEmpty() && !SkinMesh) UE_LOG(LogWebHomage, Warning, TEXT("WH_BRUTE rig: unknown -WHBruteSkin=%s, using SK_Brute"), *Skin);
+	const bool bRampage = SkinMesh != nullptr;   // any Paragon skin: UE4-mannequin bone names, own materials
+	const FString MeshPathS = SkinMesh ? *SkinMesh : FString(TEXT("/Game/Brute/Body/SK_Brute.SK_Brute"));
+	const FString ClipDirS = SkinMesh ? FString::Printf(TEXT("/Game/Brute/%s"), *Skin) : FString(TEXT("/Game/Brute/Body"));
+	const TCHAR* MeshPath = *MeshPathS;
+	const TCHAR* ClipDir = *ClipDirS;
 	USkeletalMesh* M = LoadObject<USkeletalMesh>(nullptr, MeshPath);
-	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %s missing (run Scripts/build_brute.py%s)"), MeshPath, bRampage ? TEXT(" / tools/brute/retarget_rampage.py") : TEXT("")); return false; }
+	if (!M) { UE_LOG(LogWebHomage, Display, TEXT("WH_BRUTE rig: %s missing (run Scripts/build_brute.py%s)"), MeshPath, bRampage ? TEXT(" / tools/brute/retarget_paragon.py") : TEXT("")); return false; }
 	static const TCHAR* Names[CNum] = { TEXT("Idle"), TEXT("Walk"), TEXT("Run"), TEXT("StopLunge"), TEXT("Jump"), TEXT("WallAttach"), TEXT("WallClimb"),
 		TEXT("PunchL"), TEXT("PunchR"), TEXT("Slap"), TEXT("Clap"), TEXT("Smash"), TEXT("Lift"), TEXT("Throw"), TEXT("Uppercut"), TEXT("Fall"), TEXT("Land") };
 	Clips.Reset();
@@ -1285,7 +1294,7 @@ bool ABruteCharacter::BuildClipRig()
 		Clips.Add(S);
 	}
 	const FReferenceSkeleton& Ref = M->GetRefSkeleton();
-	// Mixamo names (SK_Brute) -> UE4-mannequin names (Paragon Rampage skeleton)
+	// Mixamo names (SK_Brute) -> UE4-mannequin names (Paragon skeletons)
 	static const TMap<FString, FString> RampageBones = {
 		{TEXT("Hips"), TEXT("pelvis")}, {TEXT("Spine1"), TEXT("spine_02")}, {TEXT("Spine2"), TEXT("spine_03")}, {TEXT("Neck"), TEXT("neck_01")}, {TEXT("Head"), TEXT("head")},
 		{TEXT("LeftArm"), TEXT("upperarm_l")}, {TEXT("RightArm"), TEXT("upperarm_r")}, {TEXT("LeftForeArm"), TEXT("lowerarm_l")}, {TEXT("RightForeArm"), TEXT("lowerarm_r")},
@@ -1308,7 +1317,7 @@ bool ABruteCharacter::BuildClipRig()
 	Body = NewObject<UPoseableMeshComponent>(this, TEXT("Brute_Body"));
 	Body->SetupAttachment(Fig);
 	Body->SetSkinnedAssetAndUpdate(M);
-	if (!bRampage)   // Rampage keeps the skin's own materials
+	if (!bRampage)   // Paragon skins keep their own materials
 		if (UMaterialInterface* Mat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Brute/Body/M_Brute.M_Brute")))
 			for (int32 I = 0; I < FMath::Max(1, Body->GetNumMaterials()); ++I) Body->SetMaterial(I, Mat);
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
