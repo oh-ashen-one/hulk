@@ -1299,7 +1299,8 @@ bool ABruteCharacter::BuildClipRig()
 		{TEXT("Hips"), TEXT("pelvis")}, {TEXT("Spine1"), TEXT("spine_02")}, {TEXT("Spine2"), TEXT("spine_03")}, {TEXT("Neck"), TEXT("neck_01")}, {TEXT("Head"), TEXT("head")},
 		{TEXT("LeftArm"), TEXT("upperarm_l")}, {TEXT("RightArm"), TEXT("upperarm_r")}, {TEXT("LeftForeArm"), TEXT("lowerarm_l")}, {TEXT("RightForeArm"), TEXT("lowerarm_r")},
 		{TEXT("LeftHand"), TEXT("hand_l")}, {TEXT("RightHand"), TEXT("hand_r")}, {TEXT("LeftFoot"), TEXT("foot_l")}, {TEXT("RightFoot"), TEXT("foot_r")},
-		{TEXT("LeftToeBase"), TEXT("ball_l")}, {TEXT("RightToeBase"), TEXT("ball_r")} };
+		{TEXT("LeftToeBase"), TEXT("ball_l")}, {TEXT("RightToeBase"), TEXT("ball_r")},
+		{TEXT("LeftUpLeg"), TEXT("thigh_l")}, {TEXT("RightUpLeg"), TEXT("thigh_r")} };
 	auto Bi = [&Ref, bRampage](const TCHAR* N)
 	{
 		const FString* R = bRampage ? RampageBones.Find(N) : nullptr;
@@ -1345,7 +1346,21 @@ bool ABruteCharacter::BuildClipRig()
 	// face +X (toes ahead of the ankles), feet on the figure origin, 2.6 m tall
 	FVector Fw = (CS[BFoot[2]].GetLocation() - CS[BFoot[0]].GetLocation()) + (CS[BFoot[3]].GetLocation() - CS[BFoot[1]].GetLocation());
 	Fw.Z = 0.0; Fw = Fw.GetSafeNormal();
-	const double Yaw = FMath::Atan2(Fw.Y, Fw.X);
+	if (bRampage)
+	{	// Paragon skins: face the torso, not the toes. The clips' feet point ~15 deg off the hips/shoulders, which the old blocky
+		// mesh hid but a detailed body shows as running crooked, left shoulder leading (owner 2026-10-31, Rampage and Crunch).
+		const int32 TL = Bi(TEXT("LeftUpLeg")), TR = Bi(TEXT("RightUpLeg"));
+		if (TL != INDEX_NONE && TR != INDEX_NONE)
+		{
+			FVector Right = (CS[TR].GetLocation() - CS[TL].GetLocation()) + (CS[BArm[1]].GetLocation() - CS[BArm[0]].GetLocation());
+			Right.Z = 0.0;
+			const FVector TorsoFw = FVector::CrossProduct(Right, FVector::UpVector).GetSafeNormal();
+			if (!TorsoFw.IsNearlyZero()) Fw = TorsoFw;
+		}
+	}
+	float YawTrim = 0.f;   // -WHBruteYawTrim=<deg>: manual facing trim for tuning a new skin (+ = turn him clockwise from above)
+	FParse::Value(FCommandLine::Get(), TEXT("WHBruteYawTrim="), YawTrim);
+	const double Yaw = FMath::Atan2(Fw.Y, Fw.X) - FMath::DegreesToRadians(YawTrim);
 	BodyYawQ = FQuat(FVector::UpVector, -Yaw);
 	RefHipsCS = CS[BHips].GetLocation();
 	RefFootZ = 1e9; for (int32 B : BFoot) RefFootZ = FMath::Min(RefFootZ, CS[B].GetLocation().Z);
