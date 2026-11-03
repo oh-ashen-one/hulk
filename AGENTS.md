@@ -1,4 +1,4 @@
-# AGENTS.md: Hulk in Manhattan (`oh-ashen-one/hulk`)
+# AGENTS.md: Hulk Type Beat Game (`oh-ashen-one/hulk-type-beat-game`)
 
 You are an AI coding agent working in this repo. Read this file first, then [`docs/BUILD_ON_THIS.md`](docs/BUILD_ON_THIS.md) for step-by-step recipes and [`HANDOFF.md`](HANDOFF.md) for the latest state. (Updated 2026-10-31.)
 
