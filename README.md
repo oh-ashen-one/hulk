@@ -1,11 +1,11 @@
-# Hulk in Manhattan
+# Hulk Type Beat Game
 
-**An unofficial, non-commercial fan homage to *The Incredible Hulk: Ultimate Destruction* (2005), built with AI in Unreal Engine 5.8.** A huge rock-skinned brute runs, leaps and smashes his way across the whole island of Manhattan. Manhattan itself comes from our [Spider-Man 2 port](https://github.com/oh-ashen-one/spider-man-2), which started as Shikhar's [Spiderbench](https://github.com/xikhar/spiderbench).
+**An unofficial, non-commercial fan homage to *The Incredible Hulk: Ultimate Destruction* (2005), built with AI in Unreal Engine 5.8.** The hero is not the Hulk himself but a big rock creature cut from the same cloth — think The Thing from the Fantastic Four, a Hulk-type brute — who runs, leaps and smashes his way across the whole island of Manhattan. Manhattan itself comes from our [Spider-Man 2 port](https://github.com/oh-ashen-one/spider-man-2), which started as Shikhar's [Spiderbench](https://github.com/xikhar/spiderbench).
 
 > **Homage game, not an official Marvel game.** It is not affiliated with or endorsed by Marvel, Disney, Radical Entertainment, Vivendi, Activision, Sierra, Sony Interactive Entertainment, Insomniac Games or Epic Games. It is not for sale and never will be. See [DISCLAIMER.md](DISCLAIMER.md).
 
-![The rock brute standing on a Manhattan crosswalk](docs/media/rampage_hero.jpg)
-*In-game capture, October 31, 2026. The body is Epic's free Rampage character in its rock "Elemental" skin, driven by our own 17 animation clips.*
+![The rock creature standing on a Manhattan crosswalk](docs/media/rampage_hero.jpg)
+*In-game capture, October 31, 2026. The rock creature's body is Epic's free Rampage character in its rock "Elemental" skin, driven by our own 17 animation clips.*
 
 | | |
 |---|---|
@@ -108,4 +108,4 @@ I'm **Ashen**, a vibe coder exploring what I can make with AI-assisted developme
 - [GitHub: oh-ashen-one](https://github.com/oh-ashen-one)
 - [Website: ashenoneport.com](https://ashenoneport.com)
 
-More in [ABOUT_ME.md](ABOUT_ME.md). For bugs or ideas, please use [the issue tracker](https://github.com/oh-ashen-one/hulk/issues).
+More in [ABOUT_ME.md](ABOUT_ME.md). For bugs or ideas, please use [the issue tracker](https://github.com/oh-ashen-one/hulk-type-beat-game/issues).

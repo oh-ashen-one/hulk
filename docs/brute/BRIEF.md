@@ -1,8 +1,8 @@
-# Hulk in Manhattan
+# Hulk Type Beat Game
 
 **An AI-built homage to *The Incredible Hulk: Ultimate Destruction* (2005), rebuilt in Unreal Engine 5.8 on top of the Manhattan we already made for our Spider-Man 2 port.**
 
-This repo, `oh-ashen-one/hulk`, is its own project. It started as a snapshot of `oh-ashen-one/spider-man-2` `main` at `0ca553f` (the finished Unreal port), without the old Spider-Man capture footage; that history stays in spider-man-2. It does not depend on the separate Invincible project.
+This repo, `oh-ashen-one/hulk-type-beat-game`, is its own project. It started as a snapshot of `oh-ashen-one/spider-man-2` `main` at `0ca553f` (the finished Unreal port), without the old Spider-Man capture footage; that history stays in spider-man-2. It does not depend on the separate Invincible project.
 
 Goal, in one sentence: a fully playable Hulk-like character tearing through the whole island of Manhattan, built by Claude Opus 5.5 with Jev and Haiku 5.5 running the people around him, and filmed as a YouTube series.
 

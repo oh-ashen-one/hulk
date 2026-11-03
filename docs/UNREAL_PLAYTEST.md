@@ -1,4 +1,4 @@
-> **Hulk in Manhattan note (2026-10-31):** this page is inherited from the Spider-Man 2 port. In this repo, clone `oh-ashen-one/hulk`, and see [BUILD_ON_THIS.md](BUILD_ON_THIS.md) for the brute's build, launch and capture steps. The Spider-Man controls below apply only with `-WHSpidey`.
+> **Hulk Type Beat Game note (2026-11-03):** this page is inherited from the Spider-Man 2 port. In this repo, clone `oh-ashen-one/hulk-type-beat-game`, and see [BUILD_ON_THIS.md](BUILD_ON_THIS.md) for the brute's build, launch and capture steps. The Spider-Man controls below apply only with `-WHSpidey`.
 
 # Unreal Engine setup and playtest
 
